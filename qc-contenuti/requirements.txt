@@ -1,0 +1,3 @@
+# Il gate e lo script di valutazione girano con la sola libreria standard.
+# Qui sotto solo quello che serve per i test.
+pytest>=8.0
