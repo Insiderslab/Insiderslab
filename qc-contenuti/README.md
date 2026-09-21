@@ -17,7 +17,7 @@ Finché quella risposta non c'è, questa cartella non è un prodotto.
 | Domande di QC (IT + EN) | scritte su esempi sintetici, **da rivedere su caption vere** |
 | Policy PASS/REVIEW/BLOCK | fatta, **soglie non tarate** |
 | Script di valutazione | funzionante |
-| Test | 14, verdi, offline |
+| Test | 20, verdi, offline |
 | Dataset etichettato | **manca** — è il prossimo passo |
 
 ## Avvertenza sull'adapter
@@ -33,17 +33,48 @@ Gli errori sono scritti per dire esattamente cosa non torna e dove metterci mano
 
 ## Avvio
 
-```bash
-pip install -r requirements.txt     # solo pytest
-cp .env.example .env                # poi metti la chiave nel .env
-pytest -q                           # 14 test, nessuna rete
+Il fornitore si sceglie con `--provider`, oppure una volta sola nel `.env`.
+Nessuna variabile d'ambiente da passare a mano: i comandi sono **identici** su
+Windows, macOS e Linux.
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/Insiderslab/Insiderslab.git
+cd Insiderslab
+git checkout claude/laughing-galileo-uiropi
+cd qc-contenuti
+
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env          # poi apri .env e metti la chiave
+python -m pytest -q
 
 # giro a vuoto, senza chiave e senza rete
-QC_PROVIDER=fake python scripts/run_eval.py data/captions.sample.jsonl
+python scripts/run_eval.py data/captions.sample.jsonl --provider fake
 
 # giro reale, quando hai chiave e dataset
-QC_PROVIDER=typesafe python scripts/run_eval.py data/captions.jsonl
+python scripts/run_eval.py data/captions.jsonl --provider typesafe
 ```
+
+> In PowerShell **non** funziona `VAR=valore comando`: è sintassi bash. Per questo
+> il fornitore si passa con `--provider` e la chiave si legge dal `.env`.
+
+### macOS / Linux
+
+```bash
+git clone https://github.com/Insiderslab/Insiderslab.git
+cd Insiderslab && git checkout claude/laughing-galileo-uiropi && cd qc-contenuti
+
+pip install -r requirements.txt
+cp .env.example .env                 # poi metti la chiave nel .env
+pytest -q
+
+python scripts/run_eval.py data/captions.sample.jsonl --provider fake
+python scripts/run_eval.py data/captions.jsonl --provider typesafe
+```
+
+Serve Python 3.10 o superiore. Lancia i comandi **dalla cartella `qc-contenuti`**:
+se sbagli cartella lo script te lo dice e ti stampa dove sei.
 
 La chiave sta nel `.env` locale. Non nel repository, non in chat, non in un ticket.
 `.env` e `data/captions.jsonl` sono in `.gitignore`: **le caption reali dei clienti
@@ -53,6 +84,7 @@ non vanno committate** — questo repository è il profilo GitHub pubblico.
 
 ```
 qc/schema.py            contratto interno: Choice, Score, Noul, Answer
+qc/config.py            lettura del .env, senza dipendenze esterne
 qc/questions.py         le domande di QC, in inglese e in italiano
 qc/policy.py            PASS / REVIEW / BLOCK — soglie e regole, nel codice
 qc/providers/

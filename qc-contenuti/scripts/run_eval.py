@@ -9,8 +9,11 @@ E' lo strumento che decide il pilota. Risponde a tre domande:
 
 Niente dipendenze esterne: solo libreria standard.
 
-    QC_PROVIDER=fake     python scripts/run_eval.py data/captions.sample.jsonl
-    QC_PROVIDER=typesafe python scripts/run_eval.py data/captions.jsonl
+Il fornitore si sceglie nel .env (QC_PROVIDER) oppure con --provider.
+Funziona identico su Windows, macOS e Linux:
+
+    python scripts/run_eval.py data/captions.sample.jsonl --provider fake
+    python scripts/run_eval.py data/captions.jsonl --provider typesafe
 """
 
 import argparse
@@ -22,6 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from qc.config import carica_env  # noqa: E402
 from qc.policy import Decision, Thresholds, decide  # noqa: E402
 from qc.providers import get_provider  # noqa: E402
 from qc.questions import QUESTION_SETS  # noqa: E402
@@ -77,15 +81,30 @@ def main() -> int:
     parser.add_argument("--questions", choices=["en", "it"], default="en",
                         help="lingua delle domande (lo stato resta sempre in italiano)")
     parser.add_argument("--dump", type=Path, help="salva le risposte grezze in JSONL")
+    parser.add_argument("--provider", choices=["typesafe", "fake"], default=None,
+                        help="sovrascrive QC_PROVIDER del .env")
     args = parser.parse_args()
+
+    carica_env()
+
+    if not args.dataset.is_file():
+        sys.exit(
+            f"file non trovato: {args.dataset}\n"
+            f"cartella corrente: {Path.cwd()}\n"
+            "Lancia il comando dalla cartella qc-contenuti del progetto."
+        )
 
     righe = carica(args.dataset)
     domande = QUESTION_SETS[args.questions]
-    provider = get_provider()
+    try:
+        provider = get_provider(args.provider or "")
+    except Exception as exc:  # noqa: BLE001
+        sys.exit(f"fornitore non utilizzabile: {exc}")
 
     if provider.name == "fake":
         print("!! fornitore 'fake': risposte finte, i numeri qui sotto non "
-              "significano nulla. Serve QC_PROVIDER=typesafe.\n", file=sys.stderr)
+              "significano nulla.\n   Per un giro reale: --provider typesafe "
+              "(serve TYPESAFE_API_KEY nel .env).\n", file=sys.stderr)
 
     noul_coppie: dict[str, list[tuple[float, bool]]] = defaultdict(list)
     score_err: list[float] = []
