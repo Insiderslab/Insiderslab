@@ -191,8 +191,13 @@ def main() -> int:
         gravi = sum(1 for a, u in verdetti
                     if u == "block" and a == Decision.PASS.value)
         print(f"  ERRORI GRAVI (umano=block, gate=pass): {gravi}")
-        auto = sum(1 for a, _ in verdetti if a != Decision.REVIEW.value)
-        print(f"  automatizzabile senza revisione: {auto/len(verdetti):.1%}")
+        n = len(verdetti)
+        quote = {d: sum(1 for a, _ in verdetti if a == d) / n
+                 for d in ("pass", "review", "block")}
+        print(f"  il gate fa passare da solo:  {quote['pass']:.1%}")
+        print(f"  il gate blocca da solo:      {quote['block']:.1%}")
+        print(f"  RESTA DA GUARDARE A MANO:    {quote['review']:.1%}"
+              "   <- il carico di lavoro residuo")
         matrice: dict[tuple[str, str], int] = defaultdict(int)
         for a, u in verdetti:
             matrice[(u, a)] += 1
@@ -202,9 +207,19 @@ def main() -> int:
                                for a in ("pass", "review", "block"))
             print(f"  {u:<13}  {riga_m}")
 
-    print("\nLettura: se gli ERRORI GRAVI non sono zero, il gate non e' pronto a "
-          "bloccare da solo.\nSe l'ECE supera ~0.1, le soglie sono poco affidabili "
-          "e conviene tenere la revisione umana larga.\n")
+    print("""
+Come si legge, in ordine di importanza:
+
+  1. ERRORI GRAVI. Sono le caption che una persona avrebbe bloccato e il gate fa
+     passare. Se non sono ZERO, il gate puo' solo segnalare, non bloccare.
+  2. RESTA DA GUARDARE A MANO. E' il risparmio vero: se resta alto, il pilota non
+     paga. Confrontalo con il 100% di oggi, non con zero.
+  3. ECE. Sopra ~0.1 le probabilita' non reggono una soglia: tieni la revisione
+     larga e non fidarti dei numeri di confidenza.
+
+Il tetto massimo non e' il 100%: e' l'accordo fra due persone del team sulle
+stesse caption. Se voi due siete d'accordo al 70%, il modello non fara' meglio.
+""")
     return 0
 
 
