@@ -94,6 +94,16 @@ def main() -> int:
             "Lancia il comando dalla cartella qc-contenuti del progetto."
         )
 
+    if "sintetic" in args.dataset.name.lower():
+        print(
+            "\n" + "=" * 70 +
+            "\nDATASET SINTETICO: caption e giudizi sono inventati, non del team."
+            "\nServe a collaudare l'adapter e a tarare le domande."
+            "\nNON usare questi numeri per decidere le soglie o l'esito del pilota."
+            "\n" + "=" * 70,
+            file=sys.stderr,
+        )
+
     righe = carica(args.dataset)
     domande = QUESTION_SETS[args.questions]
     try:

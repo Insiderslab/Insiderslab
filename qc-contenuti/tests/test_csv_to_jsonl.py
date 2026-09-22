@@ -77,3 +77,24 @@ def test_segnala_tutte_le_righe_sbagliate_non_solo_la_prima(tmp_path):
     p, _ = esegui(tmp_path, INTESTAZIONE + cattive)
     assert p.returncode == 1
     assert "tono_brand" in p.stderr and "categoria" in p.stderr
+
+
+def test_il_dataset_sintetico_e_valido_e_completo():
+    """Il dataset sintetico deve restare convertibile e coprire ogni domanda."""
+    import json as _json
+
+    percorso = RADICE / "data" / "captions.sintetiche.jsonl"
+    righe = [_json.loads(r) for r in
+             percorso.read_text(encoding="utf-8").splitlines() if r.strip()]
+    assert len(righe) >= 50
+
+    booleane = ["claim_garantito", "claim_sanitario", "dato_non_verificabile",
+                "urgenza_ingannevole", "prezzo_esplicito", "nomina_competitor"]
+    for colonna in booleane:
+        positivi = sum(1 for r in righe if r["etichette"][colonna])
+        assert positivi >= 5, f"{colonna}: solo {positivi} positivi, soglia non stimabile"
+
+    for verdetto in ("pass", "review", "block"):
+        assert any(r["verdetto_umano"] == verdetto for r in righe)
+
+    assert all(r["brand"]["tono_di_voce"] for r in righe), "tono_di_voce sempre presente"

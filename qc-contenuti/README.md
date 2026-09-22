@@ -17,8 +17,9 @@ Finché quella risposta non c'è, questa cartella non è un prodotto.
 | Domande di QC (IT + EN) | scritte su esempi sintetici, **da rivedere su caption vere** |
 | Policy PASS/REVIEW/BLOCK | fatta, **soglie non tarate** |
 | Script di valutazione | funzionante |
-| Test | 27, verdi, offline |
-| Dataset etichettato | **manca** — è il prossimo passo |
+| Test | 28, verdi, offline |
+| Dataset sintetico (53 caption) | c'è, **solo per collaudo** |
+| Dataset reale etichettato | **manca** — è il prossimo passo |
 
 ## Avvertenza sull'adapter
 
@@ -95,6 +96,7 @@ scripts/csv_to_jsonl.py converte il foglio di etichettatura in dataset
 scripts/run_eval.py     accordo con i giudizi umani, ECE, sweep delle soglie
 data/LABELING.md        come etichettare (leggilo prima di iniziare)
 data/template-etichettatura.csv   il foglio che compila il team
+data/sintetiche.csv     53 caption inventate, per collaudo (NON è il dataset)
 ```
 
 ## Tre scelte di progetto
@@ -113,6 +115,22 @@ c'è anche il set italiano, e `--questions it` misura la differenza sui dati ver
 tono di voce ottimo. I rischi gravi hanno condizioni separate che bloccano da
 sole; i segnali morbidi mandano in revisione. Le medie pesate servono a preferenze
 che si compensano davvero — qui non ce ne sono.
+
+## Il dataset sintetico
+
+`data/captions.sintetiche.jsonl` contiene 53 caption inventate su sette
+archetipi di cliente (beauty/salute, ristorazione, hotel, palestra, edilizia,
+moda, B2B, nautica), con abbastanza casi positivi per ogni domanda.
+
+**Non è il dataset del pilota e non può sostituirlo.** Testi ed etichette sono
+scritti dalla stessa fonte: misurarci sopra dice solo se il modello concorda con
+chi li ha scritti, non con il team. Lo script lo urla in testa all'output.
+
+Serve a tre cose, tutte prima che il team spenda tempo:
+
+1. **collaudare l'adapter** contro l'API vera e sistemare il parsing
+2. **tarare le domande** — vedere se il testo produce risposte sensate
+3. **mostrare al team** come si etichetta, così i giudizi restano coerenti
 
 ## Prossimo passo
 
