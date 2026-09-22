@@ -10,6 +10,14 @@ Come si usano: apri **claude.ai** (web o desktop) in una chat con il connettore 
 
 ---
 
+## Foto del tecnico da inserire nei video (URL pubblici)
+Aggiungi al prompt di ogni video la riga: "Usa questa foto del tecnico come immagine principale nelle scene 1, 3 e 5, a sinistra, con i testi a destra: <URL>"
+- Fabbro: https://d8j0ntlcm91z4.cloudfront.net/user_2yHiVW71rbBWU16XRspNu432lgQ/hf_20260922_220300_8ea4129c-2dec-40bc-9597-71f1d9e105a4.png
+- Elettricista: https://d8j0ntlcm91z4.cloudfront.net/user_2yHiVW71rbBWU16XRspNu432lgQ/hf_20260922_220300_fd2d693f-a445-4a01-b362-a0bdb834672a.png
+- Idraulico: https://d8j0ntlcm91z4.cloudfront.net/user_2yHiVW71rbBWU16XRspNu432lgQ/hf_20260922_220300_f5a99bf2-42e8-43b6-8277-cbb8968feb78.png
+
+---
+
 ## Video 1 — Fabbro
 
 ```
