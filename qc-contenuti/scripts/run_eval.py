@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from pathlib import Path
 
@@ -86,6 +87,9 @@ def main() -> int:
                         help="sovrascrive QC_PROVIDER del .env")
     parser.add_argument("--limit", type=int, default=0,
                         help="valuta solo le prime N caption (per una prova rapida)")
+    parser.add_argument("--workers", type=int, default=5,
+                        help="chiamate in parallelo (default 5; le domande di una "
+                             "stessa caption viaggiano gia' insieme)")
     args = parser.parse_args()
 
     carica_env()
@@ -128,34 +132,52 @@ def main() -> int:
     grezzi = []
     errori = 0
 
-    if provider.name != "fake":
-        print(f"Interrogo il modello su {len(righe)} caption. Ctrl+C per fermare.",
+    def interroga(riga):
+        """Una caption: tutte le sue domande in una chiamata sola."""
+        try:
+            return riga, provider.evaluate(stato(riga), domande), None
+        except Exception as exc:  # noqa: BLE001
+            return riga, None, exc
+
+    if provider.name == "fake":
+        esiti = [interroga(r) for r in righe]
+    else:
+        # Prima una caption da sola: se il contratto e' sbagliato si scopre
+        # subito, senza lanciare altre 52 chiamate destinate a fallire uguale.
+        print(f"Prima chiamata di prova...", end=" ", flush=True, file=sys.stderr)
+        inizio = time.monotonic()
+        primo = interroga(righe[0])
+        durata = time.monotonic() - inizio
+        if primo[2] is not None:
+            print(f"FALLITA dopo {durata:.1f}s\n  {primo[2]}\n", file=sys.stderr)
+            print("  Prima di insistere, lancia:  python scripts/smoke_test.py\n"
+                  "  Fa UNA chiamata e mostra la risposta grezza.", file=sys.stderr)
+            return 1
+        print(f"ok in {durata:.2f}s", file=sys.stderr)
+
+        restanti = righe[1:]
+        stimato = durata * len(restanti) / max(args.workers, 1)
+        print(f"Restano {len(restanti)} caption, {args.workers} in parallelo: "
+              f"circa {stimato/60:.1f} minuti. Ctrl+C per fermare.\n",
               file=sys.stderr)
 
-    for indice, riga in enumerate(righe, 1):
-        if provider.name != "fake":
-            print(f"  [{indice}/{len(righe)}] {riga.get('id','?')} ... ",
-                  end="", flush=True, file=sys.stderr)
-        inizio = time.monotonic()
+        esiti = [primo]
         try:
-            risposte = provider.evaluate(stato(riga), domande)
+            with ThreadPoolExecutor(max_workers=args.workers) as pool:
+                for fatte, esito in enumerate(pool.map(interroga, restanti), 2):
+                    esiti.append(esito)
+                    stato_riga = "errore" if esito[2] is not None else "ok"
+                    print(f"  [{fatte}/{len(righe)}] {esito[0].get('id','?')} "
+                          f"{stato_riga}", file=sys.stderr)
         except KeyboardInterrupt:
-            print("\ninterrotto dall'utente.", file=sys.stderr)
-            break
-        except Exception as exc:  # noqa: BLE001
-            print(f"errore -> {exc}", file=sys.stderr)
+            print("\ninterrotto: valuto le caption gia' completate.\n",
+                  file=sys.stderr)
+
+    for riga, risposte, exc in esiti:
+        if exc is not None:
+            print(f"  {riga.get('id','?')}: {exc}", file=sys.stderr)
             errori += 1
-            if errori == 1 and indice == 1:
-                print(
-                    "\n   La prima chiamata e' fallita. Prima di insistere su tutte "
-                    "le altre,\n   lancia:  python scripts/smoke_test.py\n"
-                    "   Fa UNA chiamata e mostra la risposta grezza.\n",
-                    file=sys.stderr,
-                )
-                break
             continue
-        if provider.name != "fake":
-            print(f"{time.monotonic() - inizio:.2f}s", file=sys.stderr)
 
         etichette = riga.get("etichette", {})
         for qid, domanda in domande.items():
@@ -185,7 +207,7 @@ def main() -> int:
             encoding="utf-8",
         )
 
-    valutate = len(righe) - errori
+    valutate = len(esiti) - errori
     print(f"\nDataset: {args.dataset}  ({valutate}/{len(righe)} valutate, "
           f"domande in {args.questions}, fornitore {provider.name})")
     if errori:
