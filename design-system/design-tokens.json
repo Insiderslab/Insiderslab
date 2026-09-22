@@ -1,0 +1,75 @@
+{
+  "$schema": "https://design-tokens.org/schema.json",
+  "meta": {
+    "brand": "InsidersLab",
+    "version": "1.0",
+    "updated": "2026-09-22",
+    "source": "Brand Book InsidersLab · Canva DAHRh4VZtME (06/08/2026)",
+    "note": "Contrasti misurati WCAG 2.1. I valori 'tecnico: true' non sono nel brand book."
+  },
+  "color": {
+    "primario":         { "value": "#2F3AE4", "brand": "Azul InsidersLab", "pantone": "Blue 072 C", "contrastOnWhite": 7.38 },
+    "primarioScuro":    { "value": "#2042BE", "brand": "Azul editorial", "pantone": "2728 C", "contrastOnWhite": 8.13 },
+    "primarioPremuto":  { "value": "#1B2FA8", "tecnico": true, "contrastOnWhite": 10.40 },
+    "accento":          { "value": "#AAD800", "brand": "Lima", "pantone": "375 C", "contrastOnWhite": 1.68, "rule": "mai testo su chiaro; testo nero sopra (12.53:1)" },
+    "accentoScuro":     { "value": "#9BC500", "tecnico": true },
+    "accentoTesto":     { "value": "#647F00", "tecnico": true, "contrastOnWhite": 4.59 },
+    "azulProfondo":     { "value": "#344C8C", "brand": "Azul profundo", "whiteOnIt": 8.21 },
+    "azulCielo":        { "value": "#298CE8", "brand": "Azul cielo", "whiteOnIt": 3.49, "blackOnIt": 6.01, "rule": "testo nero" },
+    "verdeFoglia":      { "value": "#80AE52", "brand": "Verde hoja", "whiteOnIt": 2.59, "rule": "mai testo bianco" },
+    "lila":             { "value": "#8880E0", "brand": "Lila", "whiteOnIt": 3.38, "rule": "bianco solo su titoli grandi" },
+    "testo":            { "value": "#111827", "tecnico": true, "contrastOnWhite": 17.74 },
+    "testoSecondario":  { "value": "#5B6070", "tecnico": true, "contrastOnWhite": 6.27 },
+    "testoDisabilitato":{ "value": "#767C8B", "tecnico": true, "contrastOnWhite": 4.18 },
+    "sfondo":           { "value": "#FFFFFF" },
+    "sfondoCarta":      { "value": "#F7F7F5", "brand": "papel" },
+    "bordo":            { "value": "#8E94A3", "tecnico": true, "contrastOnWhite": 3.04 },
+    "bordoTenue":       { "value": "#E3E5EA", "tecnico": true },
+    "tintaBlu":         { "value": "#EEF0FE", "tecnico": true },
+    "tintaLima":        { "value": "#F4FAD9", "tecnico": true },
+    "successo":         { "value": "#176B41", "tecnico": true, "contrastOnWhite": 6.53, "background": "#E8F3EC" },
+    "attenzione":       { "value": "#8A5800", "tecnico": true, "contrastOnWhite": 6.04, "background": "#FFF4E0" },
+    "errore":           { "value": "#A11B14", "tecnico": true, "contrastOnWhite": 7.83, "background": "#FDECEA" }
+  },
+  "proporzioniUso": { "azul": 55, "carta": 20, "negro": 12, "lima": 9, "lila": 4, "note": "il valore del lila è dedotto: il brand book elenca 5 voci e 4 numeri" },
+  "typography": {
+    "families": {
+      "titolo": { "value": "Arvo", "weights": [400, 700], "rule": "mai in paragrafi lunghi; mai sotto 22px" },
+      "testo":  { "value": "Open Sans", "weights": [300, 400, 600, 700, 800] }
+    },
+    "scale": {
+      "h1":      { "family": "titolo", "weight": 700, "desktop": 56, "tablet": 44, "mobile": 34, "lineHeight": 1.10, "letterSpacing": "-0.01em" },
+      "h2":      { "family": "titolo", "weight": 700, "desktop": 40, "tablet": 34, "mobile": 28, "lineHeight": 1.15, "letterSpacing": "-0.01em" },
+      "h3":      { "family": "titolo", "weight": 400, "desktop": 28, "tablet": 26, "mobile": 22, "lineHeight": 1.25 },
+      "h4":      { "family": "testo",  "weight": 700, "desktop": 22, "tablet": 20, "mobile": 19, "lineHeight": 1.30 },
+      "bodyL":   { "family": "testo",  "weight": 400, "desktop": 18, "tablet": 18, "mobile": 17, "lineHeight": 1.60 },
+      "body":    { "family": "testo",  "weight": 400, "desktop": 16, "tablet": 16, "mobile": 16, "lineHeight": 1.60, "min": 16 },
+      "small":   { "family": "testo",  "weight": 400, "desktop": 14, "tablet": 14, "mobile": 14, "lineHeight": 1.50, "min": 14 },
+      "eyebrow": { "family": "testo",  "weight": 600, "desktop": 12, "tablet": 12, "mobile": 12, "lineHeight": 1.40, "letterSpacing": "0.12em", "transform": "uppercase" },
+      "citazione":{ "family": "titolo","weight": 400, "desktop": 24, "tablet": 22, "mobile": 20, "lineHeight": 1.40 }
+    }
+  },
+  "spacing": { "s1": 4, "s2": 8, "s3": 16, "s4": 24, "s5": 32, "s6": 48, "s7": 64, "s8": 96,
+               "sezioneY": { "desktop": 96, "tablet": 64, "mobile": 48 }, "gutterMobile": 16 },
+  "layout": { "contenutoMax": 1200, "testoMax": "72ch", "breakpoints": { "tablet": 1024, "mobile": 767 },
+              "colonne": { "desktop": 12, "tablet": 8, "mobile": 4 } },
+  "shape": { "raggioS": 4, "raggioM": 8, "ombra": "0 12px 32px rgba(47, 58, 228, .10)" },
+  "logo": {
+    "varianti": ["bianco", "su lima", "su azul", "solo isotipo"],
+    "minimi": { "stampaMm": 30, "schermoPx": 110, "isotipoPx": 70 },
+    "ariaDiRispetto": "altezza della lettera L",
+    "posizioni": ["alto-sinistra", "alto-destra", "centrato", "basso-sinistra", "basso-destra"],
+    "vietato": ["ricolorare", "deformare", "ruotare", "effetti", "fondo affollato", "separare il nome", "cambiare il descrittore"]
+  },
+  "kitGrafico": {
+    "elementi": ["papel", "semitono", "recorte", "estrella", "trazo", "cinta"],
+    "regole": { "papelOpacita": "100%", "maxStelle": 3, "rotazione": "±15°", "telaARiposo": "25%" },
+    "fotografia": { "trattamento": "bianco e nero", "trama": "semitono visibile", "ritaglio": "silhouette", "contornoPx": [3, 6] }
+  },
+  "social": {
+    "formato": "1080x1350",
+    "template": ["A · Dichiarazione", "B · Domanda", "C · Sistema", "D · Chiamata"],
+    "anatomia": ["logotipo bianco in alto", "titolo a due colori", "sottotitolo max 2 righe", "un solo recorte protagonista", "accenti negli angoli liberi"],
+    "ritmoFeed": { "maxConsecutiviStessoFondo": 2, "cartaChiaraOgniBlu": "1 su 3" }
+  }
+}

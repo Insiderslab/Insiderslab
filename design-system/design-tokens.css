@@ -1,0 +1,172 @@
+/* ==========================================================================
+   InsidersLab · Design Tokens v1.0 — 22/09/2026
+   Fonte: Brand Book InsidersLab (Canva DAHRh4VZtME).
+   I nomi sono semantici: al rebranding cambia il valore, non il token.
+   Contrasti indicati nei commenti: misurati WCAG 2.1 su #FFFFFF salvo diverso.
+   ========================================================================== */
+
+:root {
+  /* --- Colore: marca ------------------------------------------------------ */
+  --il-primario:          #2F3AE4;  /* Azul InsidersLab · 7.38:1 */
+  --il-primario-scuro:    #2042BE;  /* Azul editorial · hover · 8.13:1 */
+  --il-primario-premuto:  #1B2FA8;  /* active · 10.40:1 */
+  --il-accento:           #AAD800;  /* Lima · SOLO riempimenti, mai testo su chiaro */
+  --il-accento-scuro:     #9BC500;  /* hover del bottone accento */
+  --il-accento-testo:     #647F00;  /* lima leggibile come testo · 4.59:1 */
+
+  /* --- Colore: secondari del brand book ---------------------------------- */
+  --il-azul-profondo:     #344C8C;  /* bianco sopra: 8.21:1 */
+  --il-azul-cielo:        #298CE8;  /* usa testo NERO sopra: 6.01:1 */
+  --il-verde-foglia:      #80AE52;  /* mai testo bianco sopra: 2.59:1 */
+  --il-lila:              #8880E0;  /* bianco solo su titoli grandi: 3.38:1 */
+
+  /* --- Testo e superfici ------------------------------------------------- */
+  --il-testo:             #111827;  /* 17.74:1 */
+  --il-testo-secondario:  #5B6070;  /* 6.27:1 */
+  --il-testo-disabilitato:#767C8B;  /* 4.18:1 — solo su elementi inattivi */
+  --il-sfondo:            #FFFFFF;
+  --il-sfondo-carta:      #F7F7F5;  /* «papel» */
+  --il-bordo:             #8E94A3;  /* bordi portanti · 3.04:1 */
+  --il-bordo-tenue:       #E3E5EA;  /* divisori decorativi */
+
+  /* --- Tinte tenui ------------------------------------------------------- */
+  --il-tinta-blu:         #EEF0FE;  /* testo #2042BE sopra: 7.17:1 */
+  --il-tinta-lima:        #F4FAD9;  /* testo nero sopra: 19.52:1 */
+
+  /* --- Stati (aggiunta tecnica, non nel brand book) ---------------------- */
+  --il-successo:          #176B41;  /* 6.53:1 */
+  --il-successo-sfondo:   #E8F3EC;
+  --il-attenzione:        #8A5800;  /* 6.04:1 */
+  --il-attenzione-sfondo: #FFF4E0;
+  --il-errore:            #A11B14;  /* 7.83:1 */
+  --il-errore-sfondo:     #FDECEA;
+
+  /* --- Tipografia -------------------------------------------------------- */
+  --il-font-titolo: "Arvo", Georgia, "Times New Roman", serif;
+  --il-font-testo:  "Open Sans", -apple-system, "Segoe UI", Arial, sans-serif;
+
+  --il-h1: 56px;  --il-h2: 40px;  --il-h3: 28px;  --il-h4: 22px;
+  --il-body-l: 18px; --il-body: 16px; --il-small: 14px; --il-eyebrow: 12px;
+
+  --il-lh-titolo: 1.1;
+  --il-lh-testo: 1.6;
+  --il-ls-titolo: -0.01em;
+  --il-ls-eyebrow: 0.12em;
+
+  /* --- Spaziatura (4 → 96) ---------------------------------------------- */
+  --il-s1: 4px;  --il-s2: 8px;  --il-s3: 16px; --il-s4: 24px;
+  --il-s5: 32px; --il-s6: 48px; --il-s7: 64px; --il-s8: 96px;
+  --il-sezione-y: 96px;
+  --il-gutter: 16px;
+  --il-contenuto-max: 1200px;
+  --il-testo-max: 72ch;
+
+  /* --- Forma ------------------------------------------------------------ */
+  --il-raggio-s: 4px;
+  --il-raggio-m: 8px;
+  --il-ombra: 0 12px 32px rgba(47, 58, 228, .10); /* l'ombra è blu, non nera */
+}
+
+/* --- Tablet (≤1024px) ---------------------------------------------------- */
+@media (max-width: 1024px) {
+  :root {
+    --il-h1: 44px; --il-h2: 34px; --il-h3: 26px; --il-h4: 20px;
+    --il-sezione-y: 64px;
+  }
+}
+
+/* --- Mobile (≤767px) ----------------------------------------------------- */
+@media (max-width: 767px) {
+  :root {
+    --il-h1: 34px; --il-h2: 28px; --il-h3: 22px; --il-h4: 19px;
+    --il-body-l: 17px; /* body e small NON scendono: 16px / 14px minimi */
+    --il-sezione-y: 48px;
+  }
+}
+
+/* ==========================================================================
+   Regole minime che rendono i token corretti anche se copiati da soli
+   ========================================================================== */
+
+body {
+  background: var(--il-sfondo);
+  color: var(--il-testo);
+  font-family: var(--il-font-testo);
+  font-size: var(--il-body);
+  line-height: var(--il-lh-testo);
+}
+
+h1, h2, h3 { font-family: var(--il-font-titolo); }
+h1 { font-size: var(--il-h1); font-weight: 700; line-height: var(--il-lh-titolo); letter-spacing: var(--il-ls-titolo); }
+h2 { font-size: var(--il-h2); font-weight: 700; line-height: 1.15; letter-spacing: var(--il-ls-titolo); }
+h3 { font-size: var(--il-h3); font-weight: 400; line-height: 1.25; }
+h4 { font-size: var(--il-h4); font-weight: 700; line-height: 1.3; font-family: var(--il-font-testo); }
+
+.il-eyebrow {
+  font: 600 var(--il-eyebrow)/1.4 var(--il-font-testo);
+  letter-spacing: var(--il-ls-eyebrow);
+  text-transform: uppercase;
+}
+
+a { color: var(--il-primario-scuro); text-decoration: underline; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+
+.il-btn {
+  font: 600 var(--il-body)/1 var(--il-font-testo);
+  padding: var(--il-s3) var(--il-s4);
+  border-radius: var(--il-raggio-m);
+  border: 0;
+  background: var(--il-primario);
+  color: #FFFFFF;
+  cursor: pointer;
+}
+.il-btn:hover  { background: var(--il-primario-scuro); }
+.il-btn:active { background: var(--il-primario-premuto); }
+.il-btn:focus-visible { outline: 2px solid var(--il-testo); outline-offset: 2px; }
+.il-btn[disabled] { background: var(--il-bordo-tenue); color: var(--il-testo-disabilitato); cursor: not-allowed; }
+
+.il-btn--accento { background: var(--il-accento); color: #000000; } /* testo NERO, sempre */
+.il-btn--accento:hover { background: var(--il-accento-scuro); }
+
+.il-btn--secondario {
+  background: transparent;
+  color: var(--il-primario);
+  border: 2px solid var(--il-primario);
+}
+.il-btn--secondario:hover { background: var(--il-tinta-blu); }
+
+.il-input {
+  font-size: var(--il-body); /* sotto 16px iOS ingrandisce la pagina */
+  height: 48px;
+  padding: 0 var(--il-s3);
+  border: 1px solid var(--il-bordo);
+  border-radius: var(--il-raggio-s);
+  background: var(--il-sfondo);
+  color: var(--il-testo);
+}
+.il-input:focus-visible {
+  border: 2px solid var(--il-primario);
+  outline: 2px solid var(--il-tinta-blu);
+  outline-offset: 0;
+}
+.il-input[aria-invalid="true"] { border-color: var(--il-errore); }
+
+.il-sezione { padding-block: var(--il-sezione-y); }
+.il-sezione--carta { background: var(--il-sfondo-carta); }
+.il-sezione--blu { background: var(--il-primario); color: #FFFFFF; }
+.il-sezione--blu a { color: #FFFFFF; }
+
+.il-contenitore {
+  max-width: var(--il-contenuto-max);
+  margin-inline: auto;
+  padding-inline: var(--il-gutter);
+}
+
+.il-card {
+  background: var(--il-sfondo);
+  border: 1px solid var(--il-bordo-tenue);
+  border-radius: var(--il-raggio-m);
+  padding: var(--il-s4);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.il-card:hover { transform: translateY(-2px); box-shadow: var(--il-ombra); }
