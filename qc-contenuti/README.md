@@ -17,7 +17,7 @@ Finché quella risposta non c'è, questa cartella non è un prodotto.
 | Domande di QC (IT + EN) | scritte su esempi sintetici, **da rivedere su caption vere** |
 | Policy PASS/REVIEW/BLOCK | fatta, **soglie non tarate** |
 | Script di valutazione | funzionante |
-| Test | 20, verdi, offline |
+| Test | 27, verdi, offline |
 | Dataset etichettato | **manca** — è il prossimo passo |
 
 ## Avvertenza sull'adapter
@@ -91,8 +91,10 @@ qc/providers/
   base.py               il contratto che ogni fornitore rispetta
   typesafe.py           adapter TypeSafe — l'unico file legato al fornitore
   fake.py               finto deterministico, per lavorare offline
+scripts/csv_to_jsonl.py converte il foglio di etichettatura in dataset
 scripts/run_eval.py     accordo con i giudizi umani, ECE, sweep delle soglie
 data/LABELING.md        come etichettare (leggilo prima di iniziare)
+data/template-etichettatura.csv   il foglio che compila il team
 ```
 
 ## Tre scelte di progetto
@@ -114,8 +116,9 @@ che si compensano davvero — qui non ce ne sono.
 
 ## Prossimo passo
 
-Etichettare **100 caption reali** seguendo `data/LABELING.md`, poi lanciare
-`run_eval.py`. I numeri che contano, in ordine:
+Etichettare **100 caption reali** sul foglio `data/template-etichettatura.csv`
+(istruzioni in `data/LABELING.md`), convertirlo con `scripts/csv_to_jsonl.py`,
+poi lanciare `run_eval.py`. I numeri che contano, in ordine:
 
 1. **Errori gravi** (umano dice `block`, gate dice `pass`). Se non sono zero, il
    gate non può bloccare da solo — al massimo segnala.

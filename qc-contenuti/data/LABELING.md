@@ -5,7 +5,27 @@ il gate automatico regge sui nostri contenuti, e poi — se un giorno passiamo a
 modello nostro — come materiale di addestramento. Etichettare male qui costa due
 volte.
 
-## Formato
+## Come si etichetta (la via facile)
+
+**Non scrivere JSON a mano.** Si lavora su foglio:
+
+1. Apri `template-etichettatura.csv` con Excel, o importalo in Google Sheets.
+2. Il team compila una riga per caption (le due righe di esempio si cancellano).
+3. Esporta in CSV e converti:
+
+```
+python scripts/csv_to_jsonl.py data\etichette.csv data\captions.jsonl
+```
+
+Il convertitore controlla tutto prima di scrivere: se una riga e' sbagliata ti
+dice numero di riga e motivo, e non produce un file a meta'. Alla fine ti stampa
+quanti positivi hai per ogni domanda, e ti avvisa se sono troppo pochi perche' la
+soglia sia stimabile.
+
+Accetta `si`, `SI`, `x`, `1`, `true` per il vero; `no`, `0` o cella vuota per il
+falso — cosi' chi compila non deve stare attento alla forma.
+
+## Formato prodotto
 
 Un file `.jsonl`: **una riga per caption**, JSON valido su riga singola.
 Vedi `captions.sample.jsonl` (quelle sono tre righe sintetiche, da buttare).

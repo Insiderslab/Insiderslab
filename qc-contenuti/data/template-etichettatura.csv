@@ -1,0 +1,3 @@
+id,cliente,brand_nome,brand_tono_di_voce,caption,claim_garantito,claim_sanitario,dato_non_verificabile,urgenza_ingannevole,prezzo_esplicito,nomina_competitor,tono_brand,categoria,verdetto_umano,note
+HEC-001,hair-extension-clinic,Hair Extension Clinic,"Professionale e rassicurante. Mai sensazionalistico. Non promette risultati.","INCOLLA QUI LA CAPTION VERA",no,no,no,no,no,no,3,educativo,pass,
+HEC-002,hair-extension-clinic,Hair Extension Clinic,"Professionale e rassicurante. Mai sensazionalistico. Non promette risultati.","INCOLLA QUI LA CAPTION VERA",si,si,no,si,no,no,0,promo,block,esempio di caption a rischio
