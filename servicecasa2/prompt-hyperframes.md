@@ -17,8 +17,8 @@ Come si usano: apri **claude.ai** (web o desktop) in una chat con il connettore 
 Tema: PRONTO INTERVENTO FABBRO.
 Scena 1 (0-5s) VO: "Chiavi dimenticate dentro, serratura bloccata o, peggio, una porta forzata dai ladri?" — Testo grande: "CHIUSO FUORI? SERRATURA BLOCCATA?" + icona porta/chiave.
 Scena 2 (5-14s) VO: "Prima cosa: niente panico e non provare a forzare la porta da solo. Rischi di rovinare serratura e infisso e di spendere il doppio." — Icona X rossa + "Non forzare la porta".
-Scena 3 (14-28s) VO: "Friul Service Casa: fabbri a Udine e provincia, 24 ore su 24, anche di notte e nei festivi. Apriamo porte blindate e normali, sostituiamo cilindri e mettiamo in sicurezza dopo un furto." — 3 badge in sequenza: "24/7", "Apertura porte", "Cambio serratura e cilindro".
-Scena 4 (28-40s) VO: "Come funziona? Ci chiami, ci descrivi il problema e ti diamo un preventivo chiaro. Arriviamo in tempi rapidi e interveniamo solo dopo il tuo ok." — 3 step numerati: 1 Chiami · 2 Preventivo chiaro · 3 Intervento.
+Scena 3 (14-28s) VO: "Friul Service Casa: fabbri a Udine e provincia, 24 ore su 24, anche di notte e nei festivi. Apriamo porte blindate e normali, sostituiamo cilindri e mettiamo in sicurezza dopo un furto." — 4 badge in sequenza: "24/7", "Entro 1 ora", "Apertura porte", "Cambio serratura e cilindro".
+Scena 4 (28-40s) VO: "Come funziona? Ci chiami e arriviamo entro un'ora. Sul posto valutiamo il problema e ti facciamo subito il preventivo: interveniamo solo dopo il tuo ok." — 3 step numerati: 1 Chiami · 2 Arriviamo entro 1 ora · 3 Preventivo sul posto e intervento.
 Scena 5 (40-50s) VO: "Sei fuori casa proprio adesso? Chiama il tre sette sette, zero otto zero, zero sette sette quattro. Ti rispondiamo subito." — Chiusura con numero, CHIAMA ORA e logo.
 ```
 
@@ -29,8 +29,8 @@ Scena 5 (40-50s) VO: "Sei fuori casa proprio adesso? Chiama il tre sette sette, 
 Tema: PRONTO INTERVENTO ELETTRICISTA.
 Scena 1 (0-5s) VO: "Salta la corrente e il salvavita non torna su? O senti odore di bruciato da una presa?" — Schermo che si spegne, poi il testo "BLACKOUT? SALVAVITA CHE SCATTA?" + icona fulmine.
 Scena 2 (5-15s) VO: "Un consiglio: stacca tutti gli elettrodomestici e prova a riarmare il salvavita. Se scatta di nuovo, fermati: c'è un guasto. Se senti odore di bruciato, stacca il generale e chiamaci." — Icona di avviso + "Se riscatta: non insistere".
-Scena 3 (15-29s) VO: "Friul Service Casa: elettricisti 24 ore su 24 a Udine e dintorni. Ricerca guasti, cortocircuiti, quadri elettrici, prese e impianti, sempre in sicurezza." — Badge: "24/7", "Ricerca guasti", "Quadri e impianti".
-Scena 4 (29-41s) VO: "Ci chiami, ci spieghi cosa succede e ti diamo subito un'indicazione chiara sul costo. Arriviamo, troviamo il guasto e riportiamo la corrente." — Stessi 3 step del video Fabbro.
+Scena 3 (15-29s) VO: "Friul Service Casa: elettricisti 24 ore su 24 a Udine e dintorni. Ricerca guasti, cortocircuiti, quadri elettrici, prese e impianti, sempre in sicurezza." — Badge: "24/7", "Entro 1 ora", "Ricerca guasti", "Quadri e impianti".
+Scena 4 (29-41s) VO: "Ci chiami e arriviamo entro un'ora. Troviamo il guasto, ti facciamo il preventivo sul posto prima di iniziare e riportiamo la corrente." — Stessi 3 step del video Fabbro.
 Scena 5 (41-50s) VO: "Sei al buio proprio adesso? Chiama il tre sette sette, zero otto zero, zero sette sette quattro. Ti rimettiamo in luce." — Chiusura identica.
 ```
 
@@ -41,8 +41,8 @@ Scena 5 (41-50s) VO: "Sei al buio proprio adesso? Chiama il tre sette sette, zer
 Tema: PRONTO INTERVENTO IDRAULICO.
 Scena 1 (0-5s) VO: "Un tubo che perde, il bagno allagato o lo scarico completamente intasato?" — Gocce che cadono, poi "PERDITA? SCARICO INTASATO?" + icona goccia.
 Scena 2 (5-15s) VO: "La prima cosa da fare è chiudere il rubinetto generale dell'acqua: di solito è vicino al contatore o sotto il lavello. Così limiti i danni, anche al vicino di sotto." — Spunta + "Chiudi il rubinetto generale".
-Scena 3 (15-29s) VO: "Friul Service Casa: idraulici di pronto intervento 24 ore su 24 a Udine e provincia. Perdite, tubi rotti, scarichi e WC intasati, rubinetteria e boiler." — Badge: "24/7", "Perdite e tubi", "Scarichi intasati", "Boiler e rubinetti".
-Scena 4 (29-41s) VO: "Ci chiami, ci descrivi il problema, ti diamo un preventivo chiaro e arriviamo in tempi rapidi. Nessuna sorpresa a fine lavoro." — Stessi 3 step.
+Scena 3 (15-29s) VO: "Friul Service Casa: idraulici di pronto intervento 24 ore su 24 a Udine e provincia. Perdite, tubi rotti, scarichi e WC intasati, rubinetteria e boiler." — Badge: "24/7", "Entro 1 ora", "Perdite e tubi", "Scarichi intasati", "Boiler e rubinetti".
+Scena 4 (29-41s) VO: "Ci chiami e arriviamo entro un'ora. Il preventivo te lo facciamo sul posto, prima di iniziare. Nessuna sorpresa a fine lavoro." — Stessi 3 step.
 Scena 5 (41-50s) VO: "L'acqua sta ancora scendendo? Chiama adesso il tre sette sette, zero otto zero, zero sette sette quattro." — Chiusura identica.
 ```
 
