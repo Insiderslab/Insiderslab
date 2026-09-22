@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -83,6 +84,8 @@ def main() -> int:
     parser.add_argument("--dump", type=Path, help="salva le risposte grezze in JSONL")
     parser.add_argument("--provider", choices=["typesafe", "fake"], default=None,
                         help="sovrascrive QC_PROVIDER del .env")
+    parser.add_argument("--limit", type=int, default=0,
+                        help="valuta solo le prime N caption (per una prova rapida)")
     args = parser.parse_args()
 
     carica_env()
@@ -105,6 +108,8 @@ def main() -> int:
         )
 
     righe = carica(args.dataset)
+    if args.limit:
+        righe = righe[: args.limit]
     domande = QUESTION_SETS[args.questions]
     try:
         provider = get_provider(args.provider or "")
@@ -123,13 +128,34 @@ def main() -> int:
     grezzi = []
     errori = 0
 
-    for riga in righe:
+    if provider.name != "fake":
+        print(f"Interrogo il modello su {len(righe)} caption. Ctrl+C per fermare.",
+              file=sys.stderr)
+
+    for indice, riga in enumerate(righe, 1):
+        if provider.name != "fake":
+            print(f"  [{indice}/{len(righe)}] {riga.get('id','?')} ... ",
+                  end="", flush=True, file=sys.stderr)
+        inizio = time.monotonic()
         try:
             risposte = provider.evaluate(stato(riga), domande)
+        except KeyboardInterrupt:
+            print("\ninterrotto dall'utente.", file=sys.stderr)
+            break
         except Exception as exc:  # noqa: BLE001
-            print(f"  {riga.get('id','?')}: errore -> {exc}", file=sys.stderr)
+            print(f"errore -> {exc}", file=sys.stderr)
             errori += 1
+            if errori == 1 and indice == 1:
+                print(
+                    "\n   La prima chiamata e' fallita. Prima di insistere su tutte "
+                    "le altre,\n   lancia:  python scripts/smoke_test.py\n"
+                    "   Fa UNA chiamata e mostra la risposta grezza.\n",
+                    file=sys.stderr,
+                )
+                break
             continue
+        if provider.name != "fake":
+            print(f"{time.monotonic() - inizio:.2f}s", file=sys.stderr)
 
         etichette = riga.get("etichette", {})
         for qid, domanda in domande.items():

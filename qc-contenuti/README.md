@@ -21,6 +21,23 @@ Finché quella risposta non c'è, questa cartella non è un prodotto.
 | Dataset sintetico (53 caption) | c'è, **solo per collaudo** |
 | Dataset reale etichettato | **manca** — è il prossimo passo |
 
+## Se qualcosa non va con l'API
+
+```
+python scripts/smoke_test.py
+```
+
+Fa **una** chiamata sola e stampa la risposta grezza. Distingue i casi che
+altrimenti si confondono: DNS che non risolve, proxy che blocca, chiave rifiutata,
+endpoint sbagliato, o risposta con una forma diversa da quella attesa. Non stampa
+mai la chiave.
+
+Per una prova breve senza consumare tutto il dataset:
+
+```
+python scripts/run_eval.py data/captions.sintetiche.jsonl --provider typesafe --limit 3
+```
+
 ## Avvertenza sull'adapter
 
 `qc/providers/typesafe.py` è scritto contro un contratto **non verificato**:
@@ -92,6 +109,7 @@ qc/providers/
   base.py               il contratto che ogni fornitore rispetta
   typesafe.py           adapter TypeSafe — l'unico file legato al fornitore
   fake.py               finto deterministico, per lavorare offline
+scripts/smoke_test.py   UNA chiamata all'API, risposta grezza: la diagnosi
 scripts/csv_to_jsonl.py converte il foglio di etichettatura in dataset
 scripts/run_eval.py     accordo con i giudizi umani, ECE, sweep delle soglie
 data/LABELING.md        come etichettare (leggilo prima di iniziare)
