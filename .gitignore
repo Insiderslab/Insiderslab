@@ -1,0 +1,4 @@
+# Segreti: non committare mai
+.env
+.env.*
+!.env.example
