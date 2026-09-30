@@ -13,3 +13,10 @@ Controlli superati: 4 pezzi = MASTER (1 carosello, 2 reel, 1 post) su FB/IG/Goog
 | Generale | Pilastri: solo «valore» e «dietro le quinte» (2+2). | Accettabile con 4 pezzi; se diventano 6, aggiungere un pezzo di tipo prodotto/evento (cesti regalo, evento dello spaccio). |
 
 Correzioni applicate direttamente: 0.
+
+## Giro 2 · corretto
+
+- **OM-N4** (griglia interna e piano cliente) rifatta: stesso reel 9:16 del 25/11, tema «Ortaggi di stagione allo spaccio». Tolti cavoli, cavolfiori, lattuga, #Cavolfiori e «adesso»; nel copy e nelle scritte a schermo i prodotti sono il segnaposto «[prodotto confermato dal cliente]». Materiale: «DA CHIEDERE AL CLIENTE: 4-6 clip verticali nuove dei prodotti di novembre sul banco/in campo», nessuna clip d'archivio. Brief per Abraham riscritto per le clip nuove (scaletta campo → cassette → banco, 15 s, testi IT con segnaposto). Nota: senza clip nuove il reel non si pubblica; Mauro (OM-06r) come possibile autore.
+- **OM-N1**: aggiunta la verifica «non ripetere OM-06 di ottobre» (clip A/B e taglio non devono coincidere, altrimenti clip nuove).
+- **IMG_3318**: resta solo come copertina di OM-N3; tolta come riserva di OM-N2 (ora solo foto nuove del cliente).
+- Nota 4 per Nicole e Gabriella aggiornata di conseguenza. OM-N2/N3 per il resto invariati. Nessun commit.
