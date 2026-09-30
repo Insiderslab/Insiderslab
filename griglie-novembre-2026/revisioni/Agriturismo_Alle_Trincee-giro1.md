@@ -14,3 +14,15 @@ Controlli superati: 8 pezzi = MASTER (2 carrusel, 2 reel, 4 post) su FB/IG/Googl
 | 7 (20/11) | Clip di aprile con possibili addobbi di San Valentino; aperture del weekend non confermate. | Nessuna modifica: già indicato in griglia. |
 
 Correzioni applicate direttamente: 3 (riga 4; CTA di tutte le righe e scritte a schermo dei reel; hook riga 2), in griglia interna + piano cliente.
+
+## Giro 2 · corretto
+
+Rifatta solo la riga 2 (carosello 05/11), in griglia interna e piano cliente; le correzioni del giro 1 (CTA al «voi», SmartLink, hook «Prima di prenotare, date un'occhiata.», riga 4) restano invariate.
+
+| Riga | Correzione |
+|---|---|
+| 2 (05/11) | Slide 3: tolto l'«angolo per i bambini» (foto `Imagenes website\20250130_152213-scaled.jpg`). Ora è un fotogramma di `WhatsApp Video 2026-09-10 at 12.40.37.mp4` (ripresa esterna di cortile e agriturismo, settembre 2026, riga con tag `agriturismo - NON per Medea`, cartella Materiale Nuovo, nessuna persona), con la scritta «Vi aspettiamo a Medea». |
+| 2 (05/11) | Tema: «Dove vi sedete da noi: la casa, la sala, il cortile». Caption: «…l'agriturismo, la sala apparecchiata e il cortile che vi accoglie quando arrivate.» Aggiornati idea visiva, brief per Arianna (estrazione del fotogramma e ritaglio 4:5) e descrizione nel piano cliente. |
+| 2 (05/11) | Da chiedere: aggiunto «Esiste ancora uno spazio bambini? Se sì, foto nuova.» e la verifica che il fotogramma regga la qualità 4:5 e non sia già uscito. |
+
+Esito: riga 2 corretta, pronta per il ricontrollo.
