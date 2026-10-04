@@ -59,3 +59,33 @@ File in `griglie-novembre-2026/output/` (griglia interna + piano cliente), brief
 > • **Abraham**: columna 15 = brief de vídeo con los clips exactos, escaleta, textos en pantalla y duración (9:16).
 > • **Nicole y Gabriella**: revisión de textos; al final de cada grilla hay "Note per Nicole e Gabriella" con dudas y datos a verificar.
 > Antes de usar cualquier foto o vídeo, verificar que no haya salido ya en el feed. Las filas con "DA CHIEDERE AL CLIENTE" esperan material: no inventar.
+
+---
+
+# Fase B · marchi interni (aggiunta 04/10/2026)
+
+Stesso flusso della Fase A (brief → griglia → revisione giro 1). Fonti: MASTER GENERAL, mappatura Codex (`MAPPA_MEDIA_*` + "Mappa contenuti – tutti i clienti" del 02/10, da cui vengono i **link Drive diretti** in colonna 12), griglie mag–ott, manuali d'identità. Tutto bozza, niente su Drive/Monday/Slack.
+
+| Marchio | Pezzi (MASTER) | Revisione | Può partire? | Blocchi |
+|---|---|---|---|---|
+| Insiders Lab | 4: 3 post, 1 reel | 1 giro, OK con correzioni minori | Sì, dopo 2 conferme | Chi è il portavoce dei video DJI; caption del reel da allineare al parlato |
+| Hair Extension Clinic | 7: 5 post, 2 reel | 1 giro, OK con correzioni minori | Parziale | Clip 2024 forse già nel reel di giugno; servono video del salone nuovo e foto di taglio/colore |
+| Soshi Hair | 7: 5 post, 2 reel | 1 giro, OK con correzioni minori | 5 su 7 | Nessun video Soshi: i 2 reel vanno girati (senza HEC) |
+
+Scheda per il controllo di domani: `DA_CONTROLLARE_GABRIELLA_NICOLE.md`.
+
+## Decisioni che servono a te (Fase B)
+1. **Bando de emprendimiento**: nel MASTER è "in preparazione" ma non c'è nessun documento → non è in griglia. Entra a novembre?
+2. **Nuovi settori Insiders Lab** (assicurazioni, studi legali) come messaggio pubblico: post del 25/11, ok?
+3. **HEC**: 7 pezzi (MASTER) o "4 post + storie" (piano settimanale 28/09)? Chi approva? Si può dire "nuovo salone"?
+4. **Soshi**: target solo B2B (MASTER, ottobre) o anche cliente finale (luglio–settembre)? Double drawn, campionario e ordini via DM confermati?
+5. **Responsabile social** HEC e Soshi: MASTER "por asignar"; dal Brain copy = Gabriela, OK finale = Nicole.
+6. **Link Briefing nel MASTER**: HEC apre il briefing di Hotel Belvedere; Soshi non si apre.
+
+## BOZZA · righe Monday "Resumen de Grillas" Fase B (NON create)
+
+| Cliente | Mes | Piezas | Estado | Responsable | Notas |
+|---|---|---|---|---|---|
+| Insiders Lab | 2026-11 | 4 | Borrador listo | Ste | Confirmar portavoz de los vídeos |
+| Hair Extension Clinic | 2026-11 | 7 | Borrador listo | Por asignar | Faltan vídeos del salón nuevo y fotos de corte/color |
+| Soshi Hair | 2026-11 | 7 | Borrador listo | Por asignar | 2 reels sin material: grabar |
