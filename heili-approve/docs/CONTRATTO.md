@@ -100,6 +100,11 @@ Per Reel, TikTok, Story video e YouTube il cliente non commenta "la foto", ma **
 - Assistente AI: il pannello riceve `getVideoTime?: () => number | null`; se il cliente parla di un video senza dire il momento, l'assistente chiede "in che secondo?"; la UI mostra un chip **"Usa il momento attuale (0:07)"** che inserisce il timecode nel messaggio. Gli `actionItems` finali hanno `timeSec: number | null` e `timeEndSec: number | null`, e il cliente può dirli a voce ("verso il settimo secondo").
 - Agenzia: nella scheda post, lettore con tutti i marcatori (commenti + azioni dell'assistente) e lista "Note sul video" per tempo; nell'editor, scelta della copertina del Reel (fotogramma → `videoCoverMs`, inviato a Metricool come `videoCoverMilliseconds`) e durata mostrata.
 
+### Decisioni del titolare (aggiornamento)
+
+- **Dominio di produzione: `approve.heili.cloud`** (approvato), sullo stesso VPS Hostinger di DM by Heili, dietro Caddy, porta host 3200. `NEXTAUTH_URL` e `PUBLIC_BASE_URL` = `https://approve.heili.cloud`.
+- **Motore dell'assistente AI: OpenAI** (le chiavi ChatGPT già presenti nel `.env` dei server Heili). `lib/review-assistant` deve avere un'interfaccia `ReviewAssistantProvider` con due implementazioni: `openai` (SDK ufficiale `openai`, già installato: `client.responses.parse` / `chat.completions.parse` con `zodTextFormat` / `zodResponseFormat` da `openai/helpers/zod`, modello da `OPENAI_MODEL`) e `anthropic` (quella esistente). Scelta: `REVIEW_ASSISTANT_PROVIDER` (`openai` | `anthropic`); se assente, `openai` quando c'è `OPENAI_API_KEY`, altrimenti `anthropic` quando c'è `ANTHROPIC_API_KEY`. `isAssistantEnabled()` = almeno un provider configurato. Stesso prompt, stessi schemi di output, stessi limiti e gestione errori per entrambi.
+
 ### Fase 2 — in parallelo (dopo la fase 1)
 
 **E. agenzia: post** — `app/(dashboard)/dashboard`, `posts` (elenco con filtri per stato/cliente, `?status=attention` = CHANGES_REQUESTED+FAILED), `posts/new`, `posts/[id]` (editor, caricamento media, opzioni per rete, validazioni, anteprima, versioni, commenti con risposta/risolvi, timeline eventi, trascrizioni dell'assistente, azioni Invia in revisione / Programma ora / Riprova / Annulla), `calendar` (mese/settimana per cliente), invio multiplo in revisione. Server actions in file `actions.ts` accanto alle pagine.
