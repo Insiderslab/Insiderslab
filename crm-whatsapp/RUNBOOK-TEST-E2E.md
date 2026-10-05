@@ -43,3 +43,13 @@
 ## Non verificato da qui
 - Che `META_WEBHOOK_VERIFY_TOKEN` sia impostato in produzione (se il CRM non mostra la URL del webhook, va impostato e il container riavviato).
 - Che Clientify non abbia automazioni attive sul numero.
+
+## Registro di esecuzione
+
+### 5/10 sera (sessione Chrome, nessuna modifica salvata)
+- Webhook app 609974691965875: callback `https://insiderslab.app.n8n.cloud/webhook/942f3c9d-…/webhook`, solo `messages` (v25.0). Token di verifica non leggibile (campo mascherato).
+- n8n: login non effettuato, workflow non verificato. **Ricerca da remoto (Slack, Gmail, repo): nessuna traccia di un flusso WhatsApp su n8n in uso** (nessuna email di errore di esecuzione da n8n cloud, nessun messaggio Slack, nessun riferimento nei repo). L'app vede solo il numero +1 555 779 6249 e il numero di prova Meta: un flusso su quel numero non può essere un processo cliente attivo. Conferma definitiva: n8n → workflow con webhook `942f3c9d…` → scheda *Executions*: se nessuna esecuzione negli ultimi 30 giorni, si può spostare il callback.
+- Rollback verso n8n: con il token mascherato, il rollback funziona solo se il workflow n8n risponde alla challenge `hub.challenge` con un token che conosciamo. Prima di cambiare il callback, aprire il nodo Webhook in n8n e annotare (fuori chat) il token di verifica che usa; in alternativa accettare che il rollback richieda di impostare un token nuovo in entrambi i posti.
+- Clientify: nessun canale WhatsApp API collegato, automazione "Nuovo Lead" non usa WhatsApp. Rischio doppie risposte: basso.
+- Nota sul numero: +1 555 779 6249 è un numero fornito da Meta (prefisso 555, non raggiungibile con chiamate o SMS). Va bene per il test; per un cliente serve un numero reale suo.
+- A1 in corso: utente di sistema `WhatsappBot` (ID 61572964465934) senza risorse; prossimo clic = assegna app + WABA, poi token "Mai" con i due permessi.
