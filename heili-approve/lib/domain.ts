@@ -78,6 +78,29 @@ export interface MediaItem {
   /** MediaAsset.id when uploaded through the app; absent for external URLs. */
   assetId?: string;
   alt?: string;
+  /** Videos only: duration in seconds (read client-side on upload). */
+  durationSec?: number;
+  /** Videos only: poster frame URL for lists and thumbnails. */
+  posterUrl?: string;
+}
+
+/** Formats that are video-first: reviewing them means commenting on moments. */
+export const VIDEO_FORMATS = new Set(["REEL", "STORY", "video", "short"]);
+
+/** "0:07", "1:05", "1:02:03" — how timecodes are shown everywhere. */
+export function formatTimecode(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/** Parses "0:07", "1:05", "65", "1:02:03" → seconds; null if not a timecode. */
+export function parseTimecode(value: string): number | null {
+  const parts = value.trim().split(":");
+  if (parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) return null;
+  return parts.reduce((acc, p) => acc * 60 + Number(p), 0);
 }
 
 export function parseMediaItems(value: unknown): MediaItem[] {

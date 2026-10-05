@@ -271,6 +271,8 @@ model PostVersion {
   firstCommentText String?
   /// Array di MediaItem (vedi lib/domain.ts): [{ url, type, mimeType, alt? }]
   media            Json     @default("[]")
+  /// Copertina del video: istante in millisecondi (Metricool videoCoverMilliseconds).
+  videoCoverMs     Int?
   /// Nota dell'agenzia su cosa è cambiato rispetto alla versione precedente.
   changeNote       String?
   createdById      String?
@@ -301,6 +303,11 @@ model PostComment {
   mediaIndex Int?
   pinX       Float?
   pinY       Float?
+  /// Commento su un video (Reel, TikTok, Story video): istante in secondi e,
+  /// facoltativo, fine dell'intervallo ("dal 0:05 al 0:09"). pinX/pinY, se
+  /// presenti, indicano il punto sul fotogramma a quell'istante.
+  timeSec    Float?
+  timeEndSec Float?
   resolvedAt DateTime?
   createdAt  DateTime          @default(now())
 
