@@ -1,22 +1,25 @@
 @import "tailwindcss";
 
-/* Approve by Heili — Design System (from DM by Heili)
-   Plain and functional. No gradients, glass, glow, or animation. */
+/* Approve by Heili — colors from the Heili design system (light theme):
+   ink brand for actions, verderame "node" for AI, status colors always paired
+   with a word. Plain and functional. No gradients, glass, glow, or animation. */
 
 @theme inline {
-  --color-background: #ffffff;
-  --color-foreground: #18181b;
-  --color-surface: #f7f7f8;
-  --color-surface-hover: #efeff1;
-  --color-border: #e4e4e7;
-  --color-border-hover: #d4d4d8;
-  --color-muted: #71717a;
-  --color-accent: #f97316;
-  --color-accent-hover: #ea580c;
-  --color-success: #16a34a;
-  --color-error: #dc2626;
-  --color-warning: #d97706;
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-background: #f5f6f4;
+  --color-foreground: #16202b;
+  --color-surface: #ffffff;
+  --color-surface-hover: #eaeeec;
+  --color-border: #d3dadd;
+  --color-border-hover: #7d8a95;
+  --color-muted: #4b5866;
+  --color-accent: #1f3f73;
+  --color-accent-hover: #16305a;
+  --color-node: #0b6b6a;
+  --color-node-soft: #dcf0ee;
+  --color-success: #2c6a1f;
+  --color-error: #b3261e;
+  --color-warning: #875800;
+  --font-sans: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, monospace;
 }
 
