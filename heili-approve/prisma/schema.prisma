@@ -1,0 +1,428 @@
+// Approve by Heili — revisione e approvazione dei post dei clienti,
+// con programmazione automatica su Metricool dopo l'approvazione.
+//
+// Auth / Workspace / Invitation sono ereditati da DM by Heili (heili-dm) e
+// restano identici, così login, team e switcher funzionano allo stesso modo.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth (NextAuth, identico a heili-dm) ────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts         Account[]
+  sessions         Session[]
+  ownedWorkspaces  Workspace[]           @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+  sentInvitations  WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
+  postsCreated     Post[]                @relation("PostCreatedBy")
+  versionsCreated  PostVersion[]         @relation("VersionCreatedBy")
+  comments         PostComment[]
+  events           PostEvent[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Workspace (agenzia) ─────────────────────────────────────────────────────
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Credenziali API Metricool dell'agenzia. Il token è cifrato con
+  /// ENCRYPTION_KEY (AES-256-GCM, vedi lib/crypto.ts) e non lascia mai il server.
+  metricoolUserId         String?
+  metricoolTokenEncrypted String?
+  metricoolConnectedAt    DateTime?
+
+  members     WorkspaceMember[]
+  invitations WorkspaceInvitation[]
+  clients     Client[]
+  posts       Post[]
+  media       MediaAsset[]
+
+  @@index([ownerId])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(OWNER)
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model WorkspaceInvitation {
+  id              String                    @id @default(cuid())
+  workspaceId     String
+  email           String
+  role            WorkspaceRole             @default(MEMBER)
+  token           String                    @unique
+  status          WorkspaceInvitationStatus @default(PENDING)
+  invitedByUserId String?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User?     @relation("WorkspaceInvitationsSent", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, email])
+  @@index([email])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum WorkspaceInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+// ─── Clienti (= brand Metricool) ─────────────────────────────────────────────
+
+model Client {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  name            String
+  /// blogId del brand su Metricool. Senza, i post approvati non possono
+  /// essere programmati (restano APPROVED con errore esplicito).
+  metricoolBlogId String?
+  /// Fuso orario IANA del brand, es. "Europe/Rome". Usato per publicationDate.
+  timezone        String    @default("Europe/Rome")
+  logoUrl         String?
+  /// Reti abilitate per questo cliente (valori di NETWORKS in lib/domain.ts).
+  networks        String[]  @default([])
+  /// Se true, il post approvato viene programmato automaticamente;
+  /// se false resta APPROVED finché qualcuno dell'agenzia non lo programma.
+  autoSchedule    Boolean   @default(true)
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reviewers ClientReviewer[]
+  posts     Post[]
+
+  @@index([workspaceId])
+}
+
+/// Persona lato cliente che approva. Accede al portale con un link personale
+/// (/review/<token>), senza password. Nel DB salviamo solo l'hash del token.
+model ClientReviewer {
+  id             String    @id @default(cuid())
+  clientId       String
+  name           String
+  email          String
+  tokenHash      String    @unique
+  /// Stesso token cifrato (lib/crypto.ts), per poter rimandare il link via email.
+  tokenEncrypted String
+  /// Se false non riceve email e il link smette di funzionare.
+  active         Boolean   @default(true)
+  lastSeenAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  comments       PostComment[]
+  events         PostEvent[]
+  reviewSessions ReviewSession[]
+
+  @@unique([clientId, email])
+  @@index([clientId])
+}
+
+// ─── Post e revisioni ────────────────────────────────────────────────────────
+
+enum PostStatus {
+  DRAFT // in lavorazione in agenzia, il cliente non lo vede
+  IN_REVIEW // inviato al cliente, in attesa di risposta
+  CHANGES_REQUESTED // il cliente ha chiesto modifiche
+  APPROVED // approvato, in attesa di essere programmato
+  SCHEDULING // job di programmazione su Metricool in corso
+  SCHEDULED // programmato su Metricool (metricoolPostId valorizzato)
+  FAILED // programmazione fallita dopo i retry (vedi lastError)
+  CANCELLED // archiviato/annullato dall'agenzia
+}
+
+model Post {
+  id             String     @id @default(cuid())
+  workspaceId    String
+  clientId       String
+  /// Titolo interno, es. "Carosello lancio collezione autunno".
+  title          String
+  status         PostStatus @default(DRAFT)
+  /// Data/ora di pubblicazione desiderata (istante UTC). La conversione nel
+  /// fuso del cliente avviene solo quando si chiama Metricool.
+  publishAt      DateTime
+  /// Reti di destinazione (sottoinsieme di Client.networks).
+  networks       String[]
+  /// Opzioni per rete nel formato Metricool, es.
+  /// { "instagramData": { "type": "POST" }, "facebookData": { "type": "POST" } }
+  networkOptions Json       @default("{}")
+
+  currentVersionNumber Int @default(1)
+
+  /// Scadenza entro cui il cliente dovrebbe rispondere (solleciti).
+  reviewDueAt          DateTime?
+  submittedAt          DateTime?
+  approvedAt           DateTime?
+  approvedByReviewerId String?
+
+  metricoolPostId  String?
+  scheduledAt      DateTime?
+  lastError        String?
+  scheduleAttempts Int       @default(0)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy      User?           @relation("PostCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  versions       PostVersion[]
+  comments       PostComment[]
+  events         PostEvent[]
+  reviewSessions ReviewSession[]
+
+  @@index([workspaceId, status])
+  @@index([clientId, status])
+  @@index([publishAt])
+}
+
+/// Ogni modifica del contenuto dopo il primo invio crea una nuova versione,
+/// così il cliente vede cosa è cambiato e l'approvazione si riferisce sempre
+/// a una versione precisa.
+model PostVersion {
+  id               String   @id @default(cuid())
+  postId           String
+  number           Int
+  text             String
+  firstCommentText String?
+  /// Array di MediaItem (vedi lib/domain.ts): [{ url, type, mimeType, alt? }]
+  media            Json     @default("[]")
+  /// Nota dell'agenzia su cosa è cambiato rispetto alla versione precedente.
+  changeNote       String?
+  createdById      String?
+  createdAt        DateTime @default(now())
+
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("VersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  comments  PostComment[]
+
+  @@unique([postId, number])
+}
+
+enum CommentAuthorType {
+  AGENCY
+  CLIENT
+}
+
+model PostComment {
+  id         String            @id @default(cuid())
+  postId     String
+  versionId  String?
+  authorType CommentAuthorType
+  userId     String?
+  reviewerId String?
+  body       String
+  /// Commento puntato su un media: indice nell'array media e coordinate
+  /// relative 0..1. Null = commento generale.
+  mediaIndex Int?
+  pinX       Float?
+  pinY       Float?
+  resolvedAt DateTime?
+  createdAt  DateTime          @default(now())
+
+  post     Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  version  PostVersion?    @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reviewer ClientReviewer? @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([postId])
+}
+
+enum PostEventType {
+  CREATED
+  VERSION_CREATED
+  SUBMITTED_FOR_REVIEW
+  REMINDER_SENT
+  CLIENT_VIEWED
+  CHANGES_REQUESTED
+  APPROVED
+  SCHEDULE_REQUESTED
+  SCHEDULED
+  SCHEDULE_FAILED
+  CANCELLED
+  COMMENTED
+  ASSISTANT_SESSION_COMPLETED
+}
+
+/// Registro di audit: chi ha fatto cosa e quando. Mai cancellato a mano.
+model PostEvent {
+  id            String        @id @default(cuid())
+  postId        String
+  type          PostEventType
+  userId        String?
+  reviewerId    String?
+  versionNumber Int?
+  metadata      Json          @default("{}")
+  createdAt     DateTime      @default(now())
+
+  post     Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reviewer ClientReviewer? @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([postId, createdAt])
+}
+
+// ─── Media ───────────────────────────────────────────────────────────────────
+
+/// File caricato dall'agenzia. Metricool richiede URL pubblici, quindi ogni
+/// file è servito da /media/<storageKey> con una chiave non indovinabile.
+model MediaAsset {
+  id          String   @id @default(cuid())
+  workspaceId String
+  storageKey  String   @unique
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// ─── Assistente di revisione AI ──────────────────────────────────────────────
+
+enum ReviewSessionStatus {
+  OPEN
+  COMPLETED
+  ABANDONED
+}
+
+enum ReviewMessageRole {
+  CLIENT
+  ASSISTANT
+}
+
+enum ReviewInputMode {
+  TEXT
+  VOICE
+}
+
+/// Conversazione guidata tra il cliente e l'assistente AI su una versione di
+/// un post. L'assistente fa domande quando il feedback è vago ("mmh, non mi
+/// convince") finché non è azionabile; alla fine produce un riepilogo
+/// strutturato che diventa la richiesta di modifiche per l'agenzia.
+/// Tutto resta registrato (audit + storico del cliente).
+model ReviewSession {
+  id            String              @id @default(cuid())
+  postId        String
+  reviewerId    String
+  versionNumber Int
+  status        ReviewSessionStatus @default(OPEN)
+  /// Esito proposto dall'assistente: "approve" | "changes" | "unclear".
+  verdict       String?
+  /// Riepilogo in italiano per l'agenzia, scritto dall'assistente.
+  summary       String?
+  /// Array di ActionItem (vedi lib/review-assistant): [{ area, mediaIndex?, request, priority }]
+  actionItems   Json                @default("[]")
+  /// Modello che ha condotto la conversazione (tracciabilità).
+  model         String?
+  startedAt     DateTime            @default(now())
+  completedAt   DateTime?
+
+  post     Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reviewer ClientReviewer  @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  messages ReviewMessage[]
+
+  @@index([postId])
+  @@index([reviewerId])
+}
+
+model ReviewMessage {
+  id        String            @id @default(cuid())
+  sessionId String
+  role      ReviewMessageRole
+  content   String
+  inputMode ReviewInputMode   @default(TEXT)
+  createdAt DateTime          @default(now())
+
+  session ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
