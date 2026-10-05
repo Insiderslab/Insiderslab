@@ -2,6 +2,7 @@
 
 | File | A cosa serve |
 |---|---|
+| [`00-PROMPT-PER-JUAN.md`](00-PROMPT-PER-JUAN.md) | **Da passare a Juan**: istruzioni di setup + prompt da incollare in Claude (in spagnolo) |
 | [`01-brief-strategico-3runes.md`](01-brief-strategico-3runes.md) | Brief completo: baseline, posizionamento, servizi e prezzi, Lab, sitemap, concept "Tre rune", design system e animazioni, struttura della home, template, keyword research, matrice città, GEO, local SEO, link building, competitor, piano editoriale, KPI, roadmap, punti da confermare |
 | [`02-prompt-assistente-web.md`](02-prompt-assistente-web.md) | Prompt di sistema per l'account Claude "Assistente Web" che gestisce tutti i siti WordPress del gruppo |
 | [`03-prompt-progetto-3runes.md`](03-prompt-progetto-3runes.md) | Prompt operativo del progetto 3Runes: fasi, deliverable, checkpoint, regole |
