@@ -29,7 +29,7 @@ export default function InvitationAcceptCard({
       window.location.assign("/dashboard");
       return;
     }
-    setMessage(payload.error ?? "Could not accept invitation");
+    setMessage(payload.error ?? "Non è stato possibile accettare l'invito");
     setBusy(false);
   }
 
@@ -37,9 +37,9 @@ export default function InvitationAcceptCard({
     return (
       <a
         href="/login"
-        className="inline-flex items-center justify-center rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover"
+        className="inline-flex items-center justify-center rounded bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover"
       >
-        Sign in to accept
+        Accedi per accettare
       </a>
     );
   }
@@ -50,13 +50,13 @@ export default function InvitationAcceptCard({
         type="button"
         onClick={acceptInvite}
         disabled={busy}
-        className="inline-flex items-center justify-center rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-50"
+        className="inline-flex items-center justify-center rounded bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-50"
       >
-        {busy ? "Accepting..." : "Accept invitation"}
+        {busy ? "Un attimo…" : "Accetta l'invito"}
       </button>
       {message && <p className="text-sm text-error">{message}</p>}
       <p className="text-xs text-muted">
-        Use the magic link account for {invitedEmail}.
+        Accedi con il link via email per {invitedEmail}.
       </p>
     </div>
   );

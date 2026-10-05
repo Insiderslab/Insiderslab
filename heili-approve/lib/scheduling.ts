@@ -12,7 +12,12 @@
  * transaction. Only the claim holder calls Metricool, so the same post+version
  * is never created twice — not on a double click, a sweep racing a retry, or
  * two workers. A claim left behind by a crash is never retried blindly: the
- * post goes to FAILED asking the agency to check Metricool first.
+ * post goes to FAILED asking the agency to check Metricool first. The same
+ * holds for a create call whose outcome is unknown (timeout, dropped
+ * connection, 5xx): the client reports it as "uncertain", not retryable, so
+ * the post goes to FAILED instead of being POSTed again. Only failures that
+ * happened before the request left (DNS, connection refused) and 408/429 are
+ * retried automatically.
  */
 
 import { UnrecoverableError } from "bullmq";
@@ -577,74 +582,97 @@ export interface ReminderRunResult {
   outsideHours: number;
 }
 
+const REMINDER_PAGE_SIZE = 200;
+
 /**
  * Remind reviewers about posts waiting IN_REVIEW past their due date or for
  * 48 h (see isReminderDue), during the client's working hours. Run hourly.
+ * Due posts are grouped per client, so a batch sent together is reminded
+ * together: one email per reviewer listing every due post, never one per post.
+ * Candidates are read in pages until exhausted, so posts that can no longer be
+ * reminded (cap reached, no reviewers) never starve newer ones.
  */
 export async function sendReviewReminders(now: Date = new Date()): Promise<ReminderRunResult> {
   const result: ReminderRunResult = { checked: 0, sent: 0, outsideHours: 0 };
+  const dueByClient = new Map<string, Array<{ id: string; versionNumber: number; reminderNumber: number }>>();
 
-  const candidates = await prisma.post.findMany({
-    where: {
-      status: "IN_REVIEW",
-      client: { archivedAt: null },
-      OR: [
-        { reviewDueAt: { lte: now } },
-        { submittedAt: { lte: new Date(now.getTime() - REMINDER_STALE_AFTER_MS) } },
-      ],
-    },
-    select: {
-      id: true,
-      submittedAt: true,
-      reviewDueAt: true,
-      currentVersionNumber: true,
-      client: { select: { timezone: true } },
-      events: {
-        where: { type: "REMINDER_SENT" },
-        orderBy: { createdAt: "desc" },
-        select: { createdAt: true },
-        take: MAX_REMINDERS_PER_SUBMISSION + 1,
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await prisma.post.findMany({
+      where: {
+        status: "IN_REVIEW",
+        client: { archivedAt: null },
+        OR: [
+          { reviewDueAt: { lte: now } },
+          { submittedAt: { lte: new Date(now.getTime() - REMINDER_STALE_AFTER_MS) } },
+        ],
       },
-    },
-    orderBy: { submittedAt: "asc" },
-    take: 200,
-  });
+      select: {
+        id: true,
+        clientId: true,
+        submittedAt: true,
+        reviewDueAt: true,
+        currentVersionNumber: true,
+        client: { select: { timezone: true } },
+        events: {
+          where: { type: "REMINDER_SENT" },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+          take: MAX_REMINDERS_PER_SUBMISSION + 1,
+        },
+      },
+      orderBy: { id: "asc" },
+      take: REMINDER_PAGE_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (page.length === 0) break;
+    cursor = page[page.length - 1].id;
 
-  for (const post of candidates) {
-    result.checked++;
-    const sinceSubmission = post.events.filter(
-      (event) => !post.submittedAt || event.createdAt >= post.submittedAt
-    );
-    const due = isReminderDue(
-      {
-        submittedAt: post.submittedAt,
-        reviewDueAt: post.reviewDueAt,
-        lastReminderAt: post.events[0]?.createdAt ?? null,
-        remindersSinceSubmission: sinceSubmission.length,
-      },
-      now
-    );
-    if (!due) continue;
-    if (!isWithinReminderHours(now, post.client.timezone)) {
-      result.outsideHours++;
-      continue;
+    for (const post of page) {
+      result.checked++;
+      const sinceSubmission = post.events.filter(
+        (event) => !post.submittedAt || event.createdAt >= post.submittedAt
+      );
+      const due = isReminderDue(
+        {
+          submittedAt: post.submittedAt,
+          reviewDueAt: post.reviewDueAt,
+          lastReminderAt: post.events[0]?.createdAt ?? null,
+          remindersSinceSubmission: sinceSubmission.length,
+        },
+        now
+      );
+      if (!due) continue;
+      if (!isWithinReminderHours(now, post.client.timezone)) {
+        result.outsideHours++;
+        continue;
+      }
+      const list = dueByClient.get(post.clientId) ?? [];
+      list.push({ id: post.id, versionNumber: post.currentVersionNumber, reminderNumber: sinceSubmission.length + 1 });
+      dueByClient.set(post.clientId, list);
     }
+    if (page.length < REMINDER_PAGE_SIZE) break;
+  }
 
+  for (const [clientId, posts] of dueByClient) {
     try {
       // The event is the audit trail and the "already reminded" marker, so it
-      // is written only when an email actually went out (no active reviewer =
-      // nothing sent, nothing recorded).
-      if (!(await notifyReviewReminder(post.id))) continue;
-      await recordEvent(prisma, {
-        postId: post.id,
-        type: "REMINDER_SENT",
-        actor: SYSTEM_ACTOR,
-        versionNumber: post.currentVersionNumber,
-        metadata: { reminderNumber: sinceSubmission.length + 1 },
-      });
-      result.sent++;
+      // is written only for posts listed in an email that actually went out
+      // (no active reviewer = nothing sent, nothing recorded).
+      const reminded = await notifyReviewReminder(posts.map((p) => p.id));
+      for (const post of posts) {
+        if (!reminded.has(post.id)) continue;
+        await recordEvent(prisma, {
+          postId: post.id,
+          type: "REMINDER_SENT",
+          actor: SYSTEM_ACTOR,
+          versionNumber: post.versionNumber,
+          metadata: { reminderNumber: post.reminderNumber },
+        });
+        result.sent++;
+      }
     } catch (error) {
-      console.error(`[Reminders] Post ${post.id}:`, error instanceof Error ? error.message : error);
+      console.error(`[Reminders] Client ${clientId}:`, error instanceof Error ? error.message : error);
     }
   }
 

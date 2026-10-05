@@ -10,7 +10,9 @@
  * - agency calls are scoped by workspaceId, client calls by reviewer.clientId,
  *   and the client never sees drafts or versions that were not sent to them;
  * - approval is bound to the version number the client was looking at;
- * - every change writes a PostEvent in the same transaction.
+ * - every change writes a PostEvent in the same transaction;
+ * - video comments carry a moment (timeSec / timeEndSec) that must fall on a
+ *   video of the version and within its duration when known.
  *
  * Pure helpers (diffing, versioning decisions) are exported for unit tests.
  */
@@ -30,7 +32,9 @@ import { prisma } from "@/lib/db/client";
 import {
   CLIENT_VISIBLE_STATUSES,
   NETWORKS,
+  NETWORK_LABELS,
   assertTransition,
+  isNetwork,
   parseMediaItems,
   type MediaItem,
   type Network,
@@ -44,8 +48,9 @@ import {
   parseOrThrow,
 } from "@/lib/errors";
 import { recordEvent, type DbClient } from "@/lib/events";
+import { validateForNetworks } from "@/lib/metricool/payload";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
-import { mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
+import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
@@ -58,6 +63,8 @@ export type PostInput = {
   text: string;
   firstCommentText?: string | null;
   media: MediaItem[];
+  /** Cover frame of the (first) video in ms; sent to Metricool as videoCoverMilliseconds. */
+  videoCoverMs?: number | null;
 };
 
 export type PostUpdateInput = Partial<PostInput> & { changeNote?: string };
@@ -67,6 +74,10 @@ export type ReviewerRef = { id: string; clientId: string };
 
 export const MAX_MEDIA_PER_POST = 20;
 export const MAX_COMMENT_LENGTH = 5000;
+/** Assistant action items turned into comments by one change request. */
+export const MAX_ACTION_ITEMS = 50;
+/** Slack on video times: clients say "al secondo 15" of a 14.9 s clip. */
+export const VIDEO_TIME_SLACK_SEC = 1;
 
 const httpUrl = z
   .string()
@@ -87,6 +98,8 @@ export const mediaItemSchema = z.object({
   mimeType: z.string().trim().min(1).max(100),
   assetId: z.string().min(1).max(64).optional(),
   alt: z.string().trim().max(1000).optional(),
+  durationSec: z.number().positive().max(MAX_VIDEO_DURATION_SEC).optional(),
+  posterUrl: httpUrl.optional(),
 });
 
 export const networkOptionsSchema = z.record(
@@ -108,18 +121,30 @@ const postFields = {
   text: z.string().max(70_000, "Testo troppo lungo"),
   firstCommentText: z.string().max(10_000, "Primo commento troppo lungo").nullable(),
   media: z.array(mediaItemSchema).max(MAX_MEDIA_PER_POST, `Massimo ${MAX_MEDIA_PER_POST} media per post`),
+  videoCoverMs: z
+    .number({ error: "Copertina del video non valida" })
+    .int("Copertina del video non valida")
+    .min(0, "Copertina del video non valida")
+    .max(MAX_VIDEO_DURATION_SEC * 1000, "Copertina del video non valida")
+    .nullable(),
 };
 
 export const postInputSchema = z.object({
   ...postFields,
   networkOptions: postFields.networkOptions.optional(),
   firstCommentText: postFields.firstCommentText.optional(),
+  videoCoverMs: postFields.videoCoverMs.optional(),
 });
 
 export const postUpdateSchema = z
   .object(postFields)
   .partial()
   .extend({ changeNote: z.string().trim().max(1000).optional() });
+
+const videoTime = z
+  .number({ error: "Momento del video non valido" })
+  .min(0, "Il momento del video non può essere negativo")
+  .max(MAX_VIDEO_DURATION_SEC, "Momento del video non valido");
 
 const commentSchema = z
   .object({
@@ -133,9 +158,40 @@ const commentSchema = z
     mediaIndex: z.number().int().min(0).optional(),
     pinX: z.number().min(0).max(1).optional(),
     pinY: z.number().min(0).max(1).optional(),
+    timeSec: videoTime.optional(),
+    timeEndSec: videoTime.optional(),
   })
   .refine((c) => (c.pinX === undefined) === (c.pinY === undefined), "Posizione del commento incompleta")
-  .refine((c) => c.pinX === undefined || c.mediaIndex !== undefined, "Il commento puntato richiede un media");
+  .refine((c) => c.pinX === undefined || c.mediaIndex !== undefined, "Il commento puntato richiede un media")
+  .refine((c) => c.timeSec === undefined || c.mediaIndex !== undefined, "Il commento sul video richiede un media")
+  .refine((c) => c.timeEndSec === undefined || c.timeSec !== undefined, "Indica anche l'inizio dell'intervallo")
+  .refine(
+    (c) => c.timeEndSec === undefined || c.timeSec === undefined || c.timeEndSec > c.timeSec,
+    "La fine dell'intervallo deve venire dopo l'inizio"
+  );
+
+/** Structured change from the AI assistant (lib/review-assistant ActionItem). */
+export interface RequestChangesActionItem {
+  area: string;
+  mediaIndex: number | null;
+  timeSec: number | null;
+  timeEndSec: number | null;
+  request: string;
+  priority: string;
+}
+
+const actionItemsSchema = z
+  .array(
+    z.object({
+      area: z.string().max(50),
+      mediaIndex: z.number().nullable(),
+      timeSec: z.number().nullable(),
+      timeEndSec: z.number().nullable(),
+      request: z.string().max(MAX_COMMENT_LENGTH),
+      priority: z.string().max(20),
+    })
+  )
+  .max(MAX_ACTION_ITEMS, "Troppe modifiche in una sola richiesta");
 
 const changesMessageSchema = z
   .string()
@@ -150,18 +206,64 @@ export interface VersionContent {
   text: string;
   firstCommentText: string | null;
   media: MediaItem[];
+  /** Absent = unknown/unchanged (treated as null when compared). */
+  videoCoverMs?: number | null;
+  /** Date and networks the version was sent with; absent/null = not compared. */
+  schedule?: VersionSchedule | null;
+}
+
+/**
+ * Date, networks and per-network options of a version. The client approves
+ * them together with the content, so they are kept per version
+ * (PostVersion.schedule) and the portal shows those of the version it was sent.
+ */
+export interface VersionSchedule {
+  publishAt: Date;
+  networks: string[];
+  networkOptions: unknown;
+}
+
+export function parseVersionSchedule(value: unknown): VersionSchedule | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.publishAt !== "string") return null;
+  const publishAt = new Date(record.publishAt);
+  if (Number.isNaN(publishAt.getTime())) return null;
+  const networks = Array.isArray(record.networks)
+    ? record.networks.filter((n): n is string => typeof n === "string")
+    : [];
+  return { publishAt, networks, networkOptions: record.networkOptions ?? {} };
+}
+
+export function scheduleToJson(schedule: VersionSchedule): Prisma.InputJsonValue {
+  return {
+    publishAt: schedule.publishAt.toISOString(),
+    networks: [...schedule.networks],
+    networkOptions: (schedule.networkOptions ?? {}) as Prisma.InputJsonValue,
+  };
 }
 
 export function normalizeFirstComment(value: string | null | undefined): string | null {
   return value && value.trim() ? value : null;
 }
 
+// Duration and poster are technical metadata, not content: filling them in
+// later must not create a version the client has to re-approve.
 function mediaKey(item: MediaItem): string {
   return JSON.stringify([item.url, item.type, item.mimeType, item.assetId ?? null, item.alt ?? null]);
 }
 
+function mediaMetaKey(item: MediaItem): string {
+  return JSON.stringify([item.durationSec ?? null, item.posterUrl ?? null]);
+}
+
 export function sameMedia(a: MediaItem[], b: MediaItem[]): boolean {
   return a.length === b.length && a.every((item, index) => mediaKey(item) === mediaKey(b[index]));
+}
+
+/** Same media whose duration/poster differ (an in-place metadata update). */
+export function mediaMetadataChanged(current: MediaItem[], next: MediaItem[]): boolean {
+  return sameMedia(current, next) && current.some((item, index) => mediaMetaKey(item) !== mediaMetaKey(next[index]));
 }
 
 /** True when applying `patch` would change what the client sees in the post. */
@@ -174,7 +276,101 @@ export function contentChanged(current: VersionContent, patch: Partial<VersionCo
     return true;
   }
   if (patch.media !== undefined && !sameMedia(patch.media, current.media)) return true;
+  if (patch.videoCoverMs !== undefined && (patch.videoCoverMs ?? null) !== (current.videoCoverMs ?? null)) return true;
   return false;
+}
+
+// ─── Video helpers (pure) ────────────────────────────────────────────────────
+
+function knownDuration(item: MediaItem | undefined): number | null {
+  const d = item?.durationSec;
+  return typeof d === "number" && Number.isFinite(d) && d > 0 ? d : null;
+}
+
+/** Seconds rounded to hundredths (what the player can seek to). */
+function roundTime(seconds: number): number {
+  return Math.round(seconds * 100) / 100;
+}
+
+/**
+ * Checks a comment's moment against the media it points at. Returns the
+ * times to store (clamped to the duration within VIDEO_TIME_SLACK_SEC) or
+ * an Italian error message.
+ */
+export function checkCommentTime(
+  media: MediaItem | undefined,
+  timeSec: number | undefined,
+  timeEndSec: number | undefined
+): { timeSec: number | null; timeEndSec: number | null } | { error: string } {
+  if (timeSec === undefined) {
+    return timeEndSec === undefined ? { timeSec: null, timeEndSec: null } : { error: "Indica anche l'inizio dell'intervallo" };
+  }
+  if (!media || media.type !== "video") return { error: "Il momento si può indicare solo su un video" };
+  if (!Number.isFinite(timeSec) || timeSec < 0) return { error: "Il momento del video non può essere negativo" };
+  if (timeEndSec !== undefined && !(timeEndSec > timeSec)) {
+    return { error: "La fine dell'intervallo deve venire dopo l'inizio" };
+  }
+  const duration = knownDuration(media);
+  if (duration !== null) {
+    if (timeSec > duration + VIDEO_TIME_SLACK_SEC || (timeEndSec ?? 0) > duration + VIDEO_TIME_SLACK_SEC) {
+      return { error: "Il momento indicato è oltre la durata del video" };
+    }
+  }
+  const start = roundTime(duration !== null ? Math.min(timeSec, duration) : timeSec);
+  let end = timeEndSec === undefined ? null : roundTime(duration !== null ? Math.min(timeEndSec, duration) : timeEndSec);
+  // Clamping can collapse a range at the very end into a single moment.
+  if (end !== null && end <= start) end = null;
+  return { timeSec: start, timeEndSec: end };
+}
+
+/**
+ * Where an assistant action item lands as a comment, or null when it is not
+ * about a specific media (it then lives only in the summary comment). The
+ * assistant's output is best effort, so invalid parts are dropped rather than
+ * failing the whole change request: a bad index → no comment, a bad time →
+ * a comment on the media without a moment. A timed item with no media goes
+ * to the version's only video.
+ */
+export function planActionItemComment(
+  item: RequestChangesActionItem,
+  media: MediaItem[]
+): { body: string; mediaIndex: number; timeSec: number | null; timeEndSec: number | null } | null {
+  const body = item.request.trim();
+  if (!body) return null;
+
+  const validTime = (value: number | null) => (value !== null && Number.isFinite(value) && value >= 0 ? value : null);
+  const timeSec = validTime(item.timeSec);
+  let mediaIndex =
+    item.mediaIndex !== null && Number.isInteger(item.mediaIndex) && item.mediaIndex >= 0 && item.mediaIndex < media.length
+      ? item.mediaIndex
+      : null;
+  if (mediaIndex === null && timeSec !== null) {
+    const videos = media.flatMap((m, index) => (m.type === "video" ? [index] : []));
+    if (videos.length === 1) mediaIndex = videos[0];
+  }
+  if (mediaIndex === null) return null;
+
+  if (timeSec === null) return { body, mediaIndex, timeSec: null, timeEndSec: null };
+  const timeEndSec = validTime(item.timeEndSec);
+  const checked =
+    checkCommentTime(media[mediaIndex], timeSec, timeEndSec !== null && timeEndSec > timeSec ? timeEndSec : undefined);
+  if ("error" in checked) return { body, mediaIndex, timeSec: null, timeEndSec: null };
+  return { body, mediaIndex, ...checked };
+}
+
+/**
+ * Cover to store for a version: dropped when the media have no video (the
+ * agency removed it), rejected when past the first video's known duration.
+ */
+export function resolveVideoCover(media: MediaItem[], videoCoverMs: number | null | undefined): number | null {
+  if (videoCoverMs === null || videoCoverMs === undefined) return null;
+  const video = media.find((m) => m.type === "video");
+  if (!video) return null;
+  const duration = knownDuration(video);
+  if (duration !== null && videoCoverMs > Math.ceil(duration * 1000)) {
+    throw new ValidationError("La copertina scelta è oltre la durata del video");
+  }
+  return videoCoverMs;
 }
 
 /** JSON comparison independent of key order (networkOptions come from forms). */
@@ -246,7 +442,8 @@ export interface PostUpdatePlan {
  * Decides what an agency edit does. Any change must be allowed by the `edit`
  * transition (a SCHEDULED post is frozen); changes the client reviews move
  * the post per the state machine (e.g. APPROVED → DRAFT), while a change to
- * the internal title alone keeps the status.
+ * the title alone keeps the status (it is shown to the client but never
+ * published).
  */
 export function planPostUpdate(params: {
   status: PostStatus;
@@ -290,8 +487,11 @@ export function planPostUpdate(params: {
     noop: false,
     contentChanged: changedContent,
     scheduleChanged,
+    // Date and networks are approved together with the content: changing them
+    // on a version the client was already sent needs a new version too, so a
+    // stale approval (bound to the old version number) is refused.
     createVersion: needsNewVersion({
-      contentChanged: changedContent,
+      contentChanged: changedContent || scheduleChanged,
       currentVersionNumber: params.currentVersionNumber,
       lastSubmittedVersionNumber: params.lastSubmittedVersionNumber,
     }),
@@ -384,6 +584,15 @@ export interface VersionDiff {
     /** Alternative text changed on a kept file. */
     altChanged: boolean;
   };
+  /** The video cover frame (videoCoverMs) changed. */
+  coverChanged: boolean;
+  /** Date / networks / per-network options (only when both sides know them). */
+  schedule: {
+    publishAtChanged: boolean;
+    networksAdded: string[];
+    networksRemoved: string[];
+    optionsChanged: boolean;
+  };
 }
 
 /** What changed between two versions (media are matched by URL). */
@@ -405,14 +614,45 @@ export function diffVersions(before: VersionContent, after: VersionContent): Ver
     return previous !== undefined && (previous.alt ?? "") !== (m.alt ?? "");
   });
 
+  const coverChanged = (before.videoCoverMs ?? null) !== (after.videoCoverMs ?? null);
+
+  const schedule = { publishAtChanged: false, networksAdded: [] as string[], networksRemoved: [] as string[], optionsChanged: false };
+  if (before.schedule && after.schedule) {
+    const b = before.schedule;
+    const a = after.schedule;
+    schedule.publishAtChanged = b.publishAt.getTime() !== a.publishAt.getTime();
+    schedule.networksAdded = a.networks.filter((n) => !b.networks.includes(n));
+    schedule.networksRemoved = b.networks.filter((n) => !a.networks.includes(n));
+    schedule.optionsChanged = stableStringify(b.networkOptions ?? {}) !== stableStringify(a.networkOptions ?? {});
+  }
+  const scheduleChanged =
+    schedule.publishAtChanged ||
+    schedule.networksAdded.length > 0 ||
+    schedule.networksRemoved.length > 0 ||
+    schedule.optionsChanged;
+
   return {
-    changed: textChanged || firstCommentChanged || added.length > 0 || removed.length > 0 || reordered || altChanged,
+    changed:
+      textChanged ||
+      firstCommentChanged ||
+      added.length > 0 ||
+      removed.length > 0 ||
+      reordered ||
+      altChanged ||
+      coverChanged ||
+      scheduleChanged,
     textChanged,
     firstCommentChanged,
     text: textChanged ? diffText(before.text, after.text) : [],
     firstComment: firstCommentChanged ? diffText(beforeComment, afterComment) : [],
     media: { added, removed, reordered, altChanged },
+    coverChanged,
+    schedule,
   };
+}
+
+function networkNames(networks: string[]): string {
+  return networks.map((n) => (isNetwork(n) ? NETWORK_LABELS[n] : n)).join(", ");
 }
 
 /** Short Italian bullet points for timelines and emails. */
@@ -427,6 +667,11 @@ export function summarizeVersionDiff(diff: VersionDiff): string[] {
   if (removed.length > 1) lines.push(`${removed.length} media rimossi`);
   if (reordered) lines.push("Ordine dei media cambiato");
   if (altChanged) lines.push("Testo alternativo dei media modificato");
+  if (diff.coverChanged) lines.push("Copertina del video modificata");
+  if (diff.schedule.publishAtChanged) lines.push("Data di pubblicazione cambiata");
+  if (diff.schedule.networksAdded.length > 0) lines.push(`Reti aggiunte: ${networkNames(diff.schedule.networksAdded)}`);
+  if (diff.schedule.networksRemoved.length > 0) lines.push(`Reti rimosse: ${networkNames(diff.schedule.networksRemoved)}`);
+  if (diff.schedule.optionsChanged) lines.push("Formato o opzioni per rete cambiati");
   return lines;
 }
 
@@ -436,11 +681,17 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
-function versionContent(version: { text: string; firstCommentText: string | null; media: unknown }): VersionContent {
+function versionContent(version: {
+  text: string;
+  firstCommentText: string | null;
+  media: unknown;
+  videoCoverMs: number | null;
+}): VersionContent {
   return {
     text: version.text,
     firstCommentText: version.firstCommentText,
     media: parseMediaItems(version.media),
+    videoCoverMs: version.videoCoverMs,
   };
 }
 
@@ -500,12 +751,15 @@ async function normalizeMedia(db: DbClient, workspaceId: string, media: MediaIte
     if ((item.assetId || key) && !asset) {
       throw new ValidationError("Uno dei media non è stato trovato: ricaricalo");
     }
-    if (asset) return mediaItemForAsset(asset, item.alt || undefined);
+    const video = { durationSec: item.durationSec, posterUrl: item.posterUrl };
+    if (asset) return mediaItemForAsset(asset, item.alt || undefined, video);
     return {
       url: item.url,
       type: item.type,
       mimeType: item.mimeType,
       ...(item.alt ? { alt: item.alt } : {}),
+      ...(item.type === "video" && video.durationSec !== undefined ? { durationSec: video.durationSec } : {}),
+      ...(item.type === "video" && video.posterUrl ? { posterUrl: video.posterUrl } : {}),
     };
   });
 }
@@ -547,6 +801,7 @@ export async function createPost(workspaceId: string, input: PostInput, actor: A
     const client = await findClientForPost(tx, data.clientId, workspaceId);
     assertNetworksAllowed(data.networks, client.networks);
     const media = await normalizeMedia(tx, workspaceId, data.media);
+    const videoCoverMs = resolveVideoCover(media, data.videoCoverMs);
 
     const post = await tx.post.create({
       data: {
@@ -564,6 +819,12 @@ export async function createPost(workspaceId: string, input: PostInput, actor: A
             text: data.text,
             firstCommentText: normalizeFirstComment(data.firstCommentText),
             media: toJson(media),
+            videoCoverMs,
+            schedule: scheduleToJson({
+              publishAt: data.publishAt,
+              networks: data.networks,
+              networkOptions: data.networkOptions ?? {},
+            }),
             createdById: userIdOf(actor),
           },
         },
@@ -606,8 +867,18 @@ export async function updatePost(
     }
 
     const media = data.media !== undefined ? await normalizeMedia(tx, workspaceId, data.media) : undefined;
-    const current = versionContent(version);
+    // The Post row holds the current version's date and networks.
+    const current: VersionContent = {
+      ...versionContent(version),
+      schedule: { publishAt: post.publishAt, networks: post.networks, networkOptions: post.networkOptions ?? {} },
+    };
     const lastSubmitted = await lastSubmittedVersion(tx, post);
+
+    // The cover follows the media: it is dropped with the last video and must
+    // fit a video whose duration is known.
+    const coverInput = data.videoCoverMs !== undefined ? data.videoCoverMs : current.videoCoverMs;
+    const nextCover = resolveVideoCover(media ?? current.media, coverInput);
+    const coverPatch = data.videoCoverMs !== undefined || nextCover !== (current.videoCoverMs ?? null) ? nextCover : undefined;
 
     const plan = planPostUpdate({
       status: post.status,
@@ -624,6 +895,7 @@ export async function updatePost(
         text: data.text,
         firstCommentText: data.firstCommentText,
         media,
+        videoCoverMs: coverPatch,
         title: data.title,
         publishAt: data.publishAt,
         networks: data.networks,
@@ -632,14 +904,29 @@ export async function updatePost(
     });
 
     const clientChanged = client.id !== post.clientId;
-    if (plan.noop && !clientChanged && data.changeNote === undefined) return post;
+    // Duration/poster filled in on the same files: stored in place, even on a
+    // version already sent (it is not content the client approves).
+    const metadataOnly = !plan.contentChanged && media !== undefined && mediaMetadataChanged(current.media, media);
+    if (metadataOnly) {
+      await tx.postVersion.update({ where: { id: version.id }, data: { media: toJson(media) } });
+    }
+    if (plan.noop && !clientChanged && data.changeNote === undefined) {
+      return metadataOnly ? tx.post.findUniqueOrThrow({ where: { id: postId } }) : post;
+    }
 
     const nextContent: VersionContent = {
       text: data.text ?? current.text,
       firstCommentText:
         data.firstCommentText !== undefined ? normalizeFirstComment(data.firstCommentText) : current.firstCommentText,
       media: media ?? current.media,
+      videoCoverMs: coverPatch !== undefined ? coverPatch : (current.videoCoverMs ?? null),
+      schedule: {
+        publishAt: data.publishAt ?? post.publishAt,
+        networks: data.networks ?? post.networks,
+        networkOptions: data.networkOptions !== undefined ? data.networkOptions : (post.networkOptions ?? {}),
+      },
     };
+    const nextSchedule = nextContent.schedule!;
 
     let versionNumber = post.currentVersionNumber;
     if (plan.createVersion) {
@@ -651,21 +938,26 @@ export async function updatePost(
           text: nextContent.text,
           firstCommentText: nextContent.firstCommentText,
           media: toJson(nextContent.media),
+          videoCoverMs: nextContent.videoCoverMs ?? null,
+          schedule: scheduleToJson(nextSchedule),
           changeNote: data.changeNote || null,
           createdById: userIdOf(actor),
         },
       });
-    } else if (plan.contentChanged || data.changeNote !== undefined) {
+    } else if (plan.contentChanged || plan.scheduleChanged || data.changeNote !== undefined) {
       // A version already sent to the client is immutable: only unsent ones
-      // are edited in place (the plan guarantees that for content changes).
+      // are edited in place (the plan guarantees that for content and
+      // schedule changes).
       const versionWasSent = lastSubmitted !== null && post.currentVersionNumber <= lastSubmitted;
-      if (plan.contentChanged || !versionWasSent) {
+      if (plan.contentChanged || plan.scheduleChanged || !versionWasSent) {
         await tx.postVersion.update({
           where: { id: version.id },
           data: {
             text: nextContent.text,
             firstCommentText: nextContent.firstCommentText,
             media: toJson(nextContent.media),
+            videoCoverMs: nextContent.videoCoverMs ?? null,
+            schedule: scheduleToJson(nextSchedule),
             ...(data.changeNote !== undefined ? { changeNote: data.changeNote || null } : {}),
           },
         });
@@ -727,7 +1019,12 @@ export async function submitForReview(
       where: { id: { in: ids }, workspaceId },
       include: {
         client: {
-          select: { name: true, archivedAt: true, _count: { select: { reviewers: { where: { active: true } } } } },
+          select: {
+            name: true,
+            archivedAt: true,
+            timezone: true,
+            _count: { select: { reviewers: { where: { active: true } } } },
+          },
         },
         versions: { orderBy: { number: "desc" }, take: 1 },
       },
@@ -740,6 +1037,22 @@ export async function submitForReview(
       const version = post.versions[0];
       if (!version || (!version.text.trim() && parseMediaItems(version.media).length === 0)) {
         throw new ValidationError(`"${post.title}" non ha né testo né media`);
+      }
+      // The client must never approve something Metricool would reject. The
+      // date is left out: a past date is caught at scheduling time, and the
+      // agency may still move it after the approval.
+      const issues = validateForNetworks({
+        networks: post.networks,
+        networkOptions: post.networkOptions,
+        text: version.text,
+        firstCommentText: version.firstCommentText,
+        media: version.media,
+        timezone: post.client.timezone,
+      });
+      if (issues.length > 0) {
+        throw new ValidationError(
+          `"${post.title}" non è pubblicabile così com'è: ${issues.map((issue) => issue.message).join(" ")}`
+        );
       }
     }
 
@@ -843,15 +1156,23 @@ export async function approvePost(postId: string, reviewer: ReviewerRef, version
   return prisma.post.findUniqueOrThrow({ where: { id: postId } });
 }
 
+/**
+ * Client asks for changes. `message` becomes the general CLIENT comment (for
+ * the assistant: summary + bullet list). `opts.actionItems` are the
+ * assistant's structured items: each one about a specific media / video
+ * moment also becomes its own CLIENT comment, so it shows up as a pin or a
+ * marker on the video timeline (see planActionItemComment).
+ */
 export async function requestChanges(
   postId: string,
   reviewer: ReviewerRef,
   versionNumber: number,
   message: string,
-  opts: { reviewSessionId?: string } = {}
-): Promise<{ post: Post; comment: PostComment }> {
+  opts: { reviewSessionId?: string; actionItems?: RequestChangesActionItem[] } = {}
+): Promise<{ post: Post; comment: PostComment; actionComments: PostComment[] }> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
   const body = parseOrThrow(changesMessageSchema, message);
+  const actionItems = opts.actionItems ? parseOrThrow(actionItemsSchema, opts.actionItems) : [];
   const actor: Actor = { kind: "reviewer", reviewerId: reviewer.id };
 
   const result = await prisma.$transaction(async (tx) => {
@@ -869,7 +1190,7 @@ export async function requestChanges(
 
     const version = await tx.postVersion.findUniqueOrThrow({
       where: { postId_number: { postId, number: versionNumber } },
-      select: { id: true },
+      select: { id: true, media: true },
     });
 
     await guardedPostUpdate(
@@ -886,6 +1207,28 @@ export async function requestChanges(
         body,
       },
     });
+
+    const media = parseMediaItems(version.media);
+    const actionComments: PostComment[] = [];
+    for (const item of actionItems) {
+      const planned = planActionItemComment(item, media);
+      if (!planned) continue;
+      actionComments.push(
+        await tx.postComment.create({
+          data: {
+            postId,
+            versionId: version.id,
+            authorType: "CLIENT",
+            reviewerId: reviewer.id,
+            body: planned.body,
+            mediaIndex: planned.mediaIndex,
+            timeSec: planned.timeSec,
+            timeEndSec: planned.timeEndSec,
+          },
+        })
+      );
+    }
+
     await recordEvent(tx, {
       postId,
       type: "CHANGES_REQUESTED",
@@ -893,15 +1236,16 @@ export async function requestChanges(
       versionNumber,
       metadata: {
         commentId: comment.id,
+        ...(opts.actionItems ? { actionCommentIds: actionComments.map((c) => c.id) } : {}),
         ...(opts.reviewSessionId ? { reviewSessionId: opts.reviewSessionId } : {}),
       },
     });
-    return { comment };
+    return { comment, actionComments };
   });
 
   await notifyChangesRequested(postId);
   const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
-  return { post, comment: result.comment };
+  return { post, comment: result.comment, actionComments: result.actionComments };
 }
 
 /**
@@ -945,14 +1289,19 @@ export interface AddCommentInput {
   mediaIndex?: number;
   pinX?: number;
   pinY?: number;
+  /** Videos: moment in seconds (≥ 0, within the duration when known). Requires mediaIndex. */
+  timeSec?: number;
+  /** Videos: end of a range, after timeSec. */
+  timeEndSec?: number;
   /** Agency callers: the active workspace; the post must belong to it. */
   workspaceId?: string;
 }
 
 /**
- * Adds a general or pinned comment. Agency users must be members of the
- * post's workspace; reviewers must belong to the post's client and can only
- * comment on versions they have been sent.
+ * Adds a general, pinned or video-moment comment. Agency users must be
+ * members of the post's workspace; reviewers must belong to the post's client
+ * and can only comment on versions they have been sent. A moment can only be
+ * set on a video media of that version (pinX/pinY then mark the paused frame).
  */
 export async function addComment(input: AddCommentInput): Promise<PostComment> {
   const data = parseOrThrow(commentSchema, {
@@ -962,6 +1311,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
     mediaIndex: input.mediaIndex,
     pinX: input.pinX,
     pinY: input.pinY,
+    timeSec: input.timeSec,
+    timeEndSec: input.timeEndSec,
   });
   const { actor } = input;
   if (actor.kind === "system") throw new ForbiddenError();
@@ -996,9 +1347,16 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       : await tx.postVersion.findUnique({ where: { postId_number: { postId: post.id, number: maxVersion } } });
     if (!version || version.number > maxVersion) throw new NotFoundError("Versione non trovata");
 
-    if (data.mediaIndex !== undefined && data.mediaIndex >= parseMediaItems(version.media).length) {
+    const media = parseMediaItems(version.media);
+    if (data.mediaIndex !== undefined && data.mediaIndex >= media.length) {
       throw new ValidationError("Il media indicato non esiste in questa versione");
     }
+    const time = checkCommentTime(
+      data.mediaIndex !== undefined ? media[data.mediaIndex] : undefined,
+      data.timeSec,
+      data.timeEndSec
+    );
+    if ("error" in time) throw new ValidationError(time.error);
 
     const columns = actorColumns(actor);
     const comment = await tx.postComment.create({
@@ -1012,6 +1370,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
         mediaIndex: data.mediaIndex ?? null,
         pinX: data.pinX ?? null,
         pinY: data.pinY ?? null,
+        timeSec: time.timeSec,
+        timeEndSec: time.timeEndSec,
       },
     });
     await recordEvent(tx, {
@@ -1022,6 +1382,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       metadata: {
         commentId: comment.id,
         ...(data.mediaIndex !== undefined ? { mediaIndex: data.mediaIndex } : {}),
+        ...(time.timeSec !== null ? { timeSec: time.timeSec } : {}),
+        ...(time.timeEndSec !== null ? { timeEndSec: time.timeEndSec } : {}),
       },
     });
     return comment;
@@ -1081,6 +1443,10 @@ export interface ReviewerPostVersion {
   text: string;
   firstCommentText: string | null;
   media: MediaItem[];
+  /** Chosen video cover frame (ms), if any. */
+  videoCoverMs: number | null;
+  /** Date and networks this version was sent with (null for old rows). */
+  schedule: VersionSchedule | null;
   changeNote: string | null;
   createdAt: Date;
 }
@@ -1096,6 +1462,9 @@ export interface ReviewerPostComment {
   mediaIndex: number | null;
   pinX: number | null;
   pinY: number | null;
+  /** Video comments: moment (and optional end of range) in seconds. */
+  timeSec: number | null;
+  timeEndSec: number | null;
   resolvedAt: Date | null;
   createdAt: Date;
 }
@@ -1150,14 +1519,24 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
   const visible = visibleVersionNumber(post.currentVersionNumber, await lastSubmittedVersion(prisma, post));
   const versions = post.versions.filter((v) => v.number <= visible);
   const visibleVersionIds = new Set(versions.map((v) => v.id));
+  const live: VersionSchedule = {
+    publishAt: post.publishAt,
+    networks: post.networks,
+    networkOptions: post.networkOptions ?? {},
+  };
+  // The Post row carries the current version's date and networks; while an
+  // unsent revision exists the client still sees those it was sent with.
+  const scheduleOf = (v: { number: number; schedule: unknown }) =>
+    v.number === post.currentVersionNumber ? live : parseVersionSchedule(v.schedule);
+  const shownSchedule = scheduleOf(versions.find((v) => v.number === visible) ?? { number: -1, schedule: null }) ?? live;
 
   return {
     id: post.id,
     title: post.title,
     status: post.status,
-    publishAt: post.publishAt,
-    networks: post.networks as Network[],
-    networkOptions: (post.networkOptions ?? {}) as NetworkOptions,
+    publishAt: shownSchedule.publishAt,
+    networks: shownSchedule.networks as Network[],
+    networkOptions: (shownSchedule.networkOptions ?? {}) as NetworkOptions,
     currentVersionNumber: visible,
     reviewDueAt: post.reviewDueAt,
     submittedAt: post.submittedAt,
@@ -1171,6 +1550,8 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
       text: v.text,
       firstCommentText: v.firstCommentText,
       media: parseMediaItems(v.media),
+      videoCoverMs: v.videoCoverMs,
+      schedule: scheduleOf(v),
       changeNote: v.changeNote,
       createdAt: v.createdAt,
     })),
@@ -1187,6 +1568,8 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
         mediaIndex: c.mediaIndex,
         pinX: c.pinX,
         pinY: c.pinY,
+        timeSec: c.timeSec,
+        timeEndSec: c.timeEndSec,
         resolvedAt: c.resolvedAt,
         createdAt: c.createdAt,
       })),
@@ -1233,7 +1616,7 @@ export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<Revie
   );
   const versions = await prisma.postVersion.findMany({
     where: { OR: posts.map((p) => ({ postId: p.id, number: visibleByPost.get(p.id)! })) },
-    select: { postId: true, text: true, media: true },
+    select: { postId: true, text: true, media: true, schedule: true },
   });
   const versionByPost = new Map(versions.map((v) => [v.postId, v]));
 
@@ -1242,12 +1625,14 @@ export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<Revie
     const media = version ? parseMediaItems(version.media) : [];
     const text = version?.text ?? "";
     const visible = visibleByPost.get(p.id)!;
+    // An unsent revision's date and networks stay hidden like its content.
+    const sent = visible < p.currentVersionNumber && version ? parseVersionSchedule(version.schedule) : null;
     return {
       id: p.id,
       title: p.title,
       status: p.status,
-      publishAt: p.publishAt,
-      networks: p.networks as Network[],
+      publishAt: sent?.publishAt ?? p.publishAt,
+      networks: (sent?.networks ?? p.networks) as Network[],
       currentVersionNumber: visible,
       reviewDueAt: p.reviewDueAt,
       submittedAt: p.submittedAt,

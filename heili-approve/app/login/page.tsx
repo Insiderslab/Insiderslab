@@ -1,4 +1,11 @@
-import { EMAIL_PROVIDER_ID, signIn } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { EMAIL_PROVIDER_ID, auth, signIn } from "@/lib/auth";
+
+/** Same-origin path only ("/posts/x"), never "//evil.com" or an absolute URL. */
+function safeCallbackUrl(value: string | undefined): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return "/dashboard";
+  return value;
+}
 
 export const metadata = {
   title: "Accedi - Approve by Heili",
@@ -15,7 +22,11 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const checkEmail = params.checkEmail === "1";
-  const callbackUrl = params.callbackUrl ?? "/dashboard";
+  const callbackUrl = safeCallbackUrl(params.callbackUrl);
+
+  // A real session (not just a cookie, which may be stale) goes straight on.
+  const session = await auth();
+  if (session?.user?.id) redirect(callbackUrl);
 
   async function sendMagicLink(formData: FormData) {
     "use server";

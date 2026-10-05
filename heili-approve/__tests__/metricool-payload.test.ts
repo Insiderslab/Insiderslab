@@ -8,6 +8,8 @@ import {
   buildSchedulerPayload,
   getNetworkFormat,
   isValidTimeZone,
+  resolveVideoCoverMs,
+  supportsVideoCover,
   toZonedDateTimeString,
   validateForNetworks,
   zonedDateTimeToUtc,
@@ -33,6 +35,7 @@ function build(overrides: {
   media?: unknown[];
   publishAt?: Date;
   timezone?: string;
+  videoCoverMs?: number | null;
 }) {
   return buildSchedulerPayload({
     post: {
@@ -44,6 +47,7 @@ function build(overrides: {
       text: overrides.text ?? "Nuova collezione #autunno",
       firstCommentText: overrides.firstCommentText ?? null,
       media: overrides.media ?? [image()],
+      videoCoverMs: overrides.videoCoverMs,
     },
     client: { timezone: overrides.timezone ?? "Europe/Rome" },
     now: NOW,
@@ -214,6 +218,81 @@ describe("buildSchedulerPayload", () => {
   });
 });
 
+describe("video cover", () => {
+  const reel = { instagramData: { type: "REEL" } };
+
+  it("sends videoCoverMilliseconds for an Instagram Reel with a cover", () => {
+    const payload = build({ networkOptions: reel, media: [video], videoCoverMs: 7040 });
+    expect(payload.videoCoverMilliseconds).toBe(7040);
+  });
+
+  it("sends it for TikTok, YouTube, LinkedIn and Facebook posts/reels", () => {
+    for (const [networks, networkOptions] of [
+      [["tiktok"], {}],
+      [["youtube"], { youtubeData: { title: "Clip" } }],
+      [["linkedin"], {}],
+      [["facebook"], {}],
+      [["facebook"], { facebookData: { type: "REEL" } }],
+    ] as const) {
+      const payload = build({ networks: [...networks], networkOptions, media: [video], videoCoverMs: 1500 });
+      expect(payload.videoCoverMilliseconds, networks.join()).toBe(1500);
+    }
+  });
+
+  it("rounds to whole milliseconds", () => {
+    expect(build({ networkOptions: reel, media: [video], videoCoverMs: 1234.6 }).videoCoverMilliseconds).toBe(1235);
+  });
+
+  it("never sends it without a cover", () => {
+    expect(build({ networkOptions: reel, media: [video] })).not.toHaveProperty("videoCoverMilliseconds");
+    expect(build({ networkOptions: reel, media: [video], videoCoverMs: null })).not.toHaveProperty(
+      "videoCoverMilliseconds"
+    );
+  });
+
+  it("never sends it for stories, Instagram feed posts or text networks", () => {
+    const cases: Array<[string[], unknown]> = [
+      [["instagram"], { instagramData: { type: "STORY" } }],
+      [["facebook"], { facebookData: { type: "STORY" } }],
+      [["instagram"], { instagramData: { type: "POST" } }],
+      [["twitter"], {}],
+      [["threads"], {}],
+      [["bluesky"], {}],
+    ];
+    for (const [networks, networkOptions] of cases) {
+      const payload = build({ networks, networkOptions, media: [video], videoCoverMs: 3000 });
+      expect(payload, `${networks.join()} ${JSON.stringify(networkOptions)}`).not.toHaveProperty(
+        "videoCoverMilliseconds"
+      );
+    }
+  });
+
+  it("never sends it when the post has no video", () => {
+    const payload = build({ networks: ["linkedin"], media: [image()], videoCoverMs: 3000 });
+    expect(payload).not.toHaveProperty("videoCoverMilliseconds");
+  });
+
+  it("sends it when at least one target supports a cover", () => {
+    const payload = build({
+      networks: ["instagram", "twitter"],
+      networkOptions: reel,
+      media: [video],
+      videoCoverMs: 2000,
+    });
+    expect(payload.videoCoverMilliseconds).toBe(2000);
+  });
+
+  it("exposes the rules for the editor", () => {
+    expect(supportsVideoCover("instagram", reel)).toBe(true);
+    expect(supportsVideoCover("instagram", {})).toBe(false);
+    expect(supportsVideoCover("youtube", { youtubeData: { type: "short" } })).toBe(true);
+    expect(supportsVideoCover("gmb", {})).toBe(false);
+    expect(
+      resolveVideoCoverMs({ networks: ["tiktok"], networkOptions: {}, media: [{ ...video, type: "video" as const }], videoCoverMs: -1 })
+    ).toBeUndefined();
+  });
+});
+
 describe("validateForNetworks", () => {
   it("accepts a valid post", () => {
     expect(issues({})).toEqual([]);
@@ -351,6 +430,38 @@ describe("Metricool client helpers", () => {
     expect(error).toBeInstanceOf(MetricoolError);
     expect((error as MetricoolError).retryable).toBe(true);
     expect((error as MetricoolError).message).not.toContain("secret-token");
+  });
+
+  it("never marks a create call with an unknown outcome as retryable", async () => {
+    const make = (fetchImpl: () => Promise<Response>) =>
+      new MetricoolClient({ userId: "u1", token: "secret-token", fake: false, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    // Timeout / reset after the request left: Metricool may have created the post.
+    const timeout = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    const timedOut = await make(async () => { throw timeout; }).schedulePost("b1", build({})).catch((e: unknown) => e);
+    expect(timedOut).toMatchObject({ code: "uncertain", retryable: false });
+    expect((timedOut as MetricoolError).message).toContain("Esito incerto");
+
+    for (const status of [500, 502, 504]) {
+      const error = await make(async () => new Response("bad gateway", { status }))
+        .schedulePost("b1", build({}))
+        .catch((e: unknown) => e);
+      expect(error).toMatchObject({ code: "uncertain", retryable: false, status });
+    }
+
+    // Failed before sending (connection refused) and 429: safe to retry.
+    const refused = Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+    await expect(make(async () => { throw refused; }).schedulePost("b1", build({}))).rejects.toMatchObject({
+      code: "network",
+      retryable: true,
+    });
+    await expect(make(async () => new Response("slow down", { status: 429 })).schedulePost("b1", build({}))).rejects.toMatchObject({
+      code: "rate_limited",
+      retryable: true,
+    });
+
+    // Reads stay retryable on a timeout.
+    await expect(make(async () => { throw timeout; }).listBrands()).rejects.toMatchObject({ retryable: true });
   });
 
   it("works without network in fake mode", async () => {

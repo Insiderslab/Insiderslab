@@ -1,0 +1,253 @@
+"use client";
+
+/**
+ * Post List
+ *
+ * Table on desktop, cards on phones. Drafts (and posts with changes
+ * requested) can be selected and sent to their clients in one go: each
+ * reviewer gets a single email listing all of their posts.
+ */
+
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import type { PostStatus } from "@/app/generated/prisma/client";
+import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
+import StatusBadge from "@/components/status-badge";
+import { canTransition, type MediaType } from "@/lib/domain";
+import { DEFAULT_TIME_ZONE, TONE_BORDER, formatDateTime, localPartsToUtc, statusTone, timeZoneAbbr } from "./helpers";
+
+export interface PostListRow {
+  id: string;
+  title: string;
+  clientId: string;
+  clientName: string;
+  timezone: string;
+  networkLabels: string[];
+  publishAt: Date | string;
+  status: PostStatus;
+  versionNumber: number;
+  openClientComments: number;
+  lastError: string | null;
+  thumbnail: { url: string; type: MediaType; posterUrl?: string } | null;
+}
+
+function Thumbnail({ media }: { media: PostListRow["thumbnail"] }) {
+  if (!media) {
+    return <div className="h-11 w-11 shrink-0 rounded border border-border bg-surface-hover" aria-hidden />;
+  }
+  if (media.type === "video") {
+    return (
+      <video
+        src={`${media.url}#t=0.5`}
+        poster={media.posterUrl}
+        preload="metadata"
+        muted
+        playsInline
+        className="h-11 w-11 shrink-0 rounded border border-border object-cover"
+        aria-hidden
+      />
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element -- uploaded media, arbitrary sizes
+  return <img src={media.url} alt="" className="h-11 w-11 shrink-0 rounded border border-border object-cover" />;
+}
+
+function Extra({ row }: { row: PostListRow }) {
+  return (
+    <>
+      {row.openClientComments > 0 && (
+        <span className="text-warning">
+          {row.openClientComments === 1 ? "1 commento aperto" : `${row.openClientComments} commenti aperti`}
+        </span>
+      )}
+      {row.status === "FAILED" && row.lastError && <span className="line-clamp-2 text-error">{row.lastError}</span>}
+    </>
+  );
+}
+
+export default function PostList({ rows }: { rows: PostListRow[] }) {
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [dueDate, setDueDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const selectable = rows.filter((row) => canTransition(row.status, "submit"));
+  // Rows can leave the list after a refresh: only count what is still selectable.
+  const chosen = selectable.filter((row) => selected.has(row.id));
+  const allChosen = selectable.length > 0 && chosen.length === selectable.length;
+
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setNotice(null);
+  }
+
+  function toggleAll() {
+    setSelected(allChosen ? new Set() : new Set(selectable.map((row) => row.id)));
+    setNotice(null);
+  }
+
+  function submit() {
+    setError(null);
+    setNotice(null);
+    let reviewDueAt: string | null = null;
+    if (dueDate) {
+      const due = localPartsToUtc(dueDate, "18:00", DEFAULT_TIME_ZONE);
+      if (!due) {
+        setError("Scadenza non valida.");
+        return;
+      }
+      reviewDueAt = due.toISOString();
+    }
+    startTransition(async () => {
+      const result = await submitForReviewAction(
+        chosen.map((row) => row.id),
+        { reviewDueAt }
+      );
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSelected(new Set());
+      setDueDate("");
+      setNotice(result.message ?? "Inviati in revisione.");
+    });
+  }
+
+  const checkbox = (row: PostListRow) =>
+    canTransition(row.status, "submit") ? (
+      <input
+        type="checkbox"
+        checked={selected.has(row.id)}
+        onChange={() => toggle(row.id)}
+        aria-label={`Seleziona ${row.title}`}
+        className="h-4 w-4 accent-accent"
+      />
+    ) : (
+      <span className="inline-block h-4 w-4" aria-hidden />
+    );
+
+  return (
+    <div className="space-y-3">
+      {selectable.length > 0 && (
+        <div className="panel flex flex-col gap-3 rounded p-3 text-sm sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={allChosen} onChange={toggleAll} className="h-4 w-4 accent-accent" />
+            {chosen.length > 0
+              ? `${chosen.length} selezionati`
+              : `Seleziona le bozze da inviare (${selectable.length})`}
+          </label>
+          {chosen.length > 0 && (
+            <>
+              <label className="flex flex-wrap items-center gap-2 text-muted">
+                Risposta entro
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-accent/40"
+                />
+                {dueDate && <span className="text-xs">alle 18:00 ({timeZoneAbbr(DEFAULT_TIME_ZONE)})</span>}
+              </label>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={pending}
+                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:ml-auto"
+              >
+                {pending ? "Invio…" : `Invia in revisione (${chosen.length})`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {error && <p className="text-sm text-error">{error}</p>}
+      {notice && <p className="text-sm text-success">{notice}</p>}
+
+      {/* ── Desktop table ── */}
+      <div className="hidden overflow-hidden rounded border border-border md:block">
+        <table className="w-full text-sm">
+          <thead className="bg-surface text-left text-xs text-muted">
+            <tr>
+              <th className="w-10 px-3 py-2" />
+              <th className="px-3 py-2 font-medium">Post</th>
+              <th className="px-3 py-2 font-medium">Cliente</th>
+              <th className="px-3 py-2 font-medium">Reti</th>
+              <th className="px-3 py-2 font-medium">Pubblicazione</th>
+              <th className="px-3 py-2 font-medium">Stato</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-t border-border align-top hover:bg-surface">
+                <td className="px-3 py-3">{checkbox(row)}</td>
+                <td className="px-3 py-3">
+                  <div className="flex min-w-0 gap-3">
+                    <Thumbnail media={row.thumbnail} />
+                    <div className="min-w-0">
+                      <Link href={`/posts/${row.id}`} className="font-medium text-foreground hover:underline">
+                        {row.title}
+                      </Link>
+                      <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted">
+                        <span>Versione {row.versionNumber}</span>
+                        <Extra row={row} />
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <Link href={`/posts?clientId=${row.clientId}`} className="text-muted hover:text-foreground hover:underline">
+                    {row.clientName}
+                  </Link>
+                </td>
+                <td className="px-3 py-3 text-muted">{row.networkLabels.join(", ")}</td>
+                <td className="whitespace-nowrap px-3 py-3">
+                  {formatDateTime(row.publishAt, row.timezone, { year: false })}
+                  {row.timezone !== DEFAULT_TIME_ZONE && (
+                    <span className="block text-xs text-muted">{timeZoneAbbr(row.timezone, row.publishAt)}</span>
+                  )}
+                </td>
+                <td className="px-3 py-3">
+                  <StatusBadge status={row.status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Mobile cards ── */}
+      <ul className="space-y-2 md:hidden">
+        {rows.map((row) => (
+          <li
+            key={row.id}
+            className={`flex gap-3 rounded border border-l-4 border-border bg-surface p-3 ${TONE_BORDER[statusTone(row.status)]}`}
+          >
+            <div className="pt-0.5">{checkbox(row)}</div>
+            <Thumbnail media={row.thumbnail} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <Link href={`/posts/${row.id}`} className="min-w-0 break-words text-sm font-medium hover:underline">
+                  {row.title}
+                </Link>
+                <StatusBadge status={row.status} />
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                {row.clientName} · {formatDateTime(row.publishAt, row.timezone, { year: false })}
+              </p>
+              <p className="truncate text-xs text-muted">{row.networkLabels.join(", ")}</p>
+              <div className="mt-1 flex flex-col gap-0.5 text-xs">
+                <Extra row={row} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

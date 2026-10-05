@@ -12,7 +12,7 @@ import { getWorkspaceMembership } from "@/lib/workspace";
  * the membership server-side: a forged cookie pointing at someone else's
  * workspace simply falls back to the user's primary workspace.
  */
-export const ACTIVE_WORKSPACE_COOKIE = "heili-dm-active-workspace";
+export const ACTIVE_WORKSPACE_COOKIE = "heili-approve-active-workspace";
 
 export type ActiveWorkspace = {
   workspace: Workspace;

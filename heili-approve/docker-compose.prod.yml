@@ -1,15 +1,28 @@
+# Approve by Heili — produzione (VPS Hostinger, accanto a DM by Heili)
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Caddy (già presente sul VPS) inoltra approve.heili.cloud → localhost:3200.
+# Le variabili vengono da .env (vedi .env.example); POSTGRES_PASSWORD deve
+# coincidere con la password dentro DATABASE_URL.
+
+x-app-env: &app-env
+  env_file: .env
+  environment:
+    UPLOAD_DIR: /data/uploads
+
 services:
   postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: openreply
+      POSTGRES_DB: approve
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?imposta POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d approve"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -17,6 +30,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
     healthcheck:
@@ -27,11 +41,16 @@ services:
 
   web:
     build: .
+    image: heili-approve:latest
     restart: unless-stopped
-    env_file: .env
+    <<: *app-env
+    # Applies pending migrations (prisma/migrations) before starting.
     command: sh -c "npx prisma migrate deploy && npm run start"
     ports:
-      - "3100:3000"
+      # Only on localhost: Caddy is the public entry point.
+      - "127.0.0.1:3200:3000"
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,17 +65,20 @@ services:
 
   worker:
     build: .
+    image: heili-approve:latest
     restart: unless-stopped
-    env_file: .env
+    <<: *app-env
     command: ["npm", "run", "worker"]
+    volumes:
+      - uploads:/data/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
+      # Started after web, so the migrations have run.
+      web:
         condition: service_healthy
 
   cron:
     build: .
+    image: heili-approve:latest
     restart: unless-stopped
     env_file: .env
     command: ["sh", "scripts/cron.sh"]
@@ -69,3 +91,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  uploads:

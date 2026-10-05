@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { isCronAuthorized } from "@/lib/ops/cron-auth";
 import { prisma } from "@/lib/db/client";
 import { getSchedulingQueue, getRedisConnection } from "@/lib/queue/client";
 import { getWorkerHealth } from "@/lib/ops/worker-health";
@@ -56,7 +57,13 @@ async function checkQueue(): Promise<HealthCheck & { counts?: unknown }> {
   }
 }
 
-export async function GET() {
+/**
+ * Public: only { status } and the HTTP code (200 / 503), enough for Docker and
+ * uptime checks. The detailed checks (error messages with internal hosts,
+ * worker pid/hostname, queue counts) need `Authorization: Bearer CRON_SECRET`;
+ * when degraded they are also logged server-side.
+ */
+export async function GET(request: NextRequest) {
   const [database, redis, queue, worker] = await Promise.all([
     checkDatabase(),
     checkRedis(),
@@ -75,16 +82,15 @@ export async function GET() {
     queue.status === "ok" &&
     worker.healthy;
 
+  const checks = { database, redis, queue, worker };
+  if (!healthy) console.error("[health] degraded:", JSON.stringify(checks));
+
+  const detailed = isCronAuthorized(request);
   return NextResponse.json(
     {
       status: healthy ? "ok" : "degraded",
-      checks: {
-        database,
-        redis,
-        queue,
-        worker,
-      },
+      ...(detailed ? { checks } : {}),
     },
-    { status: healthy ? 200 : 503 }
+    { status: healthy ? 200 : 503, headers: { "Cache-Control": "no-store" } }
   );
 }

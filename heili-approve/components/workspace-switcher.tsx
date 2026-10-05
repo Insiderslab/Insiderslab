@@ -73,7 +73,7 @@ export default function WorkspaceSwitcher({
 
   return (
     <label className="block">
-      <span className="sr-only">Switch profile</span>
+      <span className="sr-only">Cambia workspace</span>
       <select
         value={activeId ?? ""}
         disabled={busy}

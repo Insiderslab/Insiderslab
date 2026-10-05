@@ -1,11 +1,16 @@
-# OpenReply — Local Development Services
-# Run: docker-compose up -d
+# Approve by Heili — servizi per lo sviluppo locale (Postgres + Redis)
+#
+#   docker compose up -d
+#   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/approve
+#   REDIS_URL=redis://localhost:6379
+#
+# L'app e il worker girano sulla macchina (npm run dev / npm run worker).
 
 services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: openreply
+      POSTGRES_DB: approve
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -13,7 +18,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d approve"]
       interval: 5s
       timeout: 5s
       retries: 5

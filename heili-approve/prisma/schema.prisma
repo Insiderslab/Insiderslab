@@ -218,7 +218,8 @@ model Post {
   id             String     @id @default(cuid())
   workspaceId    String
   clientId       String
-  /// Titolo interno, es. "Carosello lancio collezione autunno".
+  /// Titolo del post, es. "Carosello lancio collezione autunno". Non viene
+  /// pubblicato ma il cliente lo vede (portale, email, assistente).
   title          String
   status         PostStatus @default(DRAFT)
   /// Data/ora di pubblicazione desiderata (istante UTC). La conversione nel
@@ -275,6 +276,13 @@ model PostVersion {
   videoCoverMs     Int?
   /// Nota dell'agenzia su cosa è cambiato rispetto alla versione precedente.
   changeNote       String?
+  /// Data, reti e opzioni per rete di questa versione:
+  /// { publishAt: ISO, networks: string[], networkOptions: {...} }. Il cliente
+  /// approva anche questi, quindi una loro modifica dopo l'invio crea una nuova
+  /// versione, e il portale mostra quelli della versione inviata (mai quelli di
+  /// una revisione non ancora inviata). Null = righe precedenti: valgono i
+  /// campi del Post.
+  schedule         Json?
   createdById      String?
   createdAt        DateTime @default(now())
 
@@ -412,6 +420,9 @@ model ReviewSession {
   model         String?
   startedAt     DateTime            @default(now())
   completedAt   DateTime?
+  /// Turno in corso (chiamata al modello): una sola richiesta alla volta per
+  /// conversazione. Un valore vecchio (processo morto) scade da solo.
+  turnStartedAt DateTime?
 
   post     Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
   reviewer ClientReviewer  @relation(fields: [reviewerId], references: [id], onDelete: Cascade)

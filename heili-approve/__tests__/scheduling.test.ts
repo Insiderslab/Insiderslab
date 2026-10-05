@@ -54,6 +54,7 @@ import {
   makeClaim,
   parseClaim,
   processSchedulePost,
+  sendReviewReminders,
 } from "@/lib/scheduling";
 
 const HOUR = 60 * 60 * 1000;
@@ -249,7 +250,8 @@ describe("processSchedulePost", () => {
 
   it("releases the claim and rethrows on a retryable error", async () => {
     mockPrisma.post.findUnique.mockResolvedValue(schedulingPost());
-    const outage = new MetricoolError("Metricool non è raggiungibile in questo momento (503).", 503, true, "unavailable");
+    // Failed before the request left (e.g. connection refused): safe to retry.
+    const outage = new MetricoolError("Impossibile contattare Metricool (errore di rete).", null, true, "network");
     mockSchedulePost.mockRejectedValue(outage);
 
     await expect(processSchedulePost(job(1))).rejects.toBe(outage);
@@ -260,6 +262,20 @@ describe("processSchedulePost", () => {
     expect(mockNotify.notifyScheduleFailed).not.toHaveBeenCalled();
   });
 
+  it("never retries a create call with an uncertain outcome (timeout, 5xx)", async () => {
+    mockPrisma.post.findUnique.mockResolvedValue(schedulingPost());
+    mockSchedulePost.mockRejectedValue(
+      new MetricoolError("Esito incerto: Impossibile contattare Metricool (timeout).", null, false, "uncertain")
+    );
+
+    await expect(processSchedulePost(job(1))).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(mockPrisma.post.updateMany).not.toHaveBeenCalled();
+    const failCall = mockTx.post.updateMany.mock.calls[1][0];
+    expect(failCall.data).toMatchObject({ status: "FAILED", metricoolPostId: null });
+    expect(failCall.data.lastError).toContain("Esito incerto");
+    expect(mockRecordEvent.mock.calls[0][1].metadata).toMatchObject({ code: "uncertain" });
+  });
+
   it("marks FAILED on the last attempt of a retryable error", async () => {
     mockPrisma.post.findUnique.mockResolvedValue(schedulingPost());
     mockSchedulePost.mockRejectedValue(new MetricoolError("Troppe richieste a Metricool (429).", 429, true, "rate_limited"));
@@ -268,5 +284,65 @@ describe("processSchedulePost", () => {
     const failCall = mockTx.post.updateMany.mock.calls[1][0];
     expect(failCall.data.status).toBe("FAILED");
     expect(failCall.data.lastError).toContain("dopo 5 tentativi");
+  });
+});
+
+describe("sendReviewReminders", () => {
+  const submittedAt = new Date(NOW.getTime() - 50 * HOUR);
+  const candidate = (id: string, clientId: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    clientId,
+    submittedAt,
+    reviewDueAt: null,
+    currentVersionNumber: 1,
+    client: { timezone: "Europe/Rome" },
+    events: [] as Array<{ createdAt: Date }>,
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sends one reminder per client listing every due post, not one per post", async () => {
+    mockPrisma.post.findMany.mockResolvedValueOnce([
+      candidate("a1", "client-a"),
+      candidate("a2", "client-a"),
+      candidate("a3", "client-a"),
+      candidate("b1", "client-b"),
+    ]);
+    mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) =>
+      new Set(ids.filter((id) => id !== "b1"))
+    );
+
+    const result = await sendReviewReminders(NOW);
+
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledTimes(2);
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledWith(["a1", "a2", "a3"]);
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledWith(["b1"]);
+    // Client B has no reviewer who got the email: nothing recorded for it.
+    expect(mockRecordEvent.mock.calls.map((call) => call[1].postId)).toEqual(["a1", "a2", "a3"]);
+    expect(result).toMatchObject({ checked: 4, sent: 3 });
+  });
+
+  it("reads every page, so posts that can no longer be reminded do not starve newer ones", async () => {
+    const exhausted = Array.from({ length: 200 }, (_, i) =>
+      candidate(`old-${String(i).padStart(3, "0")}`, "client-a", {
+        events: [
+          { createdAt: new Date(NOW.getTime() - 25 * HOUR) },
+          { createdAt: new Date(NOW.getTime() - 26 * HOUR) },
+          { createdAt: new Date(NOW.getTime() - 27 * HOUR) },
+        ],
+      })
+    );
+    mockPrisma.post.findMany.mockResolvedValueOnce(exhausted).mockResolvedValueOnce([candidate("new-1", "client-a")]);
+    mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) => new Set(ids));
+
+    const result = await sendReviewReminders(NOW);
+
+    expect(mockPrisma.post.findMany).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.post.findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: "old-199" }, skip: 1 });
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledWith(["new-1"]);
+    expect(result).toMatchObject({ checked: 201, sent: 1 });
   });
 });

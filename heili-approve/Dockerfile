@@ -1,22 +1,19 @@
-# OpenReply — self-hosted Docker image
+# Approve by Heili — immagine Docker unica per web, worker e cron
 #
-# Two runtime processes ship from this image:
+# Three runtime processes ship from this image (see docker-compose.prod.yml):
 #   - web:    `npm run start`  → next start (needs .next + node_modules)
-#   - worker: `npm run worker` → tsx worker/dm-worker.ts (runs RAW TypeScript,
-#             not a bundled output — needs the generated Prisma client, the
-#             full source tree under lib/ and worker/, and tsconfig.json for
-#             the `@/*` path alias tsx resolves at runtime)
-#   - cron:   `sh scripts/cron.sh` → the scheduler for /api/cron, which nothing
-#             runs off Vercel (see docs/deploy-dokploy.md). It needs scripts/
-#             in the image and wget on PATH; node:20-slim ships neither.
+#   - worker: `npm run worker` → tsx worker/approval-worker.ts (runs RAW
+#             TypeScript, not a bundled output — needs the generated Prisma
+#             client, the source tree under lib/ and worker/, and tsconfig.json
+#             for the `@/*` path alias tsx resolves at runtime)
+#   - cron:   `sh scripts/cron.sh` → calls /api/cron/sweep every 5 minutes and
+#             /api/cron/reminders hourly. Needs wget, which node:20-slim lacks.
 #
-# next.config.ts does not set `output: "standalone"`, so `next start` already
-# requires the full node_modules tree at runtime — there is no slimmer
-# standalone bundle to fall back to here. Given that, this Dockerfile does
-# NOT try to strip node_modules/tsconfig.json/source files out of the final
-# stage: doing so is exactly what breaks the worker (MODULE_NOT_FOUND on
-# `@/lib/...` imports, because tsx has no tsconfig to resolve the alias
-# against, and no app/generated/prisma to import from).
+# Uploaded media live on disk under UPLOAD_DIR (/data/uploads): mount the SAME
+# volume in web (serves /media/... and receives uploads) and worker.
+#
+# next.config.ts does not set `output: "standalone"`, so `next start` needs the
+# full node_modules tree at runtime; this Dockerfile does not try to slim it.
 
 FROM node:20-slim AS build
 WORKDIR /app
@@ -32,12 +29,13 @@ RUN npm run build
 FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV UPLOAD_DIR=/data/uploads
 
-# scripts/cron.sh calls the /api/cron routes with wget, which node:20-slim does
-# not include.
+# wget for scripts/cron.sh and the compose healthcheck; openssl for Prisma.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends wget ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends wget ca-certificates openssl \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /data/uploads
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
@@ -53,7 +51,6 @@ COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/package.json ./package.json
 
 EXPOSE 3000
-# Default to the web process — the worker service overrides this with
-# `command: ["npm", "run", "worker"]` in whatever compose/stack file deploys
-# it (see openreply-vps.stack.yml in EvolutionAPI/omni-nexus for an example).
+# Default: the web process. The worker overrides it with
+# `command: ["npm", "run", "worker"]`, the cron with `["sh", "scripts/cron.sh"]`.
 CMD ["npm", "run", "start"]

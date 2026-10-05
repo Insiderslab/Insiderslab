@@ -4,6 +4,8 @@ import {
   buildStorageKey,
   contentTypeForKey,
   isValidStorageKey,
+  mediaItemForAsset,
+  parseDurationSec,
   parseRangeHeader,
   readImageDimensions,
   resolveStoragePath,
@@ -65,6 +67,15 @@ describe("storage keys", () => {
   });
 });
 
+/** EBML header as browsers' MediaRecorder writes it, with the given DocType. */
+const webmHeader = (docType: string) =>
+  bytes(
+    0x1a, 0x45, 0xdf, 0xa3, 0x9f,
+    0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08,
+    0x42, 0x82, 0x80 | docType.length, docType,
+    0x42, 0x87, 0x81, 0x04, 0x42, 0x85, 0x81, 0x02
+  );
+
 describe("type sniffing", () => {
   it("recognises allowed formats by their bytes", () => {
     expect(sniffMediaMime(bytes(0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0))).toBe("image/jpeg");
@@ -73,6 +84,13 @@ describe("type sniffing", () => {
     expect(sniffMediaMime(bytes("RIFF", 0, 0, 0, 0, "WEBP"))).toBe("image/webp");
     expect(sniffMediaMime(bytes(0, 0, 0, 0x20, "ftyp", "isom"))).toBe("video/mp4");
     expect(sniffMediaMime(bytes(0, 0, 0, 0x14, "ftyp", "qt  "))).toBe("video/quicktime");
+    expect(sniffMediaMime(webmHeader("webm"))).toBe("video/webm");
+  });
+
+  it("accepts WebM but not generic Matroska", () => {
+    expect(sniffMediaMime(webmHeader("matroska"))).toBeNull();
+    expect(contentTypeForKey("ws/aaaaaaaaaaaaaaaaaaaa.webm")).toBe("video/webm");
+    expect(isValidStorageKey(buildStorageKey("ws", "video/webm"))).toBe(true);
   });
 
   it("rejects everything else, whatever the extension", () => {
@@ -120,5 +138,33 @@ describe("Range header", () => {
     expect(parseRangeHeader("bytes=1000-", 1000)).toBe("unsatisfiable");
     expect(parseRangeHeader("bytes=10-5", 1000)).toBe("unsatisfiable");
     expect(parseRangeHeader("bytes=-0", 1000)).toBe("unsatisfiable");
+  });
+});
+
+describe("video metadata", () => {
+  it("parses the duration sent by the browser", () => {
+    expect(parseDurationSec(undefined)).toBeUndefined();
+    expect(parseDurationSec("")).toBeUndefined();
+    expect(parseDurationSec("14.9871")).toBe(14.987);
+    expect(parseDurationSec(30)).toBe(30);
+    for (const bad of ["abc", "-1", "0", "Infinity", "NaN", String(7 * 3600), {}]) {
+      expect(parseDurationSec(bad), String(bad)).toBeNull();
+    }
+  });
+
+  it("keeps the duration only on videos", () => {
+    const video = mediaItemForAsset(
+      { id: "a1", storageKey: "ws/aaaaaaaaaaaaaaaaaaaa.mp4", mimeType: "video/mp4" },
+      undefined,
+      { durationSec: 12.5 }
+    );
+    expect(video).toMatchObject({ type: "video", durationSec: 12.5, assetId: "a1" });
+    const image = mediaItemForAsset(
+      { id: "a2", storageKey: "ws/aaaaaaaaaaaaaaaaaaaa.jpg", mimeType: "image/jpeg" },
+      "alt",
+      { durationSec: 12.5 }
+    );
+    expect(image).not.toHaveProperty("durationSec");
+    expect(image.alt).toBe("alt");
   });
 });

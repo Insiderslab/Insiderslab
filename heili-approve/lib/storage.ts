@@ -19,6 +19,9 @@ import { getBaseUrl, getUploadDir } from "@/lib/env";
 
 export const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
 
+/** Longest video duration accepted from the uploader (6 h, well past any network's limit). */
+export const MAX_VIDEO_DURATION_SEC = 6 * 60 * 60;
+
 export const ALLOWED_MEDIA = {
   "image/jpeg": { ext: "jpg", type: "image" },
   "image/png": { ext: "png", type: "image" },
@@ -26,6 +29,7 @@ export const ALLOWED_MEDIA = {
   "image/gif": { ext: "gif", type: "image" },
   "video/mp4": { ext: "mp4", type: "video" },
   "video/quicktime": { ext: "mov", type: "video" },
+  "video/webm": { ext: "webm", type: "video" },
 } as const satisfies Record<string, { ext: string; type: MediaType }>;
 
 export type AllowedMimeType = keyof typeof ALLOWED_MEDIA;
@@ -36,6 +40,8 @@ const EXT_TO_MIME: Record<string, AllowedMimeType> = Object.fromEntries(
 
 /** Bytes kept in memory to sniff the type and read image dimensions. */
 const HEAD_BYTES = 256 * 1024;
+/** Bytes needed before sniffing (WebM's DocType sits a few dozen bytes in). */
+const SNIFF_BYTES = 64;
 
 export class UploadError extends Error {
   constructor(message: string, public status: number = 400) {
@@ -66,7 +72,24 @@ export function sniffMediaMime(head: Uint8Array): AllowedMimeType | null {
   }
   // Older QuickTime files start straight with one of these atoms.
   if (["moov", "mdat", "wide", "free", "skip", "pnot"].includes(box)) return "video/quicktime";
+  // EBML header: WebM declares its DocType in the first few dozen bytes
+  // (generic Matroska is not accepted: browsers and networks expect WebM).
+  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) {
+    return ascii(head, 0, Math.min(head.length, 64)).includes("webm") ? "video/webm" : null;
+  }
   return null;
+}
+
+/**
+ * Video duration sent by the uploader (the browser reads it from a <video>
+ * element before uploading). Returns undefined when absent, null when present
+ * but not a sensible duration, else the seconds rounded to milliseconds.
+ */
+export function parseDurationSec(value: unknown): number | null | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const seconds = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : NaN;
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_VIDEO_DURATION_SEC) return null;
+  return Math.round(seconds * 1000) / 1000;
 }
 
 /**
@@ -135,7 +158,7 @@ export function readImageDimensions(
   }
 }
 
-const KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{16,128}\.(jpg|png|webp|gif|mp4|mov)$/;
+const KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{16,128}\.(jpg|png|webp|gif|mp4|mov|webm)$/;
 
 export function isValidStorageKey(key: string): boolean {
   return KEY_PATTERN.test(key);
@@ -220,6 +243,8 @@ export interface SaveMediaInput {
   fileName: string | null | undefined;
   source: ReadableStream<Uint8Array>;
   alt?: string;
+  /** Videos only: duration read client-side (see parseDurationSec). Ignored for images. */
+  durationSec?: number;
   maxBytes?: number;
 }
 
@@ -265,7 +290,7 @@ export async function saveMediaStream(input: SaveMediaInput): Promise<SavedMedia
         headChunks.push(value);
         headLength += value.byteLength;
       }
-      if (!mime && headLength >= 12) {
+      if (!mime && headLength >= SNIFF_BYTES) {
         mime = sniffMediaMime(concat(headChunks, headLength));
         if (!mime) throw unsupportedFormat();
       }
@@ -298,7 +323,7 @@ export async function saveMediaStream(input: SaveMediaInput): Promise<SavedMedia
       },
     });
 
-    return { asset, media: mediaItemForAsset(asset, input.alt) };
+    return { asset, media: mediaItemForAsset(asset, input.alt, { durationSec: input.durationSec }) };
   } catch (error) {
     await reader.cancel().catch(() => {});
     await handle.close().catch(() => {});
@@ -309,7 +334,7 @@ export async function saveMediaStream(input: SaveMediaInput): Promise<SavedMedia
 }
 
 function unsupportedFormat(): UploadError {
-  return new UploadError("Formato non supportato: carica immagini JPG, PNG, WebP o GIF oppure video MP4 o MOV", 415);
+  return new UploadError("Formato non supportato: carica immagini JPG, PNG, WebP o GIF oppure video MP4, MOV o WebM", 415);
 }
 
 function concat(chunks: Uint8Array[], length: number): Uint8Array {
@@ -324,16 +349,24 @@ function concat(chunks: Uint8Array[], length: number): Uint8Array {
   return out;
 }
 
+/**
+ * MediaItem for an uploaded asset. `video` metadata (duration, poster) is
+ * kept only when the asset really is a video.
+ */
 export function mediaItemForAsset(
   asset: Pick<MediaAsset, "id" | "storageKey" | "mimeType">,
-  alt?: string
+  alt?: string,
+  video: { durationSec?: number; posterUrl?: string } = {}
 ): MediaItem {
   const mime = asset.mimeType as AllowedMimeType;
+  const type = ALLOWED_MEDIA[mime]?.type ?? (asset.mimeType.startsWith("video/") ? "video" : "image");
   return {
     url: publicMediaUrl(asset.storageKey),
-    type: ALLOWED_MEDIA[mime]?.type ?? (asset.mimeType.startsWith("video/") ? "video" : "image"),
+    type,
     mimeType: asset.mimeType,
     assetId: asset.id,
     ...(alt ? { alt } : {}),
+    ...(type === "video" && video.durationSec !== undefined ? { durationSec: video.durationSec } : {}),
+    ...(type === "video" && video.posterUrl ? { posterUrl: video.posterUrl } : {}),
   };
 }

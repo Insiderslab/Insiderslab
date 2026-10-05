@@ -5,11 +5,13 @@
  */
 
 import type { ReviewMessage, ReviewSession } from "@/app/generated/prisma/client";
+import type { MediaItem } from "@/lib/domain";
 import type { HistoryMessage } from "./prompt";
 import {
   MAX_CLIENT_MESSAGES_PER_DAY,
   MAX_CLIENT_MESSAGES_PER_SESSION,
   MAX_SESSIONS_PER_POST_PER_REVIEWER,
+  formatChangesMessage,
   isVerdict,
   parseActionItems,
   type ActionItem,
@@ -23,11 +25,14 @@ const MAX_ACTION_REQUEST_LENGTH = 500;
 export type SessionWithMessages = ReviewSession & { messages: ReviewMessage[] };
 
 export interface LimitCounts {
-  /** Whether the reviewer already has an OPEN session for this version. */
-  hasOpenSession: boolean;
+  /**
+   * Whether the reviewer already has a session for this version (open, or
+   * completed and reopened by the new message) — no new session is created.
+   */
+  hasCurrentSession: boolean;
   /** Sessions this reviewer has on this post (any version, any status). */
   sessionsOnPost: number;
-  /** Client messages already in the open session (0 when there is none). */
+  /** Client messages already in that session (0 when there is none). */
   clientMessagesInSession: number;
   /** Client messages this reviewer sent in the last 24 hours, all posts. */
   clientMessagesLast24h: number;
@@ -39,10 +44,10 @@ export interface LimitCounts {
  * per reviewer.
  */
 export function checkMessageLimits(counts: LimitCounts): string | null {
-  if (!counts.hasOpenSession && counts.sessionsOnPost >= MAX_SESSIONS_PER_POST_PER_REVIEWER) {
+  if (!counts.hasCurrentSession && counts.sessionsOnPost >= MAX_SESSIONS_PER_POST_PER_REVIEWER) {
     return "Hai già usato tutte le conversazioni con l'assistente per questo post. Puoi comunque approvarlo o chiedere modifiche direttamente.";
   }
-  if (counts.hasOpenSession && counts.clientMessagesInSession >= MAX_CLIENT_MESSAGES_PER_SESSION) {
+  if (counts.hasCurrentSession && counts.clientMessagesInSession >= MAX_CLIENT_MESSAGES_PER_SESSION) {
     return "La conversazione ha raggiunto la lunghezza massima: prepara il riepilogo per l'agenzia.";
   }
   if (counts.clientMessagesLast24h >= MAX_CLIENT_MESSAGES_PER_DAY) {
@@ -56,8 +61,9 @@ export function sessionsLeft(sessionsOnPost: number): number {
 }
 
 /**
- * Session the panel should show for this version: the open one (resume), else
- * the latest completed one (summary still waiting for the client's click).
+ * Session the panel shows and continues for this version: the open one
+ * (resume), else the latest completed one (its summary is waiting for the
+ * client's click; a new message reopens it). Abandoned sessions are skipped.
  */
 export function pickSessionForVersion<T extends Pick<ReviewSession, "status" | "versionNumber" | "startedAt">>(
   sessions: T[],
@@ -69,11 +75,23 @@ export function pickSessionForVersion<T extends Pick<ReviewSession, "status" | "
   return forVersion.find((s) => s.status === "OPEN") ?? forVersion.find((s) => s.status === "COMPLETED") ?? null;
 }
 
+/** Seconds rounded to tenths; null for anything that is not a usable time. */
+function cleanTime(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 10) / 10;
+}
+
 /**
  * Cleans the model's action items: trims, drops empty and duplicate requests,
- * nulls out-of-range media indexes and caps the list.
+ * nulls out-of-range media indexes, keeps video times only when they make
+ * sense (on a video, within its duration when known, end after start) and
+ * caps the list. A timed item with no media goes to the post's only video.
  */
-export function sanitizeActionItems(items: ActionItem[], mediaCount: number): ActionItem[] {
+export function sanitizeActionItems(
+  items: ActionItem[],
+  media: Array<Pick<MediaItem, "type" | "durationSec">>
+): ActionItem[] {
+  const videoIndexes = media.flatMap((item, index) => (item.type === "video" ? [index] : []));
   const seen = new Set<string>();
   const result: ActionItem[] = [];
   for (const item of items) {
@@ -82,11 +100,34 @@ export function sanitizeActionItems(items: ActionItem[], mediaCount: number): Ac
     const key = request.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    const mediaIndex =
-      item.mediaIndex !== null && Number.isInteger(item.mediaIndex) && item.mediaIndex >= 0 && item.mediaIndex < mediaCount
+
+    let mediaIndex =
+      item.mediaIndex !== null && Number.isInteger(item.mediaIndex) && item.mediaIndex >= 0 && item.mediaIndex < media.length
         ? item.mediaIndex
         : null;
-    result.push({ ...item, request, mediaIndex });
+    let timeSec = cleanTime(item.timeSec);
+    let timeEndSec = timeSec === null ? null : cleanTime(item.timeEndSec);
+
+    if (timeSec !== null && mediaIndex === null && videoIndexes.length === 1) mediaIndex = videoIndexes[0];
+    const target = mediaIndex !== null ? media[mediaIndex] : null;
+    if (timeSec !== null && (!target || target.type !== "video")) {
+      // A moment only means something on a video.
+      timeSec = null;
+      timeEndSec = null;
+    }
+    const duration = target?.durationSec;
+    if (timeSec !== null && typeof duration === "number" && duration > 0) {
+      // One second of slack for rounding in what the client said.
+      if (timeSec > duration + 1) {
+        timeSec = null;
+        timeEndSec = null;
+      } else if (timeEndSec !== null && timeEndSec > duration) {
+        timeEndSec = Math.round(duration * 10) / 10;
+      }
+    }
+    if (timeSec !== null && timeEndSec !== null && timeEndSec <= timeSec) timeEndSec = null;
+
+    result.push({ ...item, request, mediaIndex, timeSec, timeEndSec });
     if (result.length >= MAX_ACTION_ITEMS) break;
   }
   return result;
@@ -106,6 +147,7 @@ export function toHistory(messages: Array<Pick<ReviewMessage, "role" | "content"
 export function toSessionView(session: SessionWithMessages): AssistantSessionView {
   const messages = sortMessages(session.messages);
   const clientMessages = messages.filter((m) => m.role === "CLIENT").length;
+  const actionItems = parseActionItems(session.actionItems);
   return {
     id: session.id,
     status: session.status,
@@ -119,8 +161,10 @@ export function toSessionView(session: SessionWithMessages): AssistantSessionVie
     })),
     verdict: isVerdict(session.verdict) ? session.verdict : null,
     summary: session.summary,
-    actionItems: parseActionItems(session.actionItems),
-    clientMessagesLeft:
-      session.status === "OPEN" ? Math.max(0, MAX_CLIENT_MESSAGES_PER_SESSION - clientMessages) : 0,
+    actionItems,
+    // A completed session can be reopened by a new message (same version).
+    clientMessagesLeft: Math.max(0, MAX_CLIENT_MESSAGES_PER_SESSION - clientMessages),
+    changesMessage:
+      session.status === "COMPLETED" && session.summary ? formatChangesMessage(session.summary, actionItems) : null,
   };
 }

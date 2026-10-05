@@ -30,6 +30,10 @@ export type MetricoolErrorCode =
   | "rate_limited"
   | "unavailable"
   | "network"
+  /** The request may have reached Metricool but no answer came back (timeout, reset). */
+  | "no_response"
+  /** A create call whose outcome is unknown: retrying could publish twice. */
+  | "uncertain"
   | "invalid_response";
 
 /**
@@ -48,6 +52,22 @@ export class MetricoolError extends Error {
     super(message);
     this.name = "MetricoolError";
   }
+}
+
+/** Connection errors raised before any byte of the request was sent. */
+const PRE_SEND_ERROR_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH"]);
+
+/** True only when the fetch failed before the request could reach Metricool. */
+export function failedBeforeSending(error: unknown): boolean {
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const code = cause && typeof cause === "object" ? (cause as { code?: unknown }).code : undefined;
+  return typeof code === "string" && PRE_SEND_ERROR_CODES.has(code);
+}
+
+/** A failed create call that Metricool may nevertheless have carried out. */
+export function isUncertainCreateFailure(error: MetricoolError): boolean {
+  if (error.code === "no_response") return true;
+  return error.status !== null && error.status >= 500;
 }
 
 /** 429 and 5xx can clear up by themselves; any other 4xx will not. */
@@ -287,7 +307,7 @@ export class MetricoolClient {
         `Impossibile contattare Metricool (${reason}).`,
         null,
         true,
-        "network"
+        failedBeforeSending(error) ? "network" : "no_response"
       );
     }
 
@@ -325,15 +345,31 @@ export class MetricoolClient {
       console.log(
         `[Metricool fake] scheduled ${metricoolPostId} on blog ${blogId} at ${payload.publicationDate.dateTime} ${payload.publicationDate.timezone} (${payload.providers.map((p) => p.network).join(", ")})`
       );
+      // The full body (no credentials in it) so e2e tests and developers can
+      // check exactly what would have been sent to Metricool.
+      console.log(`[Metricool fake] payload ${JSON.stringify({ metricoolPostId, blogId, payload })}`);
       return { metricoolPostId };
     }
 
-    const json = await this.request(
-      "POST",
-      "/v2/scheduler/posts",
-      { blogId, userId: this.userId },
-      payload
-    );
+    let json: unknown;
+    try {
+      json = await this.request("POST", "/v2/scheduler/posts", { blogId, userId: this.userId }, payload);
+    } catch (error) {
+      // A timeout, a dropped connection or a 5xx from a gateway does not say
+      // whether Metricool created the post. Retrying blindly could schedule it
+      // twice, so the outcome is "uncertain" and a human checks first. Only
+      // failures before the request left (DNS, connection refused) and 408/429
+      // stay retryable.
+      if (error instanceof MetricoolError && isUncertainCreateFailure(error)) {
+        throw new MetricoolError(
+          `Esito incerto: ${error.message} Il post potrebbe essere già stato programmato: controlla su Metricool prima di usare "Riprova".`,
+          error.status,
+          false,
+          "uncertain"
+        );
+      }
+      throw error;
+    }
     const metricoolPostId = extractMetricoolPostId(json);
     if (!metricoolPostId) {
       // The post most likely exists on Metricool: never retry this blindly.

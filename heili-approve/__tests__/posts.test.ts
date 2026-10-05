@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { MediaItem } from "../lib/domain";
 import { InvalidTransitionError } from "../lib/domain";
 import {
+  checkCommentTime,
   contentChanged,
   diffText,
   diffVersions,
   effectiveLastSubmittedVersion,
   findDisallowedNetworks,
+  mediaMetadataChanged,
   needsNewVersion,
+  planActionItemComment,
   planPostUpdate,
   postInputSchema,
   postUpdateSchema,
+  resolveVideoCover,
   stableStringify,
   summarizeVersionDiff,
   visibleVersionNumber,
@@ -118,11 +122,23 @@ describe("planPostUpdate", () => {
     });
   });
 
-  it("revokes an approval when the date changes, without a new version", () => {
+  it("revokes an approval when the date changes, with a new version (the client approved the old date)", () => {
     expect(plan("APPROVED", { publishAt: new Date("2026-11-03T09:00:00Z") })).toMatchObject({
-      createVersion: false,
+      createVersion: true,
       scheduleChanged: true,
       nextStatus: "DRAFT",
+    });
+  });
+
+  it("versions a network change on a sent post, edits an unsent one in place", () => {
+    expect(plan("IN_REVIEW", { networks: ["facebook", "instagram", "tiktok"] })).toMatchObject({
+      createVersion: true,
+      scheduleChanged: true,
+      nextStatus: "DRAFT",
+    });
+    expect(plan("DRAFT", { publishAt: new Date("2026-11-03T09:00:00Z") }, null)).toMatchObject({
+      createVersion: false,
+      scheduleChanged: true,
     });
   });
 
@@ -186,6 +202,34 @@ describe("diff", () => {
   it("reports no change for identical content", () => {
     expect(diffVersions(base, { ...base, media: [...base.media] }).changed).toBe(false);
   });
+
+  it("reports date and network changes between versions", () => {
+    const schedule = {
+      publishAt: new Date("2026-10-09T06:30:00Z"),
+      networks: ["instagram"],
+      networkOptions: { instagramData: { type: "POST" } },
+    };
+    const diff = diffVersions(
+      { ...base, schedule },
+      {
+        ...base,
+        schedule: {
+          publishAt: new Date("2026-10-10T06:30:00Z"),
+          networks: ["instagram", "tiktok"],
+          networkOptions: { instagramData: { type: "REEL" } },
+        },
+      }
+    );
+    expect(diff.changed).toBe(true);
+    expect(summarizeVersionDiff(diff)).toEqual([
+      "Data di pubblicazione cambiata",
+      "Reti aggiunte: TikTok",
+      "Formato o opzioni per rete cambiati",
+    ]);
+    expect(diffVersions({ ...base, schedule }, { ...base, schedule: { ...schedule } }).changed).toBe(false);
+    // Old rows without a schedule are not compared.
+    expect(diffVersions(base, { ...base, schedule }).changed).toBe(false);
+  });
 });
 
 describe("validation helpers", () => {
@@ -224,5 +268,154 @@ describe("validation helpers", () => {
   it("does not fill defaults on partial updates", () => {
     const parsed = postUpdateSchema.parse({ title: "Nuovo" });
     expect(parsed).toEqual({ title: "Nuovo" });
+  });
+});
+
+// ─── Video and Reels ─────────────────────────────────────────────────────────
+
+const clip = (n: number, durationSec?: number): MediaItem => ({
+  url: `https://cdn.example.com/${n}.mp4`,
+  type: "video",
+  mimeType: "video/mp4",
+  ...(durationSec !== undefined ? { durationSec } : {}),
+});
+
+const reel: VersionContent = { text: "Reel", firstCommentText: null, media: [clip(1, 20)], videoCoverMs: 3000 };
+
+describe("video cover and metadata versioning", () => {
+  it("treats a cover change as a content change", () => {
+    expect(contentChanged(reel, { videoCoverMs: 3000 })).toBe(false);
+    expect(contentChanged(reel, { videoCoverMs: 4500 })).toBe(true);
+    expect(contentChanged(reel, { videoCoverMs: null })).toBe(true);
+    expect(contentChanged({ ...reel, videoCoverMs: undefined }, { videoCoverMs: null })).toBe(false);
+  });
+
+  it("creates a new version when the cover of a sent Reel changes", () => {
+    const result = planPostUpdate({
+      status: "IN_REVIEW",
+      currentVersionNumber: 1,
+      lastSubmittedVersionNumber: 1,
+      current: { ...reel, title: "Reel", publishAt: current.publishAt, networks: ["instagram"], networkOptions: {} },
+      patch: { videoCoverMs: 9000 },
+    });
+    expect(result).toMatchObject({ contentChanged: true, createVersion: true, nextStatus: "DRAFT" });
+  });
+
+  it("does not version on duration/poster only", () => {
+    const withPoster = [{ ...clip(1, 20.04), posterUrl: "https://cdn.example.com/1.jpg" }];
+    expect(contentChanged(reel, { media: withPoster })).toBe(false);
+    expect(mediaMetadataChanged(reel.media, withPoster)).toBe(true);
+    expect(mediaMetadataChanged(reel.media, [clip(1, 20)])).toBe(false);
+    expect(mediaMetadataChanged(reel.media, [clip(2, 20)])).toBe(false);
+  });
+
+  it("lists the cover change in the version diff", () => {
+    const diff = diffVersions(reel, { ...reel, videoCoverMs: 5000 });
+    expect(diff).toMatchObject({ changed: true, coverChanged: true });
+    expect(summarizeVersionDiff(diff)).toEqual(["Copertina del video modificata"]);
+    expect(diffVersions(reel, { ...reel }).changed).toBe(false);
+  });
+
+  it("keeps the cover only on posts with a video, within its duration", () => {
+    expect(resolveVideoCover(reel.media, 3000)).toBe(3000);
+    expect(resolveVideoCover(reel.media, undefined)).toBeNull();
+    expect(resolveVideoCover([image(1)], 3000)).toBeNull();
+    expect(resolveVideoCover([clip(1)], 999_000)).toBe(999_000);
+    expect(() => resolveVideoCover(reel.media, 25_000)).toThrow(/oltre la durata/);
+  });
+
+  it("validates video fields in post input", () => {
+    const input = {
+      clientId: "c1",
+      title: "Reel",
+      publishAt: "2026-11-02T09:00:00Z",
+      networks: ["instagram"],
+      text: "",
+      media: [{ ...clip(1, 12.5), posterUrl: "https://cdn.example.com/1.jpg" }],
+      videoCoverMs: 1200,
+    };
+    const ok = postInputSchema.safeParse(input);
+    expect(ok.success).toBe(true);
+    if (ok.success) expect(ok.data.media[0]).toMatchObject({ durationSec: 12.5, posterUrl: "https://cdn.example.com/1.jpg" });
+
+    for (const bad of [
+      { videoCoverMs: -1 },
+      { videoCoverMs: 1.5 },
+      { media: [{ ...clip(1), durationSec: -3 }] },
+      { media: [{ ...clip(1), posterUrl: "javascript:alert(1)" }] },
+    ]) {
+      expect(postInputSchema.safeParse({ ...input, ...bad }).success, JSON.stringify(bad)).toBe(false);
+    }
+    expect(postUpdateSchema.parse({ videoCoverMs: null })).toEqual({ videoCoverMs: null });
+  });
+});
+
+describe("video comments", () => {
+  it("accepts moments and ranges on a video", () => {
+    expect(checkCommentTime(clip(1, 20), 7, undefined)).toEqual({ timeSec: 7, timeEndSec: null });
+    expect(checkCommentTime(clip(1, 20), 12.345, 15)).toEqual({ timeSec: 12.35, timeEndSec: 15 });
+    expect(checkCommentTime(clip(1), 120, 130)).toEqual({ timeSec: 120, timeEndSec: 130 });
+    expect(checkCommentTime(image(1), undefined, undefined)).toEqual({ timeSec: null, timeEndSec: null });
+  });
+
+  it("clamps to the duration within one second of slack", () => {
+    expect(checkCommentTime(clip(1, 14.9), 15, undefined)).toEqual({ timeSec: 14.9, timeEndSec: null });
+    expect(checkCommentTime(clip(1, 14.9), 12, 15.5)).toEqual({ timeSec: 12, timeEndSec: 14.9 });
+  });
+
+  it("rejects invalid moments", () => {
+    const error = (r: ReturnType<typeof checkCommentTime>) => ("error" in r ? r.error : null);
+    expect(error(checkCommentTime(image(1), 3, undefined))).toMatch(/solo su un video/);
+    expect(error(checkCommentTime(undefined, 3, undefined))).toMatch(/solo su un video/);
+    expect(error(checkCommentTime(clip(1, 20), -1, undefined))).toMatch(/negativo/);
+    expect(error(checkCommentTime(clip(1, 20), 10, 10))).toMatch(/dopo l'inizio/);
+    expect(error(checkCommentTime(clip(1, 20), 10, 8))).toMatch(/dopo l'inizio/);
+    expect(error(checkCommentTime(clip(1, 20), 22, undefined))).toMatch(/oltre la durata/);
+    expect(error(checkCommentTime(clip(1, 20), 10, 25))).toMatch(/oltre la durata/);
+    expect(error(checkCommentTime(clip(1, 20), undefined, 5))).toMatch(/inizio/);
+  });
+});
+
+describe("assistant action items as comments", () => {
+  const item = (over: Partial<Parameters<typeof planActionItemComment>[0]>) => ({
+    area: "media",
+    mediaIndex: null,
+    timeSec: null,
+    timeEndSec: null,
+    request: "Cambiare la clip",
+    priority: "alta",
+    ...over,
+  });
+  const media = [image(1), clip(2, 20)];
+
+  it("creates a comment for items about a media or a moment", () => {
+    expect(planActionItemComment(item({ mediaIndex: 1, timeSec: 7, timeEndSec: 9 }), media)).toEqual({
+      body: "Cambiare la clip",
+      mediaIndex: 1,
+      timeSec: 7,
+      timeEndSec: 9,
+    });
+    expect(planActionItemComment(item({ mediaIndex: 0 }), media)).toMatchObject({ mediaIndex: 0, timeSec: null });
+  });
+
+  it("puts a timed item without media on the only video", () => {
+    expect(planActionItemComment(item({ timeSec: 12 }), media)).toMatchObject({ mediaIndex: 1, timeSec: 12 });
+    expect(planActionItemComment(item({ timeSec: 12 }), [clip(1), clip(2)])).toBeNull();
+  });
+
+  it("skips general items and drops invalid parts instead of failing", () => {
+    expect(planActionItemComment(item({}), media)).toBeNull();
+    expect(planActionItemComment(item({ mediaIndex: 5 }), media)).toBeNull();
+    expect(planActionItemComment(item({ mediaIndex: 1.5 }), media)).toBeNull();
+    expect(planActionItemComment(item({ mediaIndex: 1, request: "  " }), media)).toBeNull();
+    // A moment on an image or past the end: kept as a comment on the media.
+    expect(planActionItemComment(item({ mediaIndex: 0, timeSec: 3 }), media)).toMatchObject({ mediaIndex: 0, timeSec: null });
+    expect(planActionItemComment(item({ mediaIndex: 1, timeSec: 45 }), media)).toMatchObject({ mediaIndex: 1, timeSec: null });
+    // A bad end keeps the start.
+    expect(planActionItemComment(item({ mediaIndex: 1, timeSec: 10, timeEndSec: 8 }), media)).toMatchObject({
+      timeSec: 10,
+      timeEndSec: null,
+    });
+    expect(planActionItemComment(item({ mediaIndex: 1, timeSec: -2 }), media)).toMatchObject({ timeSec: null });
   });
 });

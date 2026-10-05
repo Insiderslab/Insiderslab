@@ -96,6 +96,12 @@ export function formatTimecode(totalSeconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 }
 
+/** "0:07" or "0:12–0:15": the moment of a video comment or action item. */
+export function formatTimeRange(timeSec: number, timeEndSec?: number | null): string {
+  const start = formatTimecode(timeSec);
+  return typeof timeEndSec === "number" && timeEndSec > timeSec ? `${start}–${formatTimecode(timeEndSec)}` : start;
+}
+
 /** Parses "0:07", "1:05", "65", "1:02:03" → seconds; null if not a timecode. */
 export function parseTimecode(value: string): number | null {
   const parts = value.trim().split(":");

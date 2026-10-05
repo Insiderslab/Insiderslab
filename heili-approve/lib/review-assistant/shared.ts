@@ -7,6 +7,7 @@
  */
 
 import { z } from "zod";
+import { formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
@@ -42,10 +43,19 @@ export type ActionPriority = (typeof ACTION_PRIORITIES)[number];
 export const VERDICTS = ["approve", "changes", "unclear"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
+/**
+ * One change requested by the client. Plain numbers (no int/min constraints)
+ * keep the JSON schema inside what both providers' structured outputs accept;
+ * rules.sanitizeActionItems enforces ranges afterwards.
+ */
 export const actionItemSchema = z.object({
   area: z.enum(ACTION_AREAS),
   /** 0-based index into PostVersion.media, or null when not about one media. */
-  mediaIndex: z.number().int().nullable(),
+  mediaIndex: z.number().nullable(),
+  /** Videos: second the change refers to ("verso il settimo secondo" → 7). */
+  timeSec: z.number().nullable(),
+  /** Videos: end of a range ("dal 12 al 15" → 15), else null. */
+  timeEndSec: z.number().nullable(),
   request: z.string(),
   priority: z.enum(ACTION_PRIORITIES),
 });
@@ -84,13 +94,17 @@ export interface AssistantSessionView {
   actionItems: ActionItem[];
   /** Client messages still allowed in this conversation. */
   clientMessagesLeft: number;
+  /** Ready-made text for requestChanges once the session is summarised. */
+  changesMessage: string | null;
 }
 
-/** GET /api/review/[token]/assistant */
+/** GET /api/review/[token]/assistant?postId=&versionNumber= */
 export interface AssistantStateResponse {
   session: AssistantSessionView | null;
   /** New conversations the reviewer can still start on this post. */
   sessionsLeft: number;
+  /** False when the post can no longer be approved or changed (read-only). */
+  canChat: boolean;
 }
 
 /** POST /api/review/[token]/assistant */
@@ -142,12 +156,16 @@ export function mediaLabel(mediaIndex: number): string {
   return `Media n°${mediaIndex + 1}`;
 }
 
-/** Reads ReviewSession.actionItems (JSON) defensively: invalid entries are dropped. */
+/**
+ * Reads ReviewSession.actionItems (JSON) defensively: invalid entries are
+ * dropped, and fields added later (timeSec, timeEndSec) default to null.
+ */
 export function parseActionItems(value: unknown): ActionItem[] {
   if (!Array.isArray(value)) return [];
   const items: ActionItem[] = [];
   for (const entry of value) {
-    const parsed = actionItemSchema.safeParse(entry);
+    if (typeof entry !== "object" || entry === null) continue;
+    const parsed = actionItemSchema.safeParse({ mediaIndex: null, timeSec: null, timeEndSec: null, ...entry });
     if (parsed.success) items.push(parsed.data);
   }
   return items;
@@ -157,13 +175,51 @@ export function isVerdict(value: unknown): value is Verdict {
   return typeof value === "string" && (VERDICTS as readonly string[]).includes(value);
 }
 
-/** One bullet line, e.g. "[Immagini/video · Media n°2 · Priorità alta] Schiarire lo sfondo". */
+/** "0:07" or "0:12–0:15"; null when the item has no time. */
+export function formatActionItemTime(item: Pick<ActionItem, "timeSec" | "timeEndSec">): string | null {
+  if (item.timeSec === null) return null;
+  return formatTimeRange(item.timeSec, item.timeEndSec);
+}
+
+/** One bullet line, e.g. "[Immagini/video · Media n°2 · 0:07 · Priorità alta] Tagliare la clip". */
 export function formatActionItem(item: ActionItem): string {
   const tags = [ACTION_AREA_LABELS[item.area]];
   if (item.mediaIndex !== null) tags.push(mediaLabel(item.mediaIndex));
+  const time = formatActionItemTime(item);
+  if (time) tags.push(time);
   tags.push(ACTION_PRIORITY_LABELS[item.priority]);
   return `[${tags.join(" · ")}] ${item.request}`;
 }
+
+// ─── Video moments ───────────────────────────────────────────────────────────
+
+/**
+ * Text the panel inserts when the client taps "Usa il momento attuale". The
+ * prompt tells the model what it means; the transcript turns it into a chip.
+ */
+export function videoMomentMarker(timeSec: number): string {
+  return `[al momento ${formatTimecode(timeSec)} del video]`;
+}
+
+export type MessageSegment = { type: "text"; value: string } | { type: "moment"; label: string; timeSec: number };
+
+/** Splits a message into text and video-moment markers (rendered as chips). */
+export function splitVideoMoments(text: string): MessageSegment[] {
+  const segments: MessageSegment[] = [];
+  const re = /\[al momento ((?:\d+:)?\d{1,2}:\d{2}) del video\]/g;
+  let last = 0;
+  for (const match of text.matchAll(re)) {
+    const timeSec = parseTimecode(match[1]);
+    if (timeSec === null) continue;
+    if (match.index > last) segments.push({ type: "text", value: text.slice(last, match.index) });
+    segments.push({ type: "moment", label: match[1], timeSec });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) segments.push({ type: "text", value: text.slice(last) });
+  return segments;
+}
+
+// ─── Message to the agency ───────────────────────────────────────────────────
 
 /**
  * Message posted to the agency as the client's change request: the summary

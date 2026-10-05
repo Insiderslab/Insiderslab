@@ -11,15 +11,10 @@ import type { Client, ClientReviewer } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
 import { NETWORKS } from "@/lib/domain";
 import { NotFoundError, parseOrThrow } from "@/lib/errors";
+import { isValidTimeZone } from "@/lib/metricool/payload";
 
-export function isValidTimeZone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("it-IT", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
+// One time-zone check for the whole app (also used by the Metricool payload).
+export { isValidTimeZone };
 
 const optionalText = (max: number) =>
   z

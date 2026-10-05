@@ -44,3 +44,6 @@ next-env.d.ts
 /app/generated/prisma
 .gstack/
 /uploads
+
+# e2e (Playwright)
+/test-results

@@ -1,3 +1,4 @@
+import "@/lib/load-env";
 import os from "node:os";
 import { Worker, type Job } from "bullmq";
 import {

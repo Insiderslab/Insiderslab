@@ -4,5 +4,9 @@ node_modules
 .env
 .env.local
 __tests__
+e2e
+test-results
+uploads
 docs
 *.md
+*.tsbuildinfo

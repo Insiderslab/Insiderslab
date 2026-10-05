@@ -32,6 +32,8 @@ export interface PayloadVersionInput {
   firstCommentText?: string | null;
   /** PostVersion.media (JSON array of MediaItem). */
   media: unknown;
+  /** PostVersion.videoCoverMs: chosen cover frame of the video, in ms. */
+  videoCoverMs?: number | null;
 }
 
 export interface PayloadClientInput {
@@ -52,6 +54,8 @@ export interface MetricoolSchedulerPayload {
   smartLinkData: { ids: string[] };
   descendants: unknown[];
   hasNotReadNotes: false;
+  /** Cover frame of the video (ms). Only sent where a network applies it. */
+  videoCoverMilliseconds?: number;
   /** One `<network>Data` object per selected network. */
   [networkData: `${string}Data`]: Record<string, unknown>;
 }
@@ -258,6 +262,46 @@ export function buildNetworkData(network: Network, networkOptions: unknown): Rec
   return { ...defaultNetworkData(network, format), ...getNetworkOptions(networkOptions, network) };
 }
 
+/**
+ * Whether `network` (in its selected format) lets Metricool set a video
+ * cover: Instagram Reels, Facebook posts/reels, TikTok, YouTube, LinkedIn.
+ * Stories never do, and neither do the text-first networks.
+ */
+export function supportsVideoCover(network: Network, networkOptions: unknown): boolean {
+  const format = getNetworkFormat(network, networkOptions);
+  switch (network) {
+    case "instagram":
+      return format === "REEL";
+    case "facebook":
+      return format === "POST" || format === "REEL";
+    case "tiktok":
+    case "youtube":
+    case "linkedin":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * `videoCoverMilliseconds` to send, or undefined. Metricool rejects the whole
+ * request (VIDEO_THUMBNAIL_NOT_APPLICABLE) when a cover is sent for a post
+ * where no network can use it, so it is only sent when the version has a
+ * cover, the media include a video and at least one target supports it.
+ */
+export function resolveVideoCoverMs(params: {
+  networks: readonly Network[];
+  networkOptions: unknown;
+  media: readonly MediaItem[];
+  videoCoverMs: number | null | undefined;
+}): number | undefined {
+  const { videoCoverMs } = params;
+  if (typeof videoCoverMs !== "number" || !Number.isFinite(videoCoverMs) || videoCoverMs < 0) return undefined;
+  if (!params.media.some((item) => item.type === "video")) return undefined;
+  if (!params.networks.some((network) => supportsVideoCover(network, params.networkOptions))) return undefined;
+  return Math.round(videoCoverMs);
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /** Instagram carousels and X posts cap the number of attachments. */
@@ -447,6 +491,14 @@ export function buildSchedulerPayload({
   };
 
   if (firstComment && !allStories) payload.firstCommentText = firstComment;
+
+  const videoCoverMilliseconds = resolveVideoCoverMs({
+    networks,
+    networkOptions: post.networkOptions,
+    media,
+    videoCoverMs: version.videoCoverMs,
+  });
+  if (videoCoverMilliseconds !== undefined) payload.videoCoverMilliseconds = videoCoverMilliseconds;
 
   for (const network of networks) {
     payload[networkDataKey(network)] = buildNetworkData(network, post.networkOptions);

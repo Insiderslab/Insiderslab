@@ -10,6 +10,7 @@ import {
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
+  hasWorkspaceRole,
 } from "@/lib/workspace-access";
 
 const inviteSchema = z.object({
@@ -120,22 +121,44 @@ export async function POST(request: NextRequest) {
   });
 
   if (existingUser) {
-    await prisma.workspaceMember.upsert({
-      where: {
-        workspaceId_userId: {
-          workspaceId: context.workspaceId,
-          userId: existingUser.id,
-        },
-      },
-      create: {
+    const membershipKey = {
+      workspaceId_userId: {
         workspaceId: context.workspaceId,
         userId: existingUser.id,
-        role: parsed.data.role,
       },
-      update: {
-        role: parsed.data.role,
-      },
+    };
+    const existingMember = await prisma.workspaceMember.findUnique({
+      where: membershipKey,
+      select: { id: true, role: true },
     });
+    if (existingMember) {
+      // The invite path never lowers a role and never touches the OWNER:
+      // role changes for existing members go through PATCH, which has the
+      // same OWNER guard. Re-inviting at a higher role is an upgrade only.
+      if (existingMember.role === "OWNER") {
+        return NextResponse.json(
+          { success: false, error: "Member cannot be updated" },
+          { status: 400 }
+        );
+      }
+      if (!hasWorkspaceRole(existingMember.role, parsed.data.role)) {
+        await prisma.workspaceMember.updateMany({
+          where: { id: existingMember.id, role: { not: "OWNER" } },
+          data: { role: parsed.data.role },
+        });
+      }
+    } else {
+      await prisma.workspaceMember.upsert({
+        where: membershipKey,
+        create: {
+          workspaceId: context.workspaceId,
+          userId: existingUser.id,
+          role: parsed.data.role,
+        },
+        // Concurrent create: keep whatever role the row already has.
+        update: {},
+      });
+    }
   } else {
     await prisma.workspaceInvitation.upsert({
       where: {

@@ -12,7 +12,7 @@
 
 import type { Client, ClientReviewer, Post } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
-import { NETWORK_LABELS, isNetwork, type Network } from "@/lib/domain";
+import { NETWORK_LABELS, formatTimeRange, isNetwork, type Network } from "@/lib/domain";
 import { renderEmail, sendEmail, type EmailListItem } from "@/lib/email";
 import { getBaseUrl } from "@/lib/env";
 import { getReviewUrl } from "@/lib/reviewers";
@@ -160,52 +160,123 @@ export async function notifyReviewRequested(postIds: string[]): Promise<void> {
   }
 }
 
-/** Reminder for one post still IN_REVIEW. Returns true if at least one email went out. */
-export async function notifyReviewReminder(postId: string): Promise<boolean> {
+/**
+ * Reminder for posts still IN_REVIEW: one email per active reviewer of each
+ * client, listing all of that client's given posts (like the review request).
+ * Returns the ids of the posts included in at least one email that went out.
+ */
+export async function notifyReviewReminder(postIds: string[]): Promise<Set<string>> {
+  const reminded = new Set<string>();
   try {
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
+    if (postIds.length === 0) return reminded;
+    const posts = await prisma.post.findMany({
+      where: { id: { in: postIds }, status: "IN_REVIEW", client: { archivedAt: null } },
+      orderBy: { publishAt: "asc" },
       include: {
         client: { include: { reviewers: { where: { active: true } } } },
         workspace: { select: { name: true } },
       },
     });
-    if (!post || post.status !== "IN_REVIEW" || post.client.archivedAt) return false;
 
-    let sent = false;
-    for (const reviewer of post.client.reviewers) {
-      try {
-        if (await sendReviewEmail(reviewer, post.client, post.workspace.name, [post], "reminder")) sent = true;
-      } catch (error) {
-        logFailure(`notifyReviewReminder(reviewer ${reviewer.id})`, error);
-      }
+    const byClient = new Map<string, typeof posts>();
+    for (const post of posts) {
+      const list = byClient.get(post.clientId) ?? [];
+      list.push(post);
+      byClient.set(post.clientId, list);
     }
-    return sent;
+
+    for (const clientPosts of byClient.values()) {
+      const { client, workspace } = clientPosts[0];
+      let sent = false;
+      for (const reviewer of client.reviewers) {
+        try {
+          if (await sendReviewEmail(reviewer, client, workspace.name, clientPosts, "reminder")) sent = true;
+        } catch (error) {
+          logFailure(`notifyReviewReminder(reviewer ${reviewer.id})`, error);
+        }
+      }
+      if (sent) for (const post of clientPosts) reminded.add(post.id);
+    }
   } catch (error) {
     logFailure("notifyReviewReminder", error);
-    return false;
   }
+  return reminded;
 }
 
 // ─── Agency side ─────────────────────────────────────────────────────────────
 
+function isTime(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+/** "0:07", "0:12–0:15", or null when there is no (valid) start time. */
+export function formatMoment(timeSec: unknown, timeEndSec?: unknown): string | null {
+  if (!isTime(timeSec)) return null;
+  return formatTimeRange(timeSec, isTime(timeEndSec) ? timeEndSec : null);
+}
+
 interface AssistantActionItem {
   area?: unknown;
   mediaIndex?: unknown;
+  timeSec?: unknown;
+  timeEndSec?: unknown;
   request?: unknown;
   priority?: unknown;
 }
 
-/** "- [Immagine 2] Schiarire lo sfondo (alta)" lines from a review session. */
-export function formatActionItems(value: unknown): string[] {
+/** True for items that point at a media or a moment of a video. */
+function hasLocation(raw: AssistantActionItem): boolean {
+  return typeof raw.mediaIndex === "number" || isTime(raw.timeSec);
+}
+
+/** "[immagine, media 2, 0:07] Schiarire lo sfondo (priorità: alta)" lines from a review session. */
+export function formatActionItems(value: unknown, opts: { onlyUnlocated?: boolean } = {}): string[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((raw: AssistantActionItem) => {
     if (!raw || typeof raw !== "object" || typeof raw.request !== "string" || !raw.request.trim()) return [];
+    if (opts.onlyUnlocated && hasLocation(raw)) return [];
     const area = typeof raw.area === "string" && raw.area ? raw.area : null;
     const media = typeof raw.mediaIndex === "number" ? `media ${raw.mediaIndex + 1}` : null;
-    const where = [area, media].filter(Boolean).join(", ");
+    const where = [area, media, formatMoment(raw.timeSec, raw.timeEndSec)].filter(Boolean).join(", ");
     const priority = typeof raw.priority === "string" && raw.priority ? ` (priorità: ${raw.priority})` : "";
     return [`${where ? `[${where}] ` : ""}${raw.request.trim()}${priority}`];
+  });
+}
+
+export interface NotifiedComment {
+  body: string;
+  mediaIndex: number | null;
+  pinX?: number | null;
+  timeSec: number | null;
+  timeEndSec: number | null;
+}
+
+const MAX_COMMENT_IN_EMAIL = 500;
+
+/**
+ * Email list entries for client comments: video comments first, in timeline
+ * order with their timecode ("Media 1 · 0:07–0:09"), then the others.
+ */
+export function formatClientComments(comments: NotifiedComment[]): EmailListItem[] {
+  // Stable sort: untimed comments keep their (chronological) order.
+  const sorted = [...comments].sort((a, b) => {
+    const aTimed = isTime(a.timeSec);
+    const bTimed = isTime(b.timeSec);
+    if (aTimed !== bTimed) return aTimed ? -1 : 1;
+    if (!aTimed || !bTimed) return 0;
+    return (a.mediaIndex ?? 0) - (b.mediaIndex ?? 0) || (a.timeSec as number) - (b.timeSec as number);
+  });
+  return sorted.map((comment) => {
+    const body = comment.body.trim();
+    const where = [
+      comment.mediaIndex !== null ? `Media ${comment.mediaIndex + 1}` : null,
+      formatMoment(comment.timeSec, comment.timeEndSec),
+      comment.timeSec === null && comment.pinX != null ? "punto sull'immagine" : null,
+    ].filter(Boolean);
+    return {
+      title: body.length > MAX_COMMENT_IN_EMAIL ? `${body.slice(0, MAX_COMMENT_IN_EMAIL - 1).trimEnd()}…` : body,
+      ...(where.length ? { detail: where.join(" · ") } : {}),
+    };
   });
 }
 
@@ -219,11 +290,34 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       orderBy: { createdAt: "desc" },
       include: { reviewer: { select: { name: true } } },
     });
-    const metadata = (event?.metadata ?? {}) as { commentId?: unknown; reviewSessionId?: unknown };
+    const metadata = (event?.metadata ?? {}) as {
+      commentId?: unknown;
+      reviewSessionId?: unknown;
+      actionCommentIds?: unknown;
+    };
     const comment =
       typeof metadata.commentId === "string"
-        ? await prisma.postComment.findUnique({ where: { id: metadata.commentId }, select: { body: true } })
+        ? await prisma.postComment.findUnique({
+            where: { id: metadata.commentId },
+            select: { body: true, versionId: true },
+          })
         : null;
+    // Open client comments on the reviewed version (pins, video moments and
+    // the assistant's located action items), shown with their timecode.
+    const clientComments = comment?.versionId
+      ? await prisma.postComment.findMany({
+          where: {
+            postId,
+            versionId: comment.versionId,
+            authorType: "CLIENT",
+            resolvedAt: null,
+            id: { not: metadata.commentId as string },
+          },
+          orderBy: { createdAt: "asc" },
+          take: 50,
+          select: { body: true, mediaIndex: true, pinX: true, timeSec: true, timeEndSec: true },
+        })
+      : [];
     const session =
       typeof metadata.reviewSessionId === "string"
         ? await prisma.reviewSession.findUnique({
@@ -240,13 +334,17 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       paragraphs.push("La richiesta è stata raccolta con l'assistente di revisione: trovi la conversazione completa nel post.");
       if (session.summary) paragraphs.push(`Riepilogo: ${session.summary}`);
     }
-    const actions = formatActionItems(session?.actionItems);
+    // Located action items already became comments when requestChanges got
+    // them (actionCommentIds); list only the others to avoid duplicates.
+    const actions = formatActionItems(session?.actionItems, {
+      onlyUnlocated: Array.isArray(metadata.actionCommentIds),
+    });
 
     await sendToAgency(post.workspaceId, `Modifiche richieste: ${post.title}`, {
       heading: "Il cliente ha chiesto modifiche",
       paragraphs,
       quote: comment?.body,
-      items: actions.map((title) => ({ title })),
+      items: [...formatClientComments(clientComments), ...actions.map((title) => ({ title }))],
       cta: { label: "Apri il post", url: agencyPostUrl(post.id) },
     });
   } catch (error) {
