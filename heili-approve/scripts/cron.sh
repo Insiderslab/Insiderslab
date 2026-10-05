@@ -1,14 +1,12 @@
 #!/bin/sh
 # Scheduler for the periodic jobs under /api/cron.
 #
-# On Vercel these run from the "crons" block in vercel.json. Nothing reads that
-# file anywhere else, so a self-hosted instance has no scheduler at all and the
-# jobs simply never run — silently. The one that hurts is refresh-tokens: the
-# Instagram token expires and every automation stops without a single error.
+# A self-hosted instance has no Vercel crons, so without this container the
+# jobs never run — silently. The one that hurts is sweep: an approved post
+# whose job was lost (Redis restart, worker down) would never reach Metricool.
 #
 # Run as its own container from the app image (see the compose file), so the
-# jobs live with the app they belong to and keep working even if every other
-# stack on the host is taken down.
+# jobs live with the app they belong to.
 
 set -u
 
@@ -38,33 +36,30 @@ call() {
 echo "[cron] scheduler started, target $BASE_URL"
 
 last_slot=""
-last_daily=""
+last_hour=""
 
 while true; do
   now=$(date -u '+%Y-%m-%d %H:%M')
-  today=${now% *}
   hhmm=${now#* }
-  hour=${hhmm%:*}
   minute=${hhmm#*:}
+  hour_slot=${now%:*}
 
-  # attach-next-reel every 5 minutes rather than once a day: a campaign created
-  # before its reel is published stays inert until this binds it, and a daily
-  # run would cost the whole first evening of comments.
+  # sweep every 5 minutes: approved posts left behind and lost jobs reach
+  # Metricool within minutes, well before their publication time.
   case "$minute" in
     00|05|10|15|20|25|30|35|40|45|50|55)
       if [ "$last_slot" != "$hhmm" ]; then
         last_slot="$hhmm"
-        call attach-next-reel
+        call sweep
       fi
       ;;
   esac
 
-  # Once a day, early: the token refresh has a 10-day window before expiry, so
-  # the exact hour does not matter — only that it happens every day.
-  if [ "$hour" = "05" ] && [ "$last_daily" != "$today" ]; then
-    last_daily="$today"
-    call refresh-tokens
-    call snapshot-followers
+  # reminders hourly: the route itself enforces max one per post per 24 h and
+  # only sends during the client's working hours, so hourly is just the grain.
+  if [ "$last_hour" != "$hour_slot" ]; then
+    last_hour="$hour_slot"
+    call reminders
   fi
 
   # Half a minute: short enough never to skip a slot, long enough to stay idle.
