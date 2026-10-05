@@ -1,5 +1,8 @@
 # Guida passo passo — sbloccare Meta per il CRM WhatsApp (5 ottobre 2026)
 
+> **Aggiornamento 5/10 sera — letto il report dal pannello (`REPORT-META-2026-10-05.md`), che corregge tre punti di questa guida:**
+> `7017461864988773` è il portfolio **Ristorante Lumii** (FUSION TASTE SRL), non Socialinsiders; l'app `609974691965875` appartiene a **Insiderlabs Business** (`404240226745821`, verificato il 27/6/2026); `283406984860632` è un secondo WABA di Lumii, non un account di fatturazione. Il numero 0432 di Lumii è usato da **Clientify**, il 389 da Cooperto/SparkinWeb: Lumii non è il primo cliente del CRM. Esiste già un **numero nostro registrato** (+1 555 779 6249, WABA "Insiderslab Team") sull'app Live: è la base per il test end-to-end. I checkpoint sotto restano validi come procedura, ma gli ID e gli stati vanno letti dal report.
+
 **Limite di questo ambiente:** la rete blocca `facebook.com`, `business.facebook.com` e `developers.facebook.com` (proxy 403). Non posso aprire Meta al posto tuo: la guida va eseguita da te, e a ogni checkpoint mi riporti cosa vedi (screenshot o testo). Nessun segreto (token, password, codici) va incollato in chat.
 
 **Fonti:** email Meta ricevute su `stefano@insiderslab.it` e `stefano.finoti@gmail.com` (lette oggi), documentazione nei repo `vocero-crm`, `wapi`, `heili-dm`.
