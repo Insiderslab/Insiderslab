@@ -3,13 +3,15 @@
  */
 
 import type { EditorClient } from "@/components/posts/types";
-import { listClients } from "@/lib/clients";
+import { clientServices, listClients } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
 import type { NetworkOptions } from "@/lib/domain";
 
 /**
  * Clients the editor can pick: the active ones, plus `includeClientId` when
  * it is archived (a post of an archived client still shows its client).
+ * Each carries its services, so pages can offer only the clients that get
+ * a kind of content.
  */
 export async function loadEditorClients(workspaceId: string, includeClientId?: string): Promise<EditorClient[]> {
   const clients = await listClients(workspaceId);
@@ -21,6 +23,7 @@ export async function loadEditorClients(workspaceId: string, includeClientId?: s
     logoUrl: client.logoUrl,
     hasMetricoolBrand: Boolean(client.metricoolBlogId),
     activeReviewers: client._count.reviewers,
+    services: clientServices(client),
   }));
 
   if (includeClientId && !result.some((c) => c.id === includeClientId)) {
@@ -37,6 +40,7 @@ export async function loadEditorClients(workspaceId: string, includeClientId?: s
         logoUrl: extra.logoUrl,
         hasMetricoolBrand: Boolean(extra.metricoolBlogId),
         activeReviewers: extra._count.reviewers,
+        services: clientServices(extra),
       });
     }
   }

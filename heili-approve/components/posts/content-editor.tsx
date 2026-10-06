@@ -238,11 +238,11 @@ export default function ContentEditor({
             </label>
             {clients.length === 0 ? (
               <p className="text-sm text-muted">
-                Nessun cliente attivo.{" "}
+                Nessun cliente attivo con questo servizio.{" "}
                 <Link href="/clients/new" className="text-accent hover:underline">
                   Aggiungi un cliente
                 </Link>{" "}
-                prima di iniziare.
+                oppure attiva il servizio nella scheda di un cliente.
               </p>
             ) : (
               <select

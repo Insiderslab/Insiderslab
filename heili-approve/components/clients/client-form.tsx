@@ -3,12 +3,16 @@
 /**
  * Client Form
  *
- * Create / edit a client: name, logo, Metricool brand, time zone, networks
- * and automatic scheduling. Fields are controlled so a validation error from
- * the server never wipes what the user typed. On instances without social
- * posts (blog, ads: `metricool` false) only name, logo and time zone are
- * shown; the stored brand / networks are sent back unchanged and the server
- * ignores them there.
+ * Create / edit a client: name, logo, services (which kinds of content the
+ * agency prepares for it), Metricool brand, time zone, networks and automatic
+ * scheduling. Fields are controlled so a validation error from the server
+ * never wipes what the user typed. The Metricool brand, networks and
+ * automatic scheduling only show when "Post social" is among the services
+ * and the instance handles social posts (`metricool`); otherwise the stored
+ * values are sent back unchanged.
+ *
+ * Services: one checkbox per kind the instance enables (`kinds`). The stored
+ * services of kinds this instance does not handle are kept by the server.
  */
 
 import Link from "next/link";
@@ -19,7 +23,10 @@ import {
 } from "@/app/(dashboard)/clients/actions";
 import type { BrandsState } from "@/components/clients/action-result";
 import { isValidTimeZoneName, type TimeZoneOption } from "@/components/clients/helpers";
+import type { ContentKind } from "@/app/generated/prisma/client";
+import { KindIcon } from "@/components/posts/kind-badge";
 import { NETWORKS, NETWORK_LABELS, isNetwork, type Network } from "@/lib/domain";
+import { KIND_UI, sortKinds } from "@/lib/variant";
 
 export interface ClientFormValues {
   name: string;
@@ -28,7 +35,16 @@ export interface ClientFormValues {
   metricoolBlogId: string;
   networks: string[];
   autoSchedule: boolean;
+  /** The client's services among `kinds` (the enabled ones). */
+  services: ContentKind[];
 }
+
+/** What each service means, next to its checkbox. */
+const SERVICE_DESCRIPTIONS: Record<ContentKind, string> = {
+  SOCIAL_POST: "Testi, foto, video e Reel. Dopo l'approvazione si programmano su Metricool.",
+  BLOG_ARTICLE: "Articoli per il sito con controlli SEO; il cliente commenta le frasi, poi li esporti.",
+  AD_CREATIVE: "Set di creatività per le campagne: il cliente approva o scarta ogni variante.",
+};
 
 interface ClientFormProps {
   mode: "create" | "edit";
@@ -40,6 +56,8 @@ interface ClientFormProps {
   readOnly?: boolean;
   /** Social posts enabled: show the Metricool brand, networks and automatic scheduling. Default true. */
   metricool?: boolean;
+  /** Kinds this instance handles (lib/variant enabledKinds): the services offered. */
+  kinds?: ContentKind[];
 }
 
 const OTHER_ZONE = "__other__";
@@ -55,6 +73,7 @@ export default function ClientForm({
   brands,
   readOnly = false,
   metricool = true,
+  kinds = ["SOCIAL_POST"],
 }: ClientFormProps) {
   const [values, setValues] = useState<ClientFormValues>(initial);
   const knownZone = timeZoneOptions.some((option) => option.value === initial.timezone);
@@ -84,6 +103,17 @@ export default function ClientForm({
       setZoneChoice(OTHER_ZONE);
       setCustomZone(value);
     }
+  }
+
+  // One kind and the client already has it (or is new): nothing to choose.
+  const showServices = kinds.length > 1 || (mode === "edit" && !initial.services.includes(kinds[0]));
+  const socialService = metricool && (showServices ? values.services.includes("SOCIAL_POST") : kinds.includes("SOCIAL_POST"));
+
+  function toggleService(kind: ContentKind) {
+    update(
+      "services",
+      values.services.includes(kind) ? values.services.filter((k) => k !== kind) : sortKinds([...values.services, kind])
+    );
   }
 
   function toggleNetwork(network: Network) {
@@ -120,6 +150,10 @@ export default function ClientForm({
       setError("Fuso orario non valido: usa un nome IANA, ad esempio Europe/Rome.");
       return;
     }
+    if (showServices && mode === "create" && values.services.length === 0) {
+      setError("Scegli almeno un servizio per il cliente.");
+      return;
+    }
 
     const input = {
       name: values.name,
@@ -128,6 +162,9 @@ export default function ClientForm({
       metricoolBlogId: values.metricoolBlogId || null,
       networks: values.networks.filter(isNetwork),
       autoSchedule: values.autoSchedule,
+      // Hidden choice: a new client gets the instance's only kind, an edit
+      // leaves the services as they are.
+      services: showServices ? values.services : mode === "create" ? kinds.slice(0, 1) : undefined,
     };
 
     startTransition(async () => {
@@ -195,8 +232,50 @@ export default function ClientForm({
           </div>
         </div>
 
+        {/* Services */}
+        {showServices && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Servizi</legend>
+            <p className="text-xs text-muted">
+              Cosa prepari per questo cliente. Il cliente vede tutto nello stesso portale.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {kinds.map((kind) => {
+                const checked = values.services.includes(kind);
+                return (
+                  <label
+                    key={kind}
+                    className={`flex min-h-11 cursor-pointer items-start gap-2 rounded border px-3 py-2 text-sm ${
+                      checked ? "border-accent/50 bg-background" : "border-border"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleService(kind)}
+                      className="mt-0.5 accent-accent"
+                    />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <KindIcon kind={kind} className="h-4 w-4 text-muted" />
+                        {KIND_UI[kind].serviceLabel}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted">{SERVICE_DESCRIPTIONS[kind]}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {mode === "edit" && initial.services.some((kind) => !values.services.includes(kind)) && (
+              <p className="text-xs text-muted">
+                I contenuti già creati per un servizio tolto restano visibili a te e al cliente.
+              </p>
+            )}
+          </fieldset>
+        )}
+
         {/* Metricool brand */}
-        {metricool && (
+        {socialService && (
           <div className="space-y-1.5">
             <label htmlFor="client-brand" className="block text-sm font-medium">
               Brand su Metricool
@@ -324,7 +403,7 @@ export default function ClientForm({
         </div>
 
         {/* Networks */}
-        {metricool && (
+        {socialService && (
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Reti social</legend>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -361,7 +440,7 @@ export default function ClientForm({
         )}
 
         {/* Auto scheduling */}
-        {metricool && (
+        {socialService && (
           <label className="flex cursor-pointer items-start gap-3 rounded border border-border p-3">
             <input
               type="checkbox"

@@ -1,19 +1,19 @@
 /**
  * Clients List Page
  *
- * Every client of the workspace with its Metricool brand and networks
- * (social instances only), reviewers and how many items of the enabled
- * kinds sit in each status.
+ * Every client of the workspace with its services, Metricool brand and
+ * networks (clients with social posts, on instances that handle them),
+ * reviewers and how many items of the enabled kinds sit in each status.
  */
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { groupStatusCounts, statusCountEntries, totalPosts, clientInitials } from "@/components/clients/helpers";
 import { contentWords } from "@/components/posts/helpers";
-import { listClients } from "@/lib/clients";
+import { clientServices, listClients } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
 import { NETWORK_LABELS, STATUS_TONES, isNetwork } from "@/lib/domain";
-import { enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
+import { KIND_UI, enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export async function generateMetadata() {
@@ -120,7 +120,9 @@ export default async function ClientsPage({
         {clients.map((client) => {
           const entries = statusCountEntries(counts[client.id], singleKind);
           const total = totalPosts(counts[client.id]);
-          const networks = metricoolEnabled ? client.networks.filter(isNetwork) : [];
+          const services = clientServices(client, kinds);
+          const social = metricoolEnabled && services.includes("SOCIAL_POST");
+          const networks = social ? client.networks.filter(isNetwork) : [];
           return (
             <div
               key={client.id}
@@ -153,8 +155,15 @@ export default async function ClientsPage({
                     {client.archivedAt && <span className="text-xs text-muted">Archiviato</span>}
                   </div>
 
+                  {kinds.length > 1 && (
+                    <p className="mt-1 text-xs text-muted">
+                      {services.length > 0
+                        ? services.map((kind) => KIND_UI[kind].serviceLabel).join(" · ")
+                        : "Nessun servizio attivo"}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted">
-                    {metricoolEnabled && (
+                    {social && (
                       <>
                         {client.metricoolBlogId ? (
                           "Brand Metricool collegato"
@@ -173,7 +182,7 @@ export default async function ClientsPage({
                     )}
                     {" · "}
                     {client.timezone}
-                    {metricoolEnabled && !client.autoSchedule && " · programmazione manuale"}
+                    {social && !client.autoSchedule && " · programmazione manuale"}
                   </p>
 
                   {networks.length > 0 && (

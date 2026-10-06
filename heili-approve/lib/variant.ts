@@ -140,12 +140,64 @@ export type KindSlug = "social" | "blog" | "ads";
 /** UI words per kind (KIND_CONFIG in lib/domain.ts holds the domain labels). */
 export const KIND_UI: Record<
   ContentKind,
-  { slug: KindSlug; navLabel: string; newTitle: string; pluralTitle: string }
+  {
+    slug: KindSlug;
+    navLabel: string;
+    newTitle: string;
+    pluralTitle: string;
+    /** Name of the service a client buys: "Post social", "Articoli", "Creatività". */
+    serviceLabel: string;
+  }
 > = {
-  SOCIAL_POST: { slug: "social", navLabel: "Post", newTitle: "Nuovo post", pluralTitle: "I post social" },
-  BLOG_ARTICLE: { slug: "blog", navLabel: "Articoli", newTitle: "Nuovo articolo", pluralTitle: "Gli articoli di blog" },
-  AD_CREATIVE: { slug: "ads", navLabel: "Creatività", newTitle: "Nuova creatività", pluralTitle: "Le creatività ads" },
+  SOCIAL_POST: {
+    slug: "social",
+    navLabel: "Post",
+    newTitle: "Nuovo post",
+    pluralTitle: "I post social",
+    serviceLabel: "Post social",
+  },
+  BLOG_ARTICLE: {
+    slug: "blog",
+    navLabel: "Articoli",
+    newTitle: "Nuovo articolo",
+    pluralTitle: "Gli articoli di blog",
+    serviceLabel: "Articoli",
+  },
+  AD_CREATIVE: {
+    slug: "ads",
+    navLabel: "Creatività",
+    newTitle: "Nuova creatività",
+    pluralTitle: "Le creatività ads",
+    serviceLabel: "Creatività",
+  },
 };
+
+// ─── Services (per client) ───────────────────────────────────────────────────
+
+/** Every kind, in menu order (also the order services are listed in). */
+const KIND_ORDER: readonly ContentKind[] = VARIANT_KINDS.all;
+
+/** Deduplicated, in menu order (social, blog, ads); unknown values dropped. */
+export function sortKinds(kinds: Iterable<ContentKind>): ContentKind[] {
+  const set = new Set(kinds);
+  return KIND_ORDER.filter((kind) => set.has(kind));
+}
+
+/** "Post social", "Articoli", "Creatività". */
+export function serviceLabel(kind: ContentKind): string {
+  return KIND_UI[kind].serviceLabel;
+}
+
+/** Italian list: "a", "a e b", "a, b e c". */
+export function joinItalian(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} e ${items[items.length - 1]}`;
+}
+
+/** "post social, articoli e creatività" (lower case, menu order). */
+export function servicesSentence(kinds: readonly ContentKind[]): string {
+  return joinItalian(sortKinds(kinds).map((kind) => KIND_UI[kind].serviceLabel.toLowerCase()));
+}
 
 /** Value of the `?kind=` query parameter for a kind ("social" | "blog" | "ads"). */
 export function kindParam(kind: ContentKind): KindSlug {

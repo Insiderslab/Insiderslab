@@ -162,3 +162,53 @@ export function clientInitials(name: string): string {
   if (words.length === 0) return "?";
   return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
 }
+
+// ─── Services overview ───────────────────────────────────────────────────────
+
+export interface ServiceOverviewEntry {
+  key: "toReview" | "changes" | "approved" | "done";
+  label: string;
+  count: number;
+  /** Status the "see them" link filters the list on. */
+  status: PostStatus;
+  tone: "info" | "warning" | "success" | "neutral";
+}
+
+/**
+ * The four numbers of a service on the client page: waiting for the client,
+ * changes requested, approved (not yet out), scheduled (social) / published
+ * (blog) / delivered (ads). Drafts and scheduling errors are reported apart
+ * (pure).
+ */
+export function serviceOverview(
+  kind: ContentKind,
+  counts: StatusCounts | undefined
+): { entries: ServiceOverviewEntry[]; drafts: number; failed: number; total: number } {
+  const n = (status: PostStatus) => counts?.[status] ?? 0;
+  const social = kind === "SOCIAL_POST";
+  const doneLabel = social ? "Programmati" : kind === "BLOG_ARTICLE" ? "Pubblicati" : "Consegnati";
+  return {
+    entries: [
+      { key: "toReview", label: "Da approvare", count: n("IN_REVIEW"), status: "IN_REVIEW", tone: "info" },
+      { key: "changes", label: "Modifiche richieste", count: n("CHANGES_REQUESTED"), status: "CHANGES_REQUESTED", tone: "warning" },
+      { key: "approved", label: "Approvati", count: n("APPROVED") + n("SCHEDULING"), status: "APPROVED", tone: "success" },
+      { key: "done", label: doneLabel, count: social ? n("SCHEDULED") : n("DELIVERED"), status: social ? "SCHEDULED" : "DELIVERED", tone: "neutral" },
+    ],
+    drafts: n("DRAFT"),
+    failed: social ? n("FAILED") : 0,
+    total: totalPosts(counts),
+  };
+}
+
+/** groupBy rows by kind and status → { KIND: { STATUS: n } } (cancelled dropped). */
+export function groupKindStatusCounts(
+  rows: ReadonlyArray<{ kind: ContentKind; status: PostStatus; count: number }>
+): Partial<Record<ContentKind, StatusCounts>> {
+  const result: Partial<Record<ContentKind, StatusCounts>> = {};
+  for (const row of rows) {
+    if (row.status === "CANCELLED" || row.count <= 0) continue;
+    const counts = (result[row.kind] ??= {});
+    counts[row.status] = (counts[row.status] ?? 0) + row.count;
+  }
+  return result;
+}

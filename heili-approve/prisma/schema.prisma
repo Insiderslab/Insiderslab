@@ -151,23 +151,28 @@ enum WorkspaceInvitationStatus {
 // ─── Clienti (= brand Metricool) ─────────────────────────────────────────────
 
 model Client {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   workspaceId     String
   name            String
   /// blogId del brand su Metricool. Senza, i post approvati non possono
   /// essere programmati (restano APPROVED con errore esplicito).
   metricoolBlogId String?
   /// Fuso orario IANA del brand, es. "Europe/Rome". Usato per publicationDate.
-  timezone        String    @default("Europe/Rome")
+  timezone        String        @default("Europe/Rome")
   logoUrl         String?
   /// Reti abilitate per questo cliente (valori di NETWORKS in lib/domain.ts).
-  networks        String[]  @default([])
+  networks        String[]      @default([])
   /// Se true, il post approvato viene programmato automaticamente;
   /// se false resta APPROVED finché qualcuno dell'agenzia non lo programma.
-  autoSchedule    Boolean   @default(true)
+  autoSchedule    Boolean       @default(true)
+  /// Servizi attivi per questo cliente: quali tipi di contenuto l'agenzia
+  /// gli prepara (post social, articoli, creatività). Mai vuoto. Si possono
+  /// creare solo contenuti di un servizio attivo (e abilitato da APP_VARIANT);
+  /// i contenuti già esistenti di un servizio tolto restano visibili.
+  services        ContentKind[] @default([SOCIAL_POST])
   archivedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   reviewers ClientReviewer[]

@@ -1,9 +1,10 @@
 /**
  * New Client Page
  *
- * Name, Metricool brand, time zone, networks (brand and networks only when
- * social posts are enabled). Reviewers are added on the client page the
- * form redirects to.
+ * Name, services (the kinds this instance handles; social posts preselected
+ * when available), Metricool brand, time zone, networks (brand and networks
+ * only when the client gets social posts). Reviewers are added on the client
+ * page the form redirects to.
  */
 
 import Link from "next/link";
@@ -12,7 +13,7 @@ import { loadBrandOptions } from "@/app/(dashboard)/clients/brands";
 import ClientForm from "@/components/clients/client-form";
 import { buildTimeZoneOptions } from "@/components/clients/helpers";
 import { contentWords } from "@/components/posts/helpers";
-import { enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
+import { defaultKind, enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export async function generateMetadata() {
@@ -48,10 +49,12 @@ export default async function NewClientPage() {
             metricoolBlogId: "",
             networks: [],
             autoSchedule: true,
+            services: [defaultKind()],
           }}
           timeZoneOptions={buildTimeZoneOptions()}
           brands={brands}
           metricool={metricool}
+          kinds={enabledKinds()}
         />
       </section>
     </div>

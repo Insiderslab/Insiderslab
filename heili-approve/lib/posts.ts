@@ -19,7 +19,8 @@
  * PostVersion.content (validated by lib/content/blog.ts / ads.ts) and have no
  * networks, text or media of their own; they are "internal": approval never
  * schedules anything, the agency exports and then marks them DELIVERED.
- * Only kinds enabled for this instance (lib/variant.ts) can be created.
+ * Only kinds enabled for this instance (lib/variant.ts) and active for the
+ * client (Client.services, lib/clients.ts) can be created.
  *
  * Pure helpers (diffing, versioning decisions) are exported for unit tests.
  */
@@ -65,6 +66,7 @@ import {
   ValidationError,
   parseOrThrow,
 } from "@/lib/errors";
+import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
 import { recordEvent, type DbClient } from "@/lib/events";
 import { validateForNetworks } from "@/lib/metricool/payload";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
@@ -1164,6 +1166,9 @@ export async function createPost(workspaceId: string, input: PostInput, actor: A
 
   return prisma.$transaction(async (tx) => {
     const client = await findClientForPost(tx, data.clientId, workspaceId);
+    // Only the client's active services; existing content of a service
+    // removed later stays editable (updatePost does not check this).
+    if (!clientHasService(client, kind)) throw new ValidationError(serviceNotActiveMessage(kind));
     // Blog/ads have no networks, caption or media of their own: everything
     // the client approves is in `content`.
     const networks = internal ? [] : (data.networks ?? []);
@@ -1248,6 +1253,8 @@ export async function updatePost(
         throw new ValidationError("Non puoi cambiare il cliente di un post già inviato in revisione");
       }
       client = await findClientForPost(tx, data.clientId, workspaceId);
+      // Moving a draft to another client: that client must have the service.
+      if (!clientHasService(client, post.kind)) throw new ValidationError(serviceNotActiveMessage(post.kind));
     }
 
     const networks = data.networks ?? (post.networks as Network[]);

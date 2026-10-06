@@ -294,11 +294,11 @@ export default function PostEditor({
               </label>
               {clients.length === 0 ? (
                 <p className="text-sm text-muted">
-                  Nessun cliente attivo.{" "}
+                  Nessun cliente attivo con questo servizio.{" "}
                   <Link href="/clients/new" className="text-accent hover:underline">
                     Aggiungi un cliente
                   </Link>{" "}
-                  prima di creare un post.
+                  oppure attiva il servizio nella scheda di un cliente.
                 </p>
               ) : (
                 <select

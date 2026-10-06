@@ -4,6 +4,7 @@
  * strings; the actions validate everything again.
  */
 
+import type { ContentKind } from "@/app/generated/prisma/client";
 import type { BlogAnchor } from "@/lib/content/types";
 import type { MediaItem, NetworkOptions } from "@/lib/domain";
 
@@ -53,6 +54,8 @@ export interface EditorClient {
   logoUrl: string | null;
   hasMetricoolBrand: boolean;
   activeReviewers: number;
+  /** Active services this instance handles (lib/clients clientServices). */
+  services: ContentKind[];
 }
 
 export interface CommentInput {

@@ -643,7 +643,11 @@ export default async function PostDetailPage({
   }
 
   async function renderEditor() {
-    const clients = await loadEditorClients(workspaceId, client.id);
+    // Other clients only when they have this kind's service; the post's own
+    // client always (its service may have been removed since).
+    const clients = (await loadEditorClients(workspaceId, client.id)).filter(
+      (c) => c.id === client.id || c.services.includes(kind)
+    );
     const local = toLocalParts(post.publishAt, timezone);
     const editable = isEditable(post.status);
     const readOnlyReason =
