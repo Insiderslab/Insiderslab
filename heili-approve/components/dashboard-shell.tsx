@@ -3,12 +3,15 @@
 import { useState } from "react";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/top-bar";
+import type { AppVariant } from "@/lib/variant";
 
 interface DashboardShellProps {
   children: React.ReactNode;
   workspaceName: string;
   metricoolConnected: boolean;
   needsAttention: number;
+  /** Product variant of this instance (read on the server, see lib/variant.ts). */
+  variant: AppVariant;
 }
 
 export default function DashboardShell({
@@ -16,6 +19,7 @@ export default function DashboardShell({
   workspaceName,
   metricoolConnected,
   needsAttention,
+  variant,
 }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -26,6 +30,7 @@ export default function DashboardShell({
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         workspaceName={workspaceName}
+        variant={variant}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -33,6 +38,7 @@ export default function DashboardShell({
           onMenuClick={() => setSidebarOpen(true)}
           metricoolConnected={metricoolConnected}
           needsAttention={needsAttention}
+          variant={variant}
         />
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden">

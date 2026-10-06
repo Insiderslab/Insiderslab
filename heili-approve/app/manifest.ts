@@ -1,11 +1,17 @@
 import type { MetadataRoute } from "next";
+import { getAppVariant, productName, productShortName } from "@/lib/variant";
+
+// Read per request: one image serves several variants (APP_VARIANT), so the
+// manifest must not be frozen at build time.
+export const dynamic = "force-dynamic";
 
 // Installable to the home screen (same as DM by Heili).
 export default function manifest(): MetadataRoute.Manifest {
+  const variant = getAppVariant();
   return {
-    name: "Approve by Heili",
-    short_name: "Approve",
-    description: "Revisione e approvazione dei post dei clienti",
+    name: productName(variant),
+    short_name: productShortName(variant),
+    description: "Revisione e approvazione dei contenuti dei clienti",
     start_url: "/dashboard",
     display: "standalone",
     orientation: "portrait",

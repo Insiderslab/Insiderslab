@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { EMAIL_PROVIDER_ID, auth, signIn } from "@/lib/auth";
+import { productName } from "@/lib/variant";
 
 /** Same-origin path only ("/posts/x"), never "//evil.com" or an absolute URL. */
 function safeCallbackUrl(value: string | undefined): string {
@@ -7,10 +8,12 @@ function safeCallbackUrl(value: string | undefined): string {
   return value;
 }
 
-export const metadata = {
-  title: "Accedi - Approve by Heili",
-  description: "Accesso riservato al team dell'agenzia.",
-};
+export function generateMetadata() {
+  return {
+    title: `Accedi - ${productName()}`,
+    description: "Accesso riservato al team dell'agenzia.",
+  };
+}
 
 export default async function LoginPage({
   searchParams,
@@ -41,7 +44,7 @@ export default async function LoginPage({
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold text-foreground">
-            Approve by Heili
+            {productName()}
           </h1>
           <p className="text-muted text-sm leading-relaxed mt-2">
             Accesso per il team dell&apos;agenzia. I clienti approvano dal

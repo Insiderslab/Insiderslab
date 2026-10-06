@@ -14,11 +14,19 @@
  * - video comments carry a moment (timeSec / timeEndSec) that must fall on a
  *   video of the version and within its duration when known.
  *
+ * Content kinds (docs/VARIANTI.md): a Post is a social post (Metricool), a
+ * blog article or an ads creative set. Blog and ads keep their content in
+ * PostVersion.content (validated by lib/content/blog.ts / ads.ts) and have no
+ * networks, text or media of their own; they are "internal": approval never
+ * schedules anything, the agency exports and then marks them DELIVERED.
+ * Only kinds enabled for this instance (lib/variant.ts) can be created.
+ *
  * Pure helpers (diffing, versioning decisions) are exported for unit tests.
  */
 
 import { z } from "zod";
 import type {
+  ContentKind,
   MediaAsset,
   Post,
   PostComment,
@@ -28,9 +36,14 @@ import type {
 } from "@/app/generated/prisma/client";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { actorColumns, type Actor } from "@/lib/actor";
+import { parseAdContent, validateAdsForReview } from "@/lib/content/ads";
+import { parseBlogContent, validateBlogForReview } from "@/lib/content/blog";
+import type { AdContent, BlogAnchor, BlogContent } from "@/lib/content/types";
+import { approvalBlocker, evaluateCreativeDecisions, variantLabel } from "@/lib/creative-decisions";
 import { prisma } from "@/lib/db/client";
 import {
   CLIENT_VISIBLE_STATUSES,
+  KIND_CONFIG,
   NETWORKS,
   NETWORK_LABELS,
   assertTransition,
@@ -51,6 +64,7 @@ import { recordEvent, type DbClient } from "@/lib/events";
 import { validateForNetworks } from "@/lib/metricool/payload";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
 import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
+import { assertKindEnabled, enabledKinds } from "@/lib/variant";
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
@@ -58,16 +72,31 @@ export type PostInput = {
   clientId: string;
   title: string;
   publishAt: Date;
-  networks: Network[];
+  /** Default SOCIAL_POST. Must be enabled for this instance (lib/variant.ts); fixed after creation. */
+  kind?: ContentKind;
+  /** Social only (required there, at least one); ignored for blog/ads. */
+  networks?: Network[];
   networkOptions?: NetworkOptions;
-  text: string;
+  /** Social only (required there); ignored for blog/ads. */
+  text?: string;
   firstCommentText?: string | null;
-  media: MediaItem[];
+  /** Social only (required there); ignored for blog/ads. */
+  media?: MediaItem[];
   /** Cover frame of the (first) video in ms; sent to Metricool as videoCoverMilliseconds. */
   videoCoverMs?: number | null;
+  /**
+   * Blog/ads only (required there): BlogContent / AdContent, validated with
+   * parseBlogContent / parseAdContent. Ignored for social posts.
+   */
+  content?: unknown;
 };
 
-export type PostUpdateInput = Partial<PostInput> & { changeNote?: string };
+export type PostUpdateInput = Partial<Omit<PostInput, "kind">> & { changeNote?: string };
+
+/** True for kinds without an external integration (blog, ads). */
+export function isInternalKind(kind: ContentKind): boolean {
+  return KIND_CONFIG[kind].internal;
+}
 
 /** Who the client portal acts as: the reviewer resolved from the link token. */
 export type ReviewerRef = { id: string; clientId: string };
@@ -100,7 +129,11 @@ export const mediaItemSchema = z.object({
   alt: z.string().trim().max(1000).optional(),
   durationSec: z.number().positive().max(MAX_VIDEO_DURATION_SEC).optional(),
   posterUrl: httpUrl.optional(),
+  width: z.number().int().positive().max(100_000).optional(),
+  height: z.number().int().positive().max(100_000).optional(),
 });
+
+const CONTENT_KIND_VALUES = ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"] as const satisfies readonly ContentKind[];
 
 export const networkOptionsSchema = z.record(
   z.string().regex(/^[a-z]+Data$/, "Opzioni di rete non valide"),
@@ -113,9 +146,9 @@ const postFields = {
   clientId: z.string().min(1).max(64),
   title: z.string().trim().min(1, "Inserisci un titolo").max(200, "Titolo troppo lungo"),
   publishAt: z.coerce.date({ error: "Data di pubblicazione non valida" }),
+  // "At least one" is a social-only rule, checked per kind below / in updatePost.
   networks: z
     .array(z.enum(NETWORKS, { error: "Rete non supportata" }))
-    .min(1, "Scegli almeno una rete")
     .transform((list) => [...new Set(list)]),
   networkOptions: networkOptionsSchema,
   text: z.string().max(70_000, "Testo troppo lungo"),
@@ -129,17 +162,48 @@ const postFields = {
     .nullable(),
 };
 
-export const postInputSchema = z.object({
-  ...postFields,
-  networkOptions: postFields.networkOptions.optional(),
-  firstCommentText: postFields.firstCommentText.optional(),
-  videoCoverMs: postFields.videoCoverMs.optional(),
-});
+export const postInputSchema = z
+  .object({
+    ...postFields,
+    kind: z.enum(CONTENT_KIND_VALUES, { error: "Tipo di contenuto non valido" }).optional(),
+    networks: postFields.networks.optional(),
+    networkOptions: postFields.networkOptions.optional(),
+    text: postFields.text.optional(),
+    firstCommentText: postFields.firstCommentText.optional(),
+    media: postFields.media.optional(),
+    videoCoverMs: postFields.videoCoverMs.optional(),
+    // Shape checked by the kind's own parser (lib/content/*).
+    content: z.unknown().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if ((data.kind ?? "SOCIAL_POST") !== "SOCIAL_POST") {
+      if (data.content === undefined || data.content === null) {
+        ctx.addIssue({ code: "custom", path: ["content"], message: "Contenuto mancante" });
+      }
+      return;
+    }
+    if (!data.networks || data.networks.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["networks"], message: "Scegli almeno una rete" });
+    }
+    if (data.text === undefined) ctx.addIssue({ code: "custom", path: ["text"], message: "Testo mancante" });
+    if (data.media === undefined) ctx.addIssue({ code: "custom", path: ["media"], message: "Media mancanti" });
+  });
 
 export const postUpdateSchema = z
   .object(postFields)
   .partial()
-  .extend({ changeNote: z.string().trim().max(1000).optional() });
+  .extend({ changeNote: z.string().trim().max(1000).optional(), content: z.unknown().optional() });
+
+/** Blog comment anchor (text-quote selector, see BlogAnchor in lib/content/types.ts). */
+export const blogAnchorSchema = z.object({
+  quote: z
+    .string()
+    .max(2000, "Passaggio selezionato troppo lungo")
+    .refine((quote) => quote.trim().length > 0, "Seleziona il passaggio da commentare"),
+  prefix: z.string().max(200).default(""),
+  suffix: z.string().max(200).default(""),
+  blockIndex: z.number().int().min(0).max(100_000).nullable().default(null),
+});
 
 const videoTime = z
   .number({ error: "Momento del video non valido" })
@@ -160,6 +224,8 @@ const commentSchema = z
     pinY: z.number().min(0).max(1).optional(),
     timeSec: videoTime.optional(),
     timeEndSec: videoTime.optional(),
+    anchor: blogAnchorSchema.optional(),
+    variantId: z.string().trim().min(1).max(64).optional(),
   })
   .refine((c) => (c.pinX === undefined) === (c.pinY === undefined), "Posizione del commento incompleta")
   .refine((c) => c.pinX === undefined || c.mediaIndex !== undefined, "Il commento puntato richiede un media")
@@ -178,6 +244,10 @@ export interface RequestChangesActionItem {
   timeEndSec: number | null;
   request: string;
   priority: string;
+  /** Ads: the variant the item is about (mediaIndex/time then refer to its media). */
+  variantId?: string | null;
+  /** Blog: the passage the item is about. */
+  anchor?: BlogAnchor | null;
 }
 
 const actionItemsSchema = z
@@ -189,6 +259,9 @@ const actionItemsSchema = z
       timeEndSec: z.number().nullable(),
       request: z.string().max(MAX_COMMENT_LENGTH),
       priority: z.string().max(20),
+      // Best effort like the rest of the item: an invalid value is dropped.
+      variantId: z.string().max(64).nullish().catch(null),
+      anchor: blogAnchorSchema.nullish().catch(null),
     })
   )
   .max(MAX_ACTION_ITEMS, "Troppe modifiche in una sola richiesta");
@@ -210,6 +283,8 @@ export interface VersionContent {
   videoCoverMs?: number | null;
   /** Date and networks the version was sent with; absent/null = not compared. */
   schedule?: VersionSchedule | null;
+  /** Blog/ads content (PostVersion.content); absent = not compared. */
+  content?: unknown;
 }
 
 /**
@@ -254,7 +329,37 @@ function mediaKey(item: MediaItem): string {
 }
 
 function mediaMetaKey(item: MediaItem): string {
-  return JSON.stringify([item.durationSec ?? null, item.posterUrl ?? null]);
+  return JSON.stringify([item.durationSec ?? null, item.posterUrl ?? null, item.width ?? null, item.height ?? null]);
+}
+
+/** MediaItem fields that are technical metadata (see mediaKey). */
+const MEDIA_METADATA_KEYS = new Set(["durationSec", "posterUrl", "width", "height"]);
+
+function looksLikeMediaItem(value: Record<string, unknown>): boolean {
+  return typeof value.url === "string" && (value.type === "image" || value.type === "video");
+}
+
+function stripMediaMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripMediaMetadata);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const media = looksLikeMediaItem(record);
+    return Object.fromEntries(
+      Object.entries(record)
+        .filter(([key]) => !(media && MEDIA_METADATA_KEYS.has(key)))
+        .map(([key, v]) => [key, stripMediaMetadata(v)])
+    );
+  }
+  return value;
+}
+
+/**
+ * What the client approves in a blog/ads content: everything except media
+ * metadata (duration, poster, pixel size), which may be filled in later
+ * without a new version — same rule as the social media list.
+ */
+export function contentFingerprint(content: unknown): string {
+  return stableStringify(stripMediaMetadata(content ?? {}));
 }
 
 export function sameMedia(a: MediaItem[], b: MediaItem[]): boolean {
@@ -277,6 +382,9 @@ export function contentChanged(current: VersionContent, patch: Partial<VersionCo
   }
   if (patch.media !== undefined && !sameMedia(patch.media, current.media)) return true;
   if (patch.videoCoverMs !== undefined && (patch.videoCoverMs ?? null) !== (current.videoCoverMs ?? null)) return true;
+  if (patch.content !== undefined && contentFingerprint(patch.content) !== contentFingerprint(current.content)) {
+    return true;
+  }
   return false;
 }
 
@@ -356,6 +464,50 @@ export function planActionItemComment(
     checkCommentTime(media[mediaIndex], timeSec, timeEndSec !== null && timeEndSec > timeSec ? timeEndSec : undefined);
   if ("error" in checked) return { body, mediaIndex, timeSec: null, timeEndSec: null };
   return { body, mediaIndex, ...checked };
+}
+
+/** What an assistant action item can point at, per content kind. */
+export type ActionItemTarget =
+  | { kind: "SOCIAL_POST"; media: MediaItem[] }
+  | { kind: "BLOG_ARTICLE" }
+  | { kind: "AD_CREATIVE"; variants: ReadonlyArray<{ id: string; media: MediaItem[] }> };
+
+export interface PlannedActionComment {
+  body: string;
+  mediaIndex: number | null;
+  timeSec: number | null;
+  timeEndSec: number | null;
+  variantId: string | null;
+  anchor: BlogAnchor | null;
+}
+
+/**
+ * planActionItemComment for every kind: social items land on a media/moment;
+ * blog items on their passage (anchor); ads items on their variant, and on a
+ * media/moment of that variant when they name one. Items that point nowhere
+ * valid stay in the summary comment only (null).
+ */
+export function planActionItemCommentFor(
+  item: RequestChangesActionItem,
+  target: ActionItemTarget
+): PlannedActionComment | null {
+  const body = item.request.trim();
+  if (!body) return null;
+  const none = { mediaIndex: null, timeSec: null, timeEndSec: null, variantId: null, anchor: null };
+  switch (target.kind) {
+    case "SOCIAL_POST": {
+      const planned = planActionItemComment(item, target.media);
+      return planned ? { ...none, ...planned } : null;
+    }
+    case "BLOG_ARTICLE":
+      return item.anchor ? { ...none, body, anchor: item.anchor } : null;
+    case "AD_CREATIVE": {
+      const variant = target.variants.find((v) => v.id === item.variantId);
+      if (!variant) return null;
+      const planned = planActionItemComment(item, variant.media);
+      return planned ? { ...none, ...planned, variantId: variant.id } : { ...none, body, variantId: variant.id };
+    }
+  }
 }
 
 /**
@@ -593,10 +745,117 @@ export interface VersionDiff {
     networksRemoved: string[];
     optionsChanged: boolean;
   };
+  /** Blog/ads content changes, as Italian bullet points (empty = unchanged or not compared). */
+  content: string[];
 }
 
-/** What changed between two versions (media are matched by URL). */
-export function diffVersions(before: VersionContent, after: VersionContent): VersionDiff {
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function asList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function sameField(a: Record<string, unknown>, b: Record<string, unknown>, key: string): boolean {
+  return contentFingerprint(a[key] ?? null) === contentFingerprint(b[key] ?? null);
+}
+
+const BLOG_SEO_FIELDS: Array<[key: string, label: string]> = [
+  ["metaTitle", "titolo SEO"],
+  ["metaDescription", "meta description"],
+  ["focusKeyword", "parola chiave"],
+  ["slug", "slug"],
+];
+
+const AD_VARIANT_FIELDS: Array<[keys: string[], label: string]> = [
+  [["name"], "nome"],
+  [["media"], "media"],
+  [["primaryText", "headline", "description"], "testi"],
+  [["cta"], "CTA"],
+  [["destinationUrl"], "URL"],
+  [["placements"], "posizionamenti"],
+];
+
+function blogContentChanges(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  const lines: string[] = [];
+  if (!sameField(before, after, "headline")) lines.push("Titolo dell'articolo modificato");
+  if (!sameField(before, after, "bodyMarkdown")) lines.push("Testo dell'articolo modificato");
+  if (!sameField(before, after, "excerpt")) lines.push("Estratto modificato");
+  const seo = BLOG_SEO_FIELDS.filter(([key]) => !sameField(before, after, key)).map(([, label]) => label);
+  if (seo.length > 0) lines.push(`SEO modificata: ${seo.join(", ")}`);
+  if (!sameField(before, after, "featuredImage")) lines.push("Immagine in evidenza cambiata");
+  if (!sameField(before, after, "categories") || !sameField(before, after, "tags")) {
+    lines.push("Categorie o tag modificati");
+  }
+  if (!sameField(before, after, "author")) lines.push("Autore modificato");
+  return lines;
+}
+
+function adContentChanges(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  const lines: string[] = [];
+  if (!sameField(before, after, "campaign")) lines.push("Dati della campagna modificati");
+
+  const variantsOf = (content: Record<string, unknown>) =>
+    asList(content.variants)
+      .map(asRecord)
+      .filter((v): v is Record<string, unknown> & { id: string } => typeof v.id === "string");
+  const beforeVariants = variantsOf(before);
+  const afterVariants = variantsOf(after);
+  const label = (v: Record<string, unknown> & { id: string }) =>
+    variantLabel({ id: v.id, name: typeof v.name === "string" ? v.name : null }, v.id);
+  const beforeIds = beforeVariants.map((v) => v.id);
+  const afterIds = afterVariants.map((v) => v.id);
+
+  const added = afterVariants.filter((v) => !beforeIds.includes(v.id));
+  const removed = beforeVariants.filter((v) => !afterIds.includes(v.id));
+  if (added.length === 1) lines.push(`Variante aggiunta: ${label(added[0])}`);
+  if (added.length > 1) lines.push(`Varianti aggiunte: ${added.map(label).join(", ")}`);
+  if (removed.length === 1) lines.push(`Variante rimossa: ${label(removed[0])}`);
+  if (removed.length > 1) lines.push(`Varianti rimosse: ${removed.map(label).join(", ")}`);
+
+  const keptBefore = beforeIds.filter((id) => afterIds.includes(id));
+  const keptAfter = afterIds.filter((id) => beforeIds.includes(id));
+  if (keptBefore.some((id, index) => keptAfter[index] !== id)) lines.push("Ordine delle varianti cambiato");
+
+  for (const variant of afterVariants) {
+    const previous = beforeVariants.find((v) => v.id === variant.id);
+    if (!previous) continue;
+    const fields = AD_VARIANT_FIELDS.filter(([keys]) => keys.some((key) => !sameField(previous, variant, key))).map(
+      ([, fieldLabel]) => fieldLabel
+    );
+    if (fields.length > 0) lines.push(`${label(variant)} modificata: ${fields.join(", ")}`);
+  }
+  return lines;
+}
+
+/**
+ * Italian bullet points for what changed in a blog/ads content. Falls back
+ * to "Contenuto modificato" for a change no specific line describes.
+ */
+export function summarizeContentChanges(kind: ContentKind, before: unknown, after: unknown): string[] {
+  if (kind === "SOCIAL_POST" || contentFingerprint(before) === contentFingerprint(after)) return [];
+  const lines =
+    kind === "BLOG_ARTICLE"
+      ? blogContentChanges(asRecord(before), asRecord(after))
+      : adContentChanges(asRecord(before), asRecord(after));
+  return lines.length > 0 ? lines : ["Contenuto modificato"];
+}
+
+/**
+ * What changed between two versions (media are matched by URL). `kind`
+ * selects how the blog/ads content is described (compared only when both
+ * versions carry it).
+ */
+export function diffVersions(
+  before: VersionContent,
+  after: VersionContent,
+  kind: ContentKind = "SOCIAL_POST"
+): VersionDiff {
+  const content =
+    before.content !== undefined && after.content !== undefined
+      ? summarizeContentChanges(kind, before.content, after.content)
+      : [];
   const textChanged = before.text !== after.text;
   const beforeComment = normalizeFirstComment(before.firstCommentText) ?? "";
   const afterComment = normalizeFirstComment(after.firstCommentText) ?? "";
@@ -640,7 +899,8 @@ export function diffVersions(before: VersionContent, after: VersionContent): Ver
       reordered ||
       altChanged ||
       coverChanged ||
-      scheduleChanged,
+      scheduleChanged ||
+      content.length > 0,
     textChanged,
     firstCommentChanged,
     text: textChanged ? diffText(before.text, after.text) : [],
@@ -648,6 +908,7 @@ export function diffVersions(before: VersionContent, after: VersionContent): Ver
     media: { added, removed, reordered, altChanged },
     coverChanged,
     schedule,
+    content,
   };
 }
 
@@ -672,6 +933,7 @@ export function summarizeVersionDiff(diff: VersionDiff): string[] {
   if (diff.schedule.networksAdded.length > 0) lines.push(`Reti aggiunte: ${networkNames(diff.schedule.networksAdded)}`);
   if (diff.schedule.networksRemoved.length > 0) lines.push(`Reti rimosse: ${networkNames(diff.schedule.networksRemoved)}`);
   if (diff.schedule.optionsChanged) lines.push("Formato o opzioni per rete cambiati");
+  lines.push(...diff.content);
   return lines;
 }
 
@@ -686,13 +948,111 @@ function versionContent(version: {
   firstCommentText: string | null;
   media: unknown;
   videoCoverMs: number | null;
+  content: unknown;
 }): VersionContent {
   return {
     text: version.text,
     firstCommentText: version.firstCommentText,
     media: parseMediaItems(version.media),
     videoCoverMs: version.videoCoverMs,
+    content: version.content ?? {},
   };
+}
+
+/** Content of a blog/ads version, as stored in PostVersion.content. */
+export type KindContent = BlogContent | AdContent;
+
+/**
+ * Runs a lib/content parser and turns any validation failure (zod error or
+ * ValidationError) into a ValidationError with an Italian message.
+ */
+function parseWith<T>(parse: (json: unknown) => T, json: unknown, label: string): T {
+  try {
+    return parse(json);
+  } catch (error) {
+    if (error instanceof ValidationError) throw error;
+    if (error instanceof z.ZodError) {
+      throw new ValidationError(error.issues[0]?.message || `${label} non valido`);
+    }
+    throw error;
+  }
+}
+
+/** Validates the content of a blog/ads post (throws ValidationError). */
+export function parseKindContent(kind: "BLOG_ARTICLE", json: unknown): BlogContent;
+export function parseKindContent(kind: "AD_CREATIVE", json: unknown): AdContent;
+export function parseKindContent(kind: ContentKind, json: unknown): KindContent | null;
+export function parseKindContent(kind: ContentKind, json: unknown): KindContent | null {
+  if (kind === "BLOG_ARTICLE") return parseWith(parseBlogContent, json, "Articolo");
+  if (kind === "AD_CREATIVE") return parseWith(parseAdContent, json, "Set di creatività");
+  return null;
+}
+
+/**
+ * Stored content for reads: never throws (an old or hand-edited row must not
+ * break the portal); null for social posts or unreadable content.
+ */
+export function readKindContent(kind: ContentKind, json: unknown): KindContent | null {
+  if (kind === "SOCIAL_POST") return null;
+  try {
+    return parseKindContent(kind, json);
+  } catch (error) {
+    console.error(`[posts] Unreadable ${kind} content:`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/** Messages of a list of review issues (plain strings or { message } objects). */
+function issueMessages(issues: ReadonlyArray<string | { message: string }>): string[] {
+  return issues.map((issue) => (typeof issue === "string" ? issue : issue.message));
+}
+
+/** Review checks of a blog/ads content (Italian messages, empty = ready). */
+function reviewIssuesFor(kind: ContentKind, json: unknown): string[] {
+  if (kind === "BLOG_ARTICLE") return issueMessages(validateBlogForReview(parseKindContent(kind, json)));
+  if (kind === "AD_CREATIVE") return issueMessages(validateAdsForReview(parseKindContent(kind, json)));
+  return [];
+}
+
+/**
+ * Validates and canonicalises a blog/ads content: media inside it (featured
+ * image, variant media) go through normalizeMedia like a social post's, so
+ * an asset of another workspace can never be referenced.
+ */
+async function prepareKindContent(
+  db: DbClient,
+  workspaceId: string,
+  kind: ContentKind,
+  json: unknown
+): Promise<KindContent> {
+  if (kind === "BLOG_ARTICLE") {
+    const content = parseKindContent(kind, json);
+    const featuredImage = content.featuredImage
+      ? (await normalizeMedia(db, workspaceId, [content.featuredImage]))[0]
+      : null;
+    return { ...content, featuredImage };
+  }
+  if (kind === "AD_CREATIVE") {
+    const content = parseKindContent(kind, json);
+    const all = await normalizeMedia(
+      db,
+      workspaceId,
+      content.variants.flatMap((v) => v.media)
+    );
+    let offset = 0;
+    const variants = content.variants.map((variant) => {
+      const media = all.slice(offset, offset + variant.media.length);
+      offset += variant.media.length;
+      return { ...variant, media };
+    });
+    return { ...content, variants };
+  }
+  throw new ValidationError("Questo tipo di contenuto non ha un contenuto strutturato");
+}
+
+/** Variants (id + media) of an ads content, for comments and action items. */
+function adVariantsOf(content: KindContent | null): Array<{ id: string; media: MediaItem[] }> {
+  return content && "variants" in content ? content.variants.map((v) => ({ id: v.id, media: v.media })) : [];
 }
 
 function isClientVisible(status: PostStatus): boolean {
@@ -752,7 +1112,11 @@ async function normalizeMedia(db: DbClient, workspaceId: string, media: MediaIte
       throw new ValidationError("Uno dei media non è stato trovato: ricaricalo");
     }
     const video = { durationSec: item.durationSec, posterUrl: item.posterUrl };
-    if (asset) return mediaItemForAsset(asset, item.alt || undefined, video);
+    // Pixel size (ads spec checks): the asset's when recorded, else the client's.
+    const width = asset?.width ?? item.width;
+    const height = asset?.height ?? item.height;
+    const size = width && height ? { width, height } : {};
+    if (asset) return { ...mediaItemForAsset(asset, item.alt || undefined, video), ...size };
     return {
       url: item.url,
       type: item.type,
@@ -760,6 +1124,7 @@ async function normalizeMedia(db: DbClient, workspaceId: string, media: MediaIte
       ...(item.alt ? { alt: item.alt } : {}),
       ...(item.type === "video" && video.durationSec !== undefined ? { durationSec: video.durationSec } : {}),
       ...(item.type === "video" && video.posterUrl ? { posterUrl: video.posterUrl } : {}),
+      ...size,
     };
   });
 }
@@ -796,42 +1161,48 @@ function userIdOf(actor: Actor): string | null {
 
 export async function createPost(workspaceId: string, input: PostInput, actor: Actor): Promise<Post> {
   const data = parseOrThrow(postInputSchema, input);
+  const kind: ContentKind = data.kind ?? "SOCIAL_POST";
+  assertKindEnabled(kind);
+  const internal = isInternalKind(kind);
 
   return prisma.$transaction(async (tx) => {
     const client = await findClientForPost(tx, data.clientId, workspaceId);
-    assertNetworksAllowed(data.networks, client.networks);
-    const media = await normalizeMedia(tx, workspaceId, data.media);
-    const videoCoverMs = resolveVideoCover(media, data.videoCoverMs);
+    // Blog/ads have no networks, caption or media of their own: everything
+    // the client approves is in `content`.
+    const networks = internal ? [] : (data.networks ?? []);
+    const networkOptions = internal ? {} : (data.networkOptions ?? {});
+    if (!internal) assertNetworksAllowed(networks, client.networks);
+    const media = internal ? [] : await normalizeMedia(tx, workspaceId, data.media ?? []);
+    const videoCoverMs = internal ? null : resolveVideoCover(media, data.videoCoverMs);
+    const content = internal ? await prepareKindContent(tx, workspaceId, kind, data.content) : {};
 
     const post = await tx.post.create({
       data: {
         workspaceId,
         clientId: client.id,
         title: data.title,
+        kind,
         publishAt: data.publishAt,
-        networks: data.networks,
-        networkOptions: toJson(data.networkOptions ?? {}),
+        networks,
+        networkOptions: toJson(networkOptions),
         currentVersionNumber: 1,
         createdById: userIdOf(actor),
         versions: {
           create: {
             number: 1,
-            text: data.text,
-            firstCommentText: normalizeFirstComment(data.firstCommentText),
+            text: internal ? "" : (data.text ?? ""),
+            firstCommentText: internal ? null : normalizeFirstComment(data.firstCommentText),
             media: toJson(media),
             videoCoverMs,
-            schedule: scheduleToJson({
-              publishAt: data.publishAt,
-              networks: data.networks,
-              networkOptions: data.networkOptions ?? {},
-            }),
+            content: toJson(content),
+            schedule: scheduleToJson({ publishAt: data.publishAt, networks, networkOptions }),
             createdById: userIdOf(actor),
           },
         },
       },
     });
 
-    await recordEvent(tx, { postId: post.id, type: "CREATED", actor, versionNumber: 1 });
+    await recordEvent(tx, { postId: post.id, type: "CREATED", actor, versionNumber: 1, metadata: { kind } });
     return post;
   });
 }
@@ -842,11 +1213,29 @@ export async function updatePost(
   input: PostUpdateInput,
   actor: Actor
 ): Promise<Post> {
-  const data = parseOrThrow(postUpdateSchema, input);
+  const parsed = parseOrThrow(postUpdateSchema, input);
 
   return prisma.$transaction(async (tx) => {
     const post = await tx.post.findFirst({ where: { id: postId, workspaceId }, include: { client: true } });
     if (!post) throw new NotFoundError("Post non trovato");
+
+    // The kind is fixed: blog/ads ignore the social fields, social posts
+    // ignore `content`.
+    const internal = isInternalKind(post.kind);
+    const data = internal
+      ? {
+          ...parsed,
+          networks: undefined,
+          networkOptions: undefined,
+          text: undefined,
+          firstCommentText: undefined,
+          media: undefined,
+          videoCoverMs: undefined,
+        }
+      : { ...parsed, content: undefined };
+    if (!internal && data.networks !== undefined && data.networks.length === 0) {
+      throw new ValidationError("Scegli almeno una rete");
+    }
 
     const version = await tx.postVersion.findUnique({
       where: { postId_number: { postId, number: post.currentVersionNumber } },
@@ -862,11 +1251,13 @@ export async function updatePost(
     }
 
     const networks = data.networks ?? (post.networks as Network[]);
-    if (data.networks !== undefined || client.id !== post.clientId) {
+    if (!internal && (data.networks !== undefined || client.id !== post.clientId)) {
       assertNetworksAllowed(networks, client.networks);
     }
 
     const media = data.media !== undefined ? await normalizeMedia(tx, workspaceId, data.media) : undefined;
+    const kindContent =
+      data.content !== undefined ? await prepareKindContent(tx, workspaceId, post.kind, data.content) : undefined;
     // The Post row holds the current version's date and networks.
     const current: VersionContent = {
       ...versionContent(version),
@@ -896,6 +1287,7 @@ export async function updatePost(
         firstCommentText: data.firstCommentText,
         media,
         videoCoverMs: coverPatch,
+        content: kindContent,
         title: data.title,
         publishAt: data.publishAt,
         networks: data.networks,
@@ -904,11 +1296,22 @@ export async function updatePost(
     });
 
     const clientChanged = client.id !== post.clientId;
-    // Duration/poster filled in on the same files: stored in place, even on a
-    // version already sent (it is not content the client approves).
-    const metadataOnly = !plan.contentChanged && media !== undefined && mediaMetadataChanged(current.media, media);
+    // Duration/poster/size filled in on the same files: stored in place, even
+    // on a version already sent (it is not content the client approves).
+    const mediaMetadataOnly = !plan.contentChanged && media !== undefined && mediaMetadataChanged(current.media, media);
+    const contentMetadataOnly =
+      !plan.contentChanged &&
+      kindContent !== undefined &&
+      stableStringify(kindContent) !== stableStringify(current.content ?? {});
+    const metadataOnly = mediaMetadataOnly || contentMetadataOnly;
     if (metadataOnly) {
-      await tx.postVersion.update({ where: { id: version.id }, data: { media: toJson(media) } });
+      await tx.postVersion.update({
+        where: { id: version.id },
+        data: {
+          ...(mediaMetadataOnly ? { media: toJson(media) } : {}),
+          ...(contentMetadataOnly ? { content: toJson(kindContent) } : {}),
+        },
+      });
     }
     if (plan.noop && !clientChanged && data.changeNote === undefined) {
       return metadataOnly ? tx.post.findUniqueOrThrow({ where: { id: postId } }) : post;
@@ -920,6 +1323,7 @@ export async function updatePost(
         data.firstCommentText !== undefined ? normalizeFirstComment(data.firstCommentText) : current.firstCommentText,
       media: media ?? current.media,
       videoCoverMs: coverPatch !== undefined ? coverPatch : (current.videoCoverMs ?? null),
+      content: kindContent ?? current.content ?? {},
       schedule: {
         publishAt: data.publishAt ?? post.publishAt,
         networks: data.networks ?? post.networks,
@@ -939,6 +1343,7 @@ export async function updatePost(
           firstCommentText: nextContent.firstCommentText,
           media: toJson(nextContent.media),
           videoCoverMs: nextContent.videoCoverMs ?? null,
+          content: toJson(nextContent.content),
           schedule: scheduleToJson(nextSchedule),
           changeNote: data.changeNote || null,
           createdById: userIdOf(actor),
@@ -957,6 +1362,7 @@ export async function updatePost(
             firstCommentText: nextContent.firstCommentText,
             media: toJson(nextContent.media),
             videoCoverMs: nextContent.videoCoverMs ?? null,
+            content: toJson(nextContent.content),
             schedule: scheduleToJson(nextSchedule),
             ...(data.changeNote !== undefined ? { changeNote: data.changeNote || null } : {}),
           },
@@ -982,7 +1388,7 @@ export async function updatePost(
     );
 
     if (plan.createVersion) {
-      const diff = diffVersions(current, nextContent);
+      const diff = diffVersions(current, nextContent, post.kind);
       await recordEvent(tx, {
         postId,
         type: "VERSION_CREATED",
@@ -1035,7 +1441,16 @@ export async function submitForReview(
       if (post.client.archivedAt) throw new ValidationError(`Il cliente ${post.client.name} è archiviato`);
       assertTransition(post.status, "submit");
       const version = post.versions[0];
-      if (!version || (!version.text.trim() && parseMediaItems(version.media).length === 0)) {
+      if (!version) throw new NotFoundError("Versione del post non trovata");
+      if (isInternalKind(post.kind)) {
+        // Blog/ads: the kind's own review checks instead of Metricool's.
+        const problems = reviewIssuesFor(post.kind, version.content);
+        if (problems.length > 0) {
+          throw new ValidationError(`"${post.title}" non è pronto per la revisione: ${problems.join(" ")}`);
+        }
+        continue;
+      }
+      if (!version.text.trim() && parseMediaItems(version.media).length === 0) {
         throw new ValidationError(`"${post.title}" non ha né testo né media`);
       }
       // The client must never approve something Metricool would reject. The
@@ -1102,6 +1517,34 @@ export async function cancelPost(postId: string, workspaceId: string, actor: Act
   });
 }
 
+/**
+ * Blog/ads only: the agency marks an approved item as published / delivered
+ * (action `deliver`, APPROVED → DELIVERED) once it has exported it.
+ */
+export async function deliverPost(postId: string, workspaceId: string, actor: Actor): Promise<Post> {
+  return prisma.$transaction(async (tx) => {
+    const post = await tx.post.findFirst({ where: { id: postId, workspaceId } });
+    if (!post) throw new NotFoundError("Post non trovato");
+    if (!isInternalKind(post.kind)) {
+      throw new ValidationError("I post social si programmano su Metricool: non si segnano come consegnati");
+    }
+    const next = assertTransition(post.status, "deliver");
+    await guardedPostUpdate(
+      tx,
+      { id: postId, status: post.status, currentVersionNumber: post.currentVersionNumber },
+      { status: next }
+    );
+    await recordEvent(tx, {
+      postId,
+      type: "DELIVERED",
+      actor,
+      versionNumber: post.currentVersionNumber,
+      metadata: { fromStatus: post.status, kind: post.kind },
+    });
+    return tx.post.findUniqueOrThrow({ where: { id: postId } });
+  });
+}
+
 // ─── Client: approve / request changes ───────────────────────────────────────
 
 async function loadPostForReviewerAction(db: DbClient, postId: string, reviewer: ReviewerRef) {
@@ -1124,24 +1567,49 @@ export async function approvePost(postId: string, reviewer: ReviewerRef, version
     if (post.currentVersionNumber !== versionNumber) throw new ConflictError(STALE_VERSION_MESSAGE);
 
     // Double click / second tab: approving what is already approved is a no-op.
-    if (post.approvedAt && ["APPROVED", "SCHEDULING", "SCHEDULED"].includes(post.status)) {
+    if (post.approvedAt && ["APPROVED", "SCHEDULING", "SCHEDULED", "DELIVERED"].includes(post.status)) {
       return { post, changed: false };
     }
 
     const next = assertTransition(post.status, "approve");
     const now = new Date();
+    // The guarded write also locks the row, so the ads decisions read below
+    // cannot change before this transaction commits (decideVariant locks it too).
     await guardedPostUpdate(
       tx,
       { id: postId, status: post.status, currentVersionNumber: versionNumber },
       { status: next, approvedAt: now, approvedByReviewerId: reviewer.id, lastError: null }
     );
-    await recordEvent(tx, { postId, type: "APPROVED", actor, versionNumber });
+
+    let metadata: Prisma.InputJsonObject | undefined;
+    if (post.kind === "AD_CREATIVE") {
+      // Rule 5: every variant decided, at least one approved.
+      const version = await tx.postVersion.findUniqueOrThrow({
+        where: { postId_number: { postId, number: versionNumber } },
+        select: { content: true },
+      });
+      const content = parseKindContent("AD_CREATIVE", version.content);
+      const decisions = await tx.creativeDecision.findMany({ where: { postId, versionNumber } });
+      const evaluation = evaluateCreativeDecisions(
+        content.variants.map((v) => v.id),
+        decisions
+      );
+      const blocker = approvalBlocker(evaluation, content);
+      if (blocker) throw new ValidationError(blocker);
+      metadata = {
+        approvedVariants: evaluation.approved,
+        rejectedVariants: evaluation.rejected.map((r) => r.variantId),
+      };
+    }
+
+    await recordEvent(tx, { postId, type: "APPROVED", actor, versionNumber, ...(metadata ? { metadata } : {}) });
     return { post: { ...post, status: next, approvedAt: now, approvedByReviewerId: reviewer.id }, changed: true };
   });
 
   if (!result.changed) return result.post;
 
-  if (result.post.client.autoSchedule) {
+  // Blog/ads have no external integration: nothing to schedule, ever.
+  if (!isInternalKind(result.post.kind) && result.post.client.autoSchedule) {
     try {
       // Imported lazily: scheduling pulls in BullMQ/Redis and imports this module.
       const { requestScheduling } = await import("@/lib/scheduling");
@@ -1190,7 +1658,7 @@ export async function requestChanges(
 
     const version = await tx.postVersion.findUniqueOrThrow({
       where: { postId_number: { postId, number: versionNumber } },
-      select: { id: true, media: true },
+      select: { id: true, media: true, content: true },
     });
 
     await guardedPostUpdate(
@@ -1208,10 +1676,15 @@ export async function requestChanges(
       },
     });
 
-    const media = parseMediaItems(version.media);
+    const target: ActionItemTarget =
+      post.kind === "BLOG_ARTICLE"
+        ? { kind: "BLOG_ARTICLE" }
+        : post.kind === "AD_CREATIVE"
+          ? { kind: "AD_CREATIVE", variants: actionItems.length ? adVariantsOf(readKindContent(post.kind, version.content)) : [] }
+          : { kind: "SOCIAL_POST", media: parseMediaItems(version.media) };
     const actionComments: PostComment[] = [];
     for (const item of actionItems) {
-      const planned = planActionItemComment(item, media);
+      const planned = planActionItemCommentFor(item, target);
       if (!planned) continue;
       actionComments.push(
         await tx.postComment.create({
@@ -1224,6 +1697,8 @@ export async function requestChanges(
             mediaIndex: planned.mediaIndex,
             timeSec: planned.timeSec,
             timeEndSec: planned.timeEndSec,
+            variantId: planned.variantId,
+            ...(planned.anchor ? { anchor: toJson(planned.anchor) } : {}),
           },
         })
       );
@@ -1293,6 +1768,10 @@ export interface AddCommentInput {
   timeSec?: number;
   /** Videos: end of a range, after timeSec. */
   timeEndSec?: number;
+  /** Blog only: the selected passage. */
+  anchor?: BlogAnchor | null;
+  /** Ads only: the variant (must exist in the version); mediaIndex then refers to its media. */
+  variantId?: string | null;
   /** Agency callers: the active workspace; the post must belong to it. */
   workspaceId?: string;
 }
@@ -1302,6 +1781,8 @@ export interface AddCommentInput {
  * members of the post's workspace; reviewers must belong to the post's client
  * and can only comment on versions they have been sent. A moment can only be
  * set on a video media of that version (pinX/pinY then mark the paused frame).
+ * Blog comments may carry the selected passage (anchor); ads comments a
+ * variant, whose media mediaIndex / moments then refer to.
  */
 export async function addComment(input: AddCommentInput): Promise<PostComment> {
   const data = parseOrThrow(commentSchema, {
@@ -1313,6 +1794,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
     pinY: input.pinY,
     timeSec: input.timeSec,
     timeEndSec: input.timeEndSec,
+    anchor: input.anchor ?? undefined,
+    variantId: input.variantId ?? undefined,
   });
   const { actor } = input;
   if (actor.kind === "system") throw new ForbiddenError();
@@ -1347,7 +1830,30 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       : await tx.postVersion.findUnique({ where: { postId_number: { postId: post.id, number: maxVersion } } });
     if (!version || version.number > maxVersion) throw new NotFoundError("Versione non trovata");
 
-    const media = parseMediaItems(version.media);
+    // Where a comment can point depends on the kind: social → the post's
+    // media; blog → a passage (anchor); ads → a variant and its media.
+    if (data.anchor && post.kind !== "BLOG_ARTICLE") {
+      throw new ValidationError("Il passaggio del testo si può indicare solo sugli articoli");
+    }
+    if (data.variantId && post.kind !== "AD_CREATIVE") {
+      throw new ValidationError("La variante si può indicare solo sulle creatività ads");
+    }
+    let media: MediaItem[] = [];
+    if (post.kind === "AD_CREATIVE") {
+      if (data.variantId) {
+        const variant = adVariantsOf(readKindContent(post.kind, version.content)).find((v) => v.id === data.variantId);
+        if (!variant) throw new NotFoundError("Variante non trovata in questa versione");
+        media = variant.media;
+      } else if (data.mediaIndex !== undefined) {
+        throw new ValidationError("Indica la variante a cui si riferisce il commento");
+      }
+    } else if (post.kind === "BLOG_ARTICLE") {
+      if (data.mediaIndex !== undefined) {
+        throw new ValidationError("Sugli articoli seleziona il passaggio del testo da commentare");
+      }
+    } else {
+      media = parseMediaItems(version.media);
+    }
     if (data.mediaIndex !== undefined && data.mediaIndex >= media.length) {
       throw new ValidationError("Il media indicato non esiste in questa versione");
     }
@@ -1372,6 +1878,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
         pinY: data.pinY ?? null,
         timeSec: time.timeSec,
         timeEndSec: time.timeEndSec,
+        variantId: data.variantId ?? null,
+        ...(data.anchor ? { anchor: toJson(data.anchor) } : {}),
       },
     });
     await recordEvent(tx, {
@@ -1381,6 +1889,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       versionNumber: version.number,
       metadata: {
         commentId: comment.id,
+        ...(data.variantId ? { variantId: data.variantId } : {}),
+        ...(data.anchor ? { quote: data.anchor.quote.slice(0, 200) } : {}),
         ...(data.mediaIndex !== undefined ? { mediaIndex: data.mediaIndex } : {}),
         ...(time.timeSec !== null ? { timeSec: time.timeSec } : {}),
         ...(time.timeEndSec !== null ? { timeEndSec: time.timeEndSec } : {}),
@@ -1420,21 +1930,35 @@ const workspacePostInclude = {
     orderBy: { startedAt: "desc" },
     include: { reviewer: { select: personSelect }, messages: { orderBy: { createdAt: "asc" } } },
   },
+  // Ads: the client's per-variant decisions, every version (newest first).
+  creativeDecisions: {
+    orderBy: [{ versionNumber: "desc" }, { createdAt: "asc" }],
+    include: { reviewer: { select: personSelect } },
+  },
 } satisfies Prisma.PostInclude;
 
 export type WorkspacePost = Prisma.PostGetPayload<{ include: typeof workspacePostInclude }>;
 
 /**
  * Full post for the agency editor: client, versions (newest first), comments,
- * events (chronological) and AI review sessions with their transcripts.
+ * events (chronological), AI review sessions with their transcripts and, for
+ * ads, the client's decisions per variant. Kinds not enabled for this
+ * instance are not found.
  */
 export async function getPostForWorkspace(postId: string, workspaceId: string): Promise<WorkspacePost> {
   const post = await prisma.post.findFirst({
-    where: { id: postId, workspaceId },
+    where: { id: postId, workspaceId, kind: { in: enabledKinds() } },
     include: workspacePostInclude,
   });
   if (!post) throw new NotFoundError("Post non trovato");
   return post;
+}
+
+/** Comment anchor as stored (PostComment.anchor), or null when absent/malformed. */
+export function readBlogAnchor(value: unknown): BlogAnchor | null {
+  if (value === null || value === undefined) return null;
+  const parsed = blogAnchorSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 export interface ReviewerPostVersion {
@@ -1445,6 +1969,8 @@ export interface ReviewerPostVersion {
   media: MediaItem[];
   /** Chosen video cover frame (ms), if any. */
   videoCoverMs: number | null;
+  /** Blog: BlogContent, ads: AdContent; null for social posts (or unreadable rows). */
+  content: KindContent | null;
   /** Date and networks this version was sent with (null for old rows). */
   schedule: VersionSchedule | null;
   changeNote: string | null;
@@ -1465,13 +1991,29 @@ export interface ReviewerPostComment {
   /** Video comments: moment (and optional end of range) in seconds. */
   timeSec: number | null;
   timeEndSec: number | null;
+  /** Blog: the commented passage. */
+  anchor: BlogAnchor | null;
+  /** Ads: the commented variant (mediaIndex refers to its media). */
+  variantId: string | null;
   resolvedAt: Date | null;
   createdAt: Date;
+}
+
+/** Ads: the client's decision on one variant of the visible version. */
+export interface ReviewerVariantDecision {
+  variantId: string;
+  verdict: "APPROVED" | "REJECTED";
+  note: string | null;
+  reviewerName: string | null;
+  /** Taken by this reviewer (another reviewer of the client may have decided). */
+  isMine: boolean;
+  updatedAt: Date;
 }
 
 export interface ReviewerPost {
   id: string;
   title: string;
+  kind: ContentKind;
   status: PostStatus;
   publishAt: Date;
   networks: Network[];
@@ -1489,17 +2031,25 @@ export interface ReviewerPost {
   versions: ReviewerPostVersion[];
   /** Oldest first. */
   comments: ReviewerPostComment[];
+  /** Ads: decisions on the visible version (empty for other kinds). */
+  decisions: ReviewerVariantDecision[];
   /** This reviewer's conversations with the AI assistant. */
   reviewSessions: Array<ReviewSession & { messages: ReviewMessage[] }>;
 }
 
 /**
  * Post as the client portal may show it. Throws NotFoundError when the post
- * belongs to another client or is not visible to clients (drafts, cancelled).
+ * belongs to another client, is not visible to clients (drafts, cancelled) or
+ * is of a kind this instance does not handle.
  */
 export async function getPostForReviewer(postId: string, reviewer: ReviewerRef): Promise<ReviewerPost> {
   const post = await prisma.post.findFirst({
-    where: { id: postId, clientId: reviewer.clientId, status: { in: CLIENT_VISIBLE_STATUSES } },
+    where: {
+      id: postId,
+      clientId: reviewer.clientId,
+      status: { in: CLIENT_VISIBLE_STATUSES },
+      kind: { in: enabledKinds() },
+    },
     include: {
       client: { select: { id: true, name: true, logoUrl: true, timezone: true } },
       versions: { orderBy: { number: "desc" } },
@@ -1530,9 +2080,19 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
     v.number === post.currentVersionNumber ? live : parseVersionSchedule(v.schedule);
   const shownSchedule = scheduleOf(versions.find((v) => v.number === visible) ?? { number: -1, schedule: null }) ?? live;
 
+  const decisions =
+    post.kind === "AD_CREATIVE"
+      ? await prisma.creativeDecision.findMany({
+          where: { postId: post.id, versionNumber: visible },
+          orderBy: { createdAt: "asc" },
+          include: { reviewer: { select: { name: true } } },
+        })
+      : [];
+
   return {
     id: post.id,
     title: post.title,
+    kind: post.kind,
     status: post.status,
     publishAt: shownSchedule.publishAt,
     networks: shownSchedule.networks as Network[],
@@ -1551,6 +2111,7 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
       firstCommentText: v.firstCommentText,
       media: parseMediaItems(v.media),
       videoCoverMs: v.videoCoverMs,
+      content: readKindContent(post.kind, v.content),
       schedule: scheduleOf(v),
       changeNote: v.changeNote,
       createdAt: v.createdAt,
@@ -1570,9 +2131,19 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
         pinY: c.pinY,
         timeSec: c.timeSec,
         timeEndSec: c.timeEndSec,
+        anchor: readBlogAnchor(c.anchor),
+        variantId: c.variantId,
         resolvedAt: c.resolvedAt,
         createdAt: c.createdAt,
       })),
+    decisions: decisions.map((d) => ({
+      variantId: d.variantId,
+      verdict: d.verdict,
+      note: d.note,
+      reviewerName: d.reviewer?.name ?? null,
+      isMine: d.reviewerId === reviewer.id,
+      updatedAt: d.updatedAt,
+    })),
     reviewSessions: post.reviewSessions,
   };
 }
@@ -1580,6 +2151,7 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
 export interface ReviewerPostSummary {
   id: string;
   title: string;
+  kind: ContentKind;
   status: PostStatus;
   publishAt: Date;
   networks: Network[];
@@ -1588,17 +2160,66 @@ export interface ReviewerPostSummary {
   submittedAt: Date | null;
   approvedAt: Date | null;
   canAct: boolean;
-  /** First media of the visible version, for thumbnails. */
+  /** Thumbnail: first media (social), featured image (blog), first variant's first media (ads). */
   cover: MediaItem | null;
   mediaCount: number;
-  /** First ~160 characters of the caption. */
+  /** Ads: number of variants in the set; null for other kinds. */
+  variantCount: number | null;
+  /** First ~160 characters of the caption / article excerpt / first variant's text. */
   excerpt: string;
+}
+
+/** Markdown → one line of plain text, good enough (and cheap) for a list excerpt. */
+function markdownExcerpt(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, "")
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncate(text: string, max = 160): string {
+  return text.length > max ? `${text.slice(0, max - 3).trimEnd()}…` : text;
+}
+
+/** Thumbnail, media count and excerpt of a version, per kind (pure). */
+export function summarizeVersionForList(
+  kind: ContentKind,
+  version: { text: string; media: unknown; content: unknown } | undefined
+): { cover: MediaItem | null; mediaCount: number; variantCount: number | null; excerpt: string } {
+  if (!version) return { cover: null, mediaCount: 0, variantCount: kind === "AD_CREATIVE" ? 0 : null, excerpt: "" };
+  if (kind === "SOCIAL_POST") {
+    const media = parseMediaItems(version.media);
+    return { cover: media[0] ?? null, mediaCount: media.length, variantCount: null, excerpt: truncate(version.text) };
+  }
+  const content = readKindContent(kind, version.content);
+  if (content && "variants" in content) {
+    const media = content.variants.flatMap((v) => v.media);
+    const first = content.variants[0];
+    return {
+      cover: media[0] ?? null,
+      mediaCount: media.length,
+      variantCount: content.variants.length,
+      excerpt: truncate(first?.primaryText || first?.headline || ""),
+    };
+  }
+  if (content && "bodyMarkdown" in content) {
+    return {
+      cover: content.featuredImage,
+      mediaCount: content.featuredImage ? 1 : 0,
+      variantCount: null,
+      excerpt: truncate(content.excerpt.trim() || markdownExcerpt(content.bodyMarkdown)),
+    };
+  }
+  return { cover: null, mediaCount: 0, variantCount: kind === "AD_CREATIVE" ? 0 : null, excerpt: "" };
 }
 
 /** Posts of the reviewer's client that the portal lists, by publish date. */
 export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<ReviewerPostSummary[]> {
   const posts = await prisma.post.findMany({
-    where: { clientId: reviewer.clientId, status: { in: CLIENT_VISIBLE_STATUSES } },
+    where: { clientId: reviewer.clientId, status: { in: CLIENT_VISIBLE_STATUSES }, kind: { in: enabledKinds() } },
     orderBy: { publishAt: "asc" },
     take: 500,
   });
@@ -1616,20 +2237,19 @@ export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<Revie
   );
   const versions = await prisma.postVersion.findMany({
     where: { OR: posts.map((p) => ({ postId: p.id, number: visibleByPost.get(p.id)! })) },
-    select: { postId: true, text: true, media: true, schedule: true },
+    select: { postId: true, text: true, media: true, content: true, schedule: true },
   });
   const versionByPost = new Map(versions.map((v) => [v.postId, v]));
 
   return posts.map((p) => {
     const version = versionByPost.get(p.id);
-    const media = version ? parseMediaItems(version.media) : [];
-    const text = version?.text ?? "";
     const visible = visibleByPost.get(p.id)!;
     // An unsent revision's date and networks stay hidden like its content.
     const sent = visible < p.currentVersionNumber && version ? parseVersionSchedule(version.schedule) : null;
     return {
       id: p.id,
       title: p.title,
+      kind: p.kind,
       status: p.status,
       publishAt: sent?.publishAt ?? p.publishAt,
       networks: (sent?.networks ?? p.networks) as Network[],
@@ -1638,9 +2258,7 @@ export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<Revie
       submittedAt: p.submittedAt,
       approvedAt: p.approvedAt,
       canAct: p.status === "IN_REVIEW" && visible === p.currentVersionNumber,
-      cover: media[0] ?? null,
-      mediaCount: media.length,
-      excerpt: text.length > 160 ? `${text.slice(0, 157).trimEnd()}…` : text,
+      ...summarizeVersionForList(p.kind, version),
     };
   });
 }

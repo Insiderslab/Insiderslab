@@ -2,6 +2,17 @@
  * Append-only audit log of everything that happens to a post (PostEvent).
  * Call it with the transaction client so the event commits together with the
  * change it describes.
+ *
+ * Metadata written by the services, per type (all optional for readers):
+ * - CREATED: { kind }
+ * - VERSION_CREATED: { previousVersionNumber, changeNote, changes: string[], fromStatus?, toStatus? }
+ * - SUBMITTED_FOR_REVIEW: { fromStatus, reviewDueAt? }
+ * - APPROVED (ads): { approvedVariants: string[], rejectedVariants: string[] }
+ * - CHANGES_REQUESTED: { commentId, actionCommentIds?, reviewSessionId? }
+ * - COMMENTED: { commentId, mediaIndex?, timeSec?, timeEndSec?, variantId?, quote? }
+ * - VARIANT_DECIDED (ads): { variantId, variantName, verdict: "APPROVED" | "REJECTED", note? }
+ * - DELIVERED (blog/ads): { fromStatus, kind }
+ * - CANCELLED: { fromStatus }
  */
 
 import type { Prisma, PostEvent, PostEventType, PrismaClient } from "@/app/generated/prisma/client";

@@ -4,6 +4,10 @@
  * been matched against the caller's workspaceId.
  *
  * Clients are archived, never deleted, so posts and their audit log survive.
+ *
+ * Metricool brand, networks and auto-scheduling only mean something for
+ * social posts: on instances without SOCIAL_POST (blog / ads variants, see
+ * lib/variant.ts) those fields are ignored on write and left empty.
  */
 
 import { z } from "zod";
@@ -12,6 +16,7 @@ import { prisma } from "@/lib/db/client";
 import { NETWORKS } from "@/lib/domain";
 import { NotFoundError, parseOrThrow } from "@/lib/errors";
 import { isValidTimeZone } from "@/lib/metricool/payload";
+import { enabledKinds, isMetricoolEnabled } from "@/lib/variant";
 
 // One time-zone check for the whole app (also used by the Metricool payload).
 export { isValidTimeZone };
@@ -80,7 +85,7 @@ export async function listClients(
     include: {
       _count: {
         select: {
-          posts: { where: { status: { not: "CANCELLED" } } },
+          posts: { where: { status: { not: "CANCELLED" }, kind: { in: enabledKinds() } } },
           reviewers: { where: { active: true } },
         },
       },
@@ -102,14 +107,15 @@ export async function getClient(clientId: string, workspaceId: string): Promise<
 
 export async function createClient(workspaceId: string, input: ClientInput): Promise<Client> {
   const data = parseOrThrow(clientInputSchema, input);
+  const social = isMetricoolEnabled();
   return prisma.client.create({
     data: {
       workspaceId,
       name: data.name,
-      metricoolBlogId: data.metricoolBlogId,
+      metricoolBlogId: social ? data.metricoolBlogId : null,
       timezone: data.timezone,
       logoUrl: data.logoUrl ?? null,
-      networks: data.networks,
+      networks: social ? data.networks : [],
       autoSchedule: data.autoSchedule,
     },
   });
@@ -120,7 +126,10 @@ export async function updateClient(
   workspaceId: string,
   input: ClientUpdateInput
 ): Promise<Client> {
-  const data = parseOrThrow(clientUpdateSchema, input);
+  const parsed = parseOrThrow(clientUpdateSchema, input);
+  const data = isMetricoolEnabled()
+    ? parsed
+    : { ...parsed, metricoolBlogId: undefined, networks: undefined, autoSchedule: undefined };
   await assertClientInWorkspace(clientId, workspaceId);
   return prisma.client.update({
     where: { id: clientId },

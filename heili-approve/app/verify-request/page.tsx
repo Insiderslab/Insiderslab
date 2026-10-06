@@ -1,17 +1,24 @@
 import Link from "next/link";
+import { connection } from "next/server";
+import { productName } from "@/lib/variant";
 
-export const metadata = {
-  title: "Controlla la tua email - Approve by Heili",
-  description: "Ti abbiamo inviato un link di accesso.",
-};
+export async function generateMetadata() {
+  await connection();
+  return {
+    title: `Controlla la tua email - ${productName()}`,
+    description: "Ti abbiamo inviato un link di accesso.",
+  };
+}
 
-export default function VerifyRequestPage() {
+// Rendered per request: the product name depends on APP_VARIANT at runtime.
+export default async function VerifyRequestPage() {
+  await connection();
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold text-foreground">
-            Approve by Heili
+            {productName()}
           </h1>
         </div>
 

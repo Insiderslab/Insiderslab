@@ -8,14 +8,19 @@
  *
  * Every function catches and logs its own errors: a notification can never
  * break or roll back the action that triggered it.
+ *
+ * Wording follows the content kind: "un nuovo articolo da approvare",
+ * "3 creatività da approvare" (ads count the variants of the sets), and
+ * "contenuti" when one email lists several kinds.
  */
 
-import type { Client, ClientReviewer, Post } from "@/app/generated/prisma/client";
+import type { Client, ClientReviewer, ContentKind, Post } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
-import { NETWORK_LABELS, formatTimeRange, isNetwork, type Network } from "@/lib/domain";
+import { KIND_CONFIG, NETWORK_LABELS, formatTimeRange, isNetwork, type Network } from "@/lib/domain";
 import { renderEmail, sendEmail, type EmailListItem } from "@/lib/email";
 import { getBaseUrl } from "@/lib/env";
 import { getReviewUrl } from "@/lib/reviewers";
+import { productName } from "@/lib/variant";
 
 // ─── Formatting (pure) ───────────────────────────────────────────────────────
 
@@ -38,12 +43,176 @@ export function formatNetworks(networks: readonly string[]): string {
   return networks.map((n) => (isNetwork(n) ? NETWORK_LABELS[n as Network] : n)).join(", ");
 }
 
-function postListItem(post: Pick<Post, "title" | "publishAt" | "networks">, timeZone: string): EmailListItem {
-  const networks = formatNetworks(post.networks);
+// ─── Content kinds (pure) ────────────────────────────────────────────────────
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+const AD_PLATFORM_LABELS: Record<string, string> = {
+  meta: "Meta",
+  google: "Google Ads",
+  tiktok: "TikTok",
+  linkedin: "LinkedIn",
+};
+
+/** Variants (id, name) and platform of a stored AdContent, read leniently. */
+export function readAdSummary(content: unknown): { variants: Array<{ id: string; name: string }>; platform: string | null } {
+  const record = asRecord(content);
+  const variants = (Array.isArray(record.variants) ? record.variants : []).flatMap((raw) => {
+    const v = asRecord(raw);
+    if (typeof v.id !== "string") return [];
+    const name = typeof v.name === "string" && v.name.trim() ? v.name.trim() : `Variante ${v.id}`;
+    return [{ id: v.id, name }];
+  });
+  const platform = asRecord(record.campaign).platform;
+  return { variants, platform: typeof platform === "string" ? (AD_PLATFORM_LABELS[platform] ?? platform) : null };
+}
+
+export interface NotifiedPost {
+  title: string;
+  kind?: ContentKind;
+  publishAt: Date;
+  networks: string[];
+  /** Content of the version being notified (ads: variant count and platform). */
+  content?: unknown;
+}
+
+function kindOf(post: { kind?: ContentKind }): ContentKind {
+  return post.kind ?? "SOCIAL_POST";
+}
+
+/** How many "creatività" an ads set counts for (its variants, at least 1). */
+function unitsOf(post: NotifiedPost): number {
+  return kindOf(post) === "AD_CREATIVE" ? Math.max(1, readAdSummary(post.content).variants.length) : 1;
+}
+
+export function postListItem(post: NotifiedPost, timeZone: string): EmailListItem {
+  const kind = kindOf(post);
+  const date = formatPublishDate(post.publishAt, timeZone);
+  if (kind === "SOCIAL_POST") {
+    const networks = formatNetworks(post.networks);
+    return { title: post.title, detail: `${date}${networks ? ` · ${networks}` : ""}` };
+  }
+  const parts = [`${KIND_CONFIG[kind].dateLabel}: ${date}`];
+  if (kind === "AD_CREATIVE") {
+    const { variants, platform } = readAdSummary(post.content);
+    parts.push(variants.length === 1 ? "1 variante" : `${variants.length} varianti`);
+    if (platform) parts.push(platform);
+  }
+  return { title: post.title, detail: parts.join(" · ") };
+}
+
+type BatchKind = ContentKind | "MIXED";
+
+const BATCH_WORDS: Record<
+  BatchKind,
+  {
+    one: string;
+    many: (n: number) => string;
+    newOne: string;
+    newMany: (n: number) => string;
+    heading: string;
+    howTo: string;
+    cta: [one: string, many: string];
+    /** "il post", "l'articolo"… with the verb agreement of the reminder. */
+    reminderOne: (title: string) => string;
+  }
+> = {
+  SOCIAL_POST: {
+    one: "un post",
+    many: (n) => `${n} post`,
+    newOne: "Nuovo post",
+    newMany: (n) => `${n} nuovi post`,
+    heading: "Post da approvare",
+    howTo: "Puoi vedere l'anteprima, lasciare commenti e approvare oppure chiedere modifiche.",
+    cta: ["Rivedi il post", "Rivedi i post"],
+    reminderOne: (title) => `il post "${title}" aspetta la tua revisione`,
+  },
+  BLOG_ARTICLE: {
+    one: "un articolo",
+    many: (n) => `${n} articoli`,
+    newOne: "Nuovo articolo",
+    newMany: (n) => `${n} nuovi articoli`,
+    heading: "Articoli da approvare",
+    howTo: "Puoi leggere il testo, commentare le singole frasi e approvare oppure chiedere modifiche.",
+    cta: ["Leggi l'articolo", "Leggi gli articoli"],
+    reminderOne: (title) => `l'articolo "${title}" aspetta la tua revisione`,
+  },
+  AD_CREATIVE: {
+    one: "una creatività",
+    many: (n) => `${n} creatività`,
+    newOne: "Nuova creatività",
+    newMany: (n) => `${n} nuove creatività`,
+    heading: "Creatività da approvare",
+    howTo: "Puoi vedere le anteprime per posizionamento, approvare o scartare ogni variante e lasciare commenti.",
+    cta: ["Rivedi le creatività", "Rivedi le creatività"],
+    reminderOne: (title) => `le creatività "${title}" aspettano la tua revisione`,
+  },
+  MIXED: {
+    one: "un contenuto",
+    many: (n) => `${n} contenuti`,
+    newOne: "Nuovo contenuto",
+    newMany: (n) => `${n} nuovi contenuti`,
+    heading: "Contenuti da approvare",
+    howTo: "Puoi vedere le anteprime, lasciare commenti e approvare oppure chiedere modifiche.",
+    cta: ["Rivedi il contenuto", "Rivedi i contenuti"],
+    reminderOne: (title) => `"${title}" aspetta la tua revisione`,
+  },
+};
+
+export interface ReviewEmailCopy {
+  subject: string;
+  heading: string;
+  intro: string;
+  ctaLabel: string;
+}
+
+/**
+ * Subject and wording of a review request / reminder for the posts of one
+ * client, by kind: "Nuovo articolo da approvare: …", "3 creatività da
+ * approvare: …", "4 nuovi contenuti da approvare per …" (pure).
+ */
+export function reviewEmailCopy(
+  posts: NotifiedPost[],
+  params: { kind: "request" | "reminder"; clientName: string; agencyName: string }
+): ReviewEmailCopy {
+  const kinds = new Set(posts.map(kindOf));
+  const batch: BatchKind = kinds.size === 1 ? [...kinds][0] : "MIXED";
+  const words = BATCH_WORDS[batch];
+  const units = batch === "MIXED" ? posts.length : posts.reduce((sum, post) => sum + unitsOf(post), 0);
+  const phrase = units === 1 ? words.one : words.many(units);
+  const single = posts.length === 1 ? posts[0] : null;
+
+  let subject: string;
+  if (params.kind === "request") {
+    if (single && batch === "AD_CREATIVE" && units > 1) subject = `${words.many(units)} da approvare: ${single.title}`;
+    else if (single) subject = `${words.newOne} da approvare: ${single.title}`;
+    else subject = `${words.newMany(units)} da approvare per ${params.clientName}`;
+  } else {
+    subject = single
+      ? `Promemoria: ${words.reminderOne(single.title)}`
+      : `Promemoria: ${phrase} aspettano la tua revisione`;
+  }
+
+  const intro =
+    params.kind === "request"
+      ? `${params.agencyName} ha preparato ${phrase} per ${params.clientName}. ${words.howTo}`
+      : `${units === 1 ? `C'è ancora ${phrase}` : `Ci sono ancora ${phrase}`} di ${params.clientName} in attesa della tua revisione.`;
+
   return {
-    title: post.title,
-    detail: `${formatPublishDate(post.publishAt, timeZone)}${networks ? ` · ${networks}` : ""}`,
+    subject,
+    heading: params.kind === "request" ? words.heading : "Promemoria revisione",
+    intro,
+    ctaLabel: words.cta[posts.length === 1 ? 0 : 1],
   };
+}
+
+/** "al post", "all'articolo", "alle creatività" + title. */
+function aboutPost(kind: ContentKind, title: string): string {
+  if (kind === "BLOG_ARTICLE") return `all'articolo "${title}"`;
+  if (kind === "AD_CREATIVE") return `alle creatività "${title}"`;
+  return `al post "${title}"`;
 }
 
 function agencyPostUrl(postId: string): string {
@@ -80,44 +249,39 @@ function logFailure(name: string, error: unknown) {
 
 // ─── Client side ─────────────────────────────────────────────────────────────
 
+type ReviewEmailPost = Pick<Post, "title" | "kind" | "publishAt" | "networks" | "reviewDueAt"> & {
+  versions: Array<{ content: unknown }>;
+};
+
+/** The latest version is the one sent: posts are listed only while IN_REVIEW. */
+const latestVersionContent = { orderBy: { number: "desc" }, take: 1, select: { content: true } } as const;
+
 async function sendReviewEmail(
   reviewer: ClientReviewer,
   client: Client,
   agencyName: string,
-  posts: Array<Pick<Post, "title" | "publishAt" | "networks" | "reviewDueAt">>,
+  posts: ReviewEmailPost[],
   kind: "request" | "reminder"
 ): Promise<boolean> {
-  const count = posts.length;
-  const subject =
-    kind === "request"
-      ? count === 1
-        ? `Nuovo post da approvare: ${posts[0].title}`
-        : `${count} nuovi post da approvare per ${client.name}`
-      : count === 1
-        ? `Promemoria: il post "${posts[0].title}" aspetta la tua revisione`
-        : `Promemoria: ${count} post aspettano la tua revisione`;
+  const notified: NotifiedPost[] = posts.map((p) => ({ ...p, content: p.versions[0]?.content }));
+  const copy = reviewEmailCopy(notified, { kind, clientName: client.name, agencyName });
 
   const dueDates = posts.map((p) => p.reviewDueAt).filter((d): d is Date => !!d);
   const earliestDue = dueDates.length ? new Date(Math.min(...dueDates.map((d) => d.getTime()))) : null;
 
-  const paragraphs = [
-    `Ciao ${reviewer.name},`,
-    kind === "request"
-      ? `${agencyName} ha preparato ${count === 1 ? "un post" : `${count} post`} per ${client.name}. Puoi vedere l'anteprima, lasciare commenti e approvare oppure chiedere modifiche.`
-      : `${count === 1 ? "C'è ancora un post" : `Ci sono ancora ${count} post`} di ${client.name} in attesa della tua revisione.`,
-  ];
+  const paragraphs = [`Ciao ${reviewer.name},`, copy.intro];
   if (earliestDue) {
     paragraphs.push(`Ti chiediamo una risposta entro ${formatPublishDate(earliestDue, client.timezone)}.`);
   }
 
   const { html, text } = renderEmail({
-    heading: kind === "request" ? "Post da approvare" : "Promemoria revisione",
+    heading: copy.heading,
     paragraphs,
-    items: posts.map((p) => postListItem(p, client.timezone)),
-    cta: { label: count === 1 ? "Rivedi il post" : "Rivedi i post", url: getReviewUrl(reviewer) },
-    footer: `Link personale per ${reviewer.name}: non inoltrarlo. Inviato da ${agencyName} con Approve by Heili.`,
+    items: notified.map((p) => postListItem(p, client.timezone)),
+    cta: { label: copy.ctaLabel, url: getReviewUrl(reviewer) },
+    footer: `Link personale per ${reviewer.name}: non inoltrarlo. Inviato da ${agencyName} con ${productName()}.`,
   });
-  const result = await sendEmail({ to: reviewer.email, subject, html, text });
+  const result = await sendEmail({ to: reviewer.email, subject: copy.subject, html, text });
   return result.ok;
 }
 
@@ -134,6 +298,7 @@ export async function notifyReviewRequested(postIds: string[]): Promise<void> {
       include: {
         client: { include: { reviewers: { where: { active: true } } } },
         workspace: { select: { name: true } },
+        versions: latestVersionContent,
       },
     });
 
@@ -175,6 +340,7 @@ export async function notifyReviewReminder(postIds: string[]): Promise<Set<strin
       include: {
         client: { include: { reviewers: { where: { active: true } } } },
         workspace: { select: { name: true } },
+        versions: latestVersionContent,
       },
     });
 
@@ -249,6 +415,19 @@ export interface NotifiedComment {
   pinX?: number | null;
   timeSec: number | null;
   timeEndSec: number | null;
+  /** Blog: the commented passage ({ quote, … }). */
+  anchor?: unknown;
+  /** Ads: the commented variant. */
+  variantId?: string | null;
+}
+
+const MAX_QUOTE_IN_EMAIL = 120;
+
+function anchorQuote(anchor: unknown): string | null {
+  const quote = asRecord(anchor).quote;
+  if (typeof quote !== "string" || !quote.trim()) return null;
+  const text = quote.trim().replace(/\s+/g, " ");
+  return text.length > MAX_QUOTE_IN_EMAIL ? `${text.slice(0, MAX_QUOTE_IN_EMAIL - 1).trimEnd()}…` : text;
 }
 
 const MAX_COMMENT_IN_EMAIL = 500;
@@ -257,7 +436,10 @@ const MAX_COMMENT_IN_EMAIL = 500;
  * Email list entries for client comments: video comments first, in timeline
  * order with their timecode ("Media 1 · 0:07–0:09"), then the others.
  */
-export function formatClientComments(comments: NotifiedComment[]): EmailListItem[] {
+export function formatClientComments(
+  comments: NotifiedComment[],
+  variantNames: ReadonlyMap<string, string> = new Map()
+): EmailListItem[] {
   // Stable sort: untimed comments keep their (chronological) order.
   const sorted = [...comments].sort((a, b) => {
     const aTimed = isTime(a.timeSec);
@@ -268,7 +450,10 @@ export function formatClientComments(comments: NotifiedComment[]): EmailListItem
   });
   return sorted.map((comment) => {
     const body = comment.body.trim();
+    const quote = anchorQuote(comment.anchor);
     const where = [
+      comment.variantId ? (variantNames.get(comment.variantId) ?? `Variante ${comment.variantId}`) : null,
+      quote ? `Sul passaggio «${quote}»` : null,
       comment.mediaIndex !== null ? `Media ${comment.mediaIndex + 1}` : null,
       formatMoment(comment.timeSec, comment.timeEndSec),
       comment.timeSec === null && comment.pinX != null ? "punto sull'immagine" : null,
@@ -299,7 +484,7 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       typeof metadata.commentId === "string"
         ? await prisma.postComment.findUnique({
             where: { id: metadata.commentId },
-            select: { body: true, versionId: true },
+            select: { body: true, versionId: true, version: { select: { content: true } } },
           })
         : null;
     // Open client comments on the reviewed version (pins, video moments and
@@ -315,9 +500,22 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
           },
           orderBy: { createdAt: "asc" },
           take: 50,
-          select: { body: true, mediaIndex: true, pinX: true, timeSec: true, timeEndSec: true },
+          select: {
+            body: true,
+            mediaIndex: true,
+            pinX: true,
+            timeSec: true,
+            timeEndSec: true,
+            anchor: true,
+            variantId: true,
+          },
         })
       : [];
+    const variantNames = new Map(
+      post.kind === "AD_CREATIVE"
+        ? readAdSummary(comment?.version?.content).variants.map((v) => [v.id, v.name] as const)
+        : []
+    );
     const session =
       typeof metadata.reviewSessionId === "string"
         ? await prisma.reviewSession.findUnique({
@@ -328,7 +526,7 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
 
     const who = event?.reviewer?.name ?? post.client.name;
     const paragraphs = [
-      `${who} (${post.client.name}) ha chiesto modifiche al post "${post.title}" (versione ${post.currentVersionNumber}).`,
+      `${who} (${post.client.name}) ha chiesto modifiche ${aboutPost(post.kind, post.title)} (versione ${post.currentVersionNumber}).`,
     ];
     if (session) {
       paragraphs.push("La richiesta è stata raccolta con l'assistente di revisione: trovi la conversazione completa nel post.");
@@ -344,7 +542,7 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       heading: "Il cliente ha chiesto modifiche",
       paragraphs,
       quote: comment?.body,
-      items: [...formatClientComments(clientComments), ...actions.map((title) => ({ title }))],
+      items: [...formatClientComments(clientComments, variantNames), ...actions.map((title) => ({ title }))],
       cta: { label: "Apri il post", url: agencyPostUrl(post.id) },
     });
   } catch (error) {
@@ -360,6 +558,49 @@ export async function notifyApproved(postId: string): Promise<void> {
       ? await prisma.clientReviewer.findUnique({ where: { id: post.approvedByReviewerId }, select: { name: true } })
       : null;
 
+    const who = `${reviewer?.name ?? post.client.name} (${post.client.name})`;
+    const approvedLine = `${who} ha approvato la versione ${post.currentVersionNumber} di "${post.title}".`;
+
+    if (post.kind === "BLOG_ARTICLE") {
+      await sendToAgency(post.workspaceId, `Approvato: ${post.title}`, {
+        heading: "Articolo approvato",
+        paragraphs: [
+          approvedLine,
+          "Esporta l'articolo dal pannello e, quando è online, segnalo come pubblicato.",
+        ],
+        items: [postListItem(post, post.client.timezone)],
+        cta: { label: "Apri l'articolo", url: agencyPostUrl(post.id) },
+      });
+      return;
+    }
+
+    if (post.kind === "AD_CREATIVE") {
+      const [version, decisions] = await Promise.all([
+        prisma.postVersion.findUnique({
+          where: { postId_number: { postId, number: post.currentVersionNumber } },
+          select: { content: true },
+        }),
+        prisma.creativeDecision.findMany({ where: { postId, versionNumber: post.currentVersionNumber } }),
+      ]);
+      const { variants } = readAdSummary(version?.content);
+      const byVariant = new Map(decisions.map((d) => [d.variantId, d]));
+      await sendToAgency(post.workspaceId, `Approvato: ${post.title}`, {
+        heading: "Creatività approvate",
+        paragraphs: [
+          `${who} ha deciso le varianti della versione ${post.currentVersionNumber} di "${post.title}".`,
+          "Scarica dal pannello il pacchetto delle varianti approvate e, una volta caricate, segnale come consegnate.",
+        ],
+        items: variants.map((variant) => {
+          const decision = byVariant.get(variant.id);
+          const verdict =
+            decision?.verdict === "APPROVED" ? "approvata" : decision?.verdict === "REJECTED" ? "scartata" : "senza decisione";
+          return { title: `${variant.name} — ${verdict}`, ...(decision?.note ? { detail: decision.note } : {}) };
+        }),
+        cta: { label: "Apri le creatività", url: agencyPostUrl(post.id) },
+      });
+      return;
+    }
+
     const next = post.client.autoSchedule
       ? post.client.metricoolBlogId
         ? "Verrà programmato automaticamente su Metricool."
@@ -368,10 +609,7 @@ export async function notifyApproved(postId: string): Promise<void> {
 
     await sendToAgency(post.workspaceId, `Approvato: ${post.title}`, {
       heading: "Post approvato",
-      paragraphs: [
-        `${reviewer?.name ?? post.client.name} (${post.client.name}) ha approvato la versione ${post.currentVersionNumber} di "${post.title}".`,
-        next,
-      ],
+      paragraphs: [approvedLine, next],
       items: [postListItem(post, post.client.timezone)],
       cta: { label: "Apri il post", url: agencyPostUrl(post.id) },
     });

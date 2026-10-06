@@ -18,13 +18,18 @@
  * the post goes to FAILED instead of being POSTed again. Only failures that
  * happened before the request left (DNS, connection refused) and 408/429 are
  * retried automatically.
+ *
+ * Only social posts are scheduled: blog articles and ads creatives are
+ * internal (KIND_CONFIG[kind].internal) and never reach Metricool — the
+ * service refuses them, the worker skips them and the sweep ignores them.
+ * Review reminders apply to every kind.
  */
 
 import { UnrecoverableError } from "bullmq";
 import type { PostStatus } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
-import { assertTransition } from "@/lib/domain";
-import { NotFoundError } from "@/lib/errors";
+import { KIND_CONFIG, assertTransition } from "@/lib/domain";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 import { recordEvent } from "@/lib/events";
 import { SYSTEM_ACTOR, type Actor } from "@/lib/actor";
 import { notifyReviewReminder, notifyScheduleFailed, notifyScheduled } from "@/lib/notifications";
@@ -211,9 +216,12 @@ export async function requestScheduling(
   const outcome = await prisma.$transaction(async (tx) => {
     const post = await tx.post.findFirst({
       where: { id: postId, ...(opts.workspaceId ? { workspaceId: opts.workspaceId } : {}) },
-      select: { id: true, status: true, currentVersionNumber: true },
+      select: { id: true, status: true, currentVersionNumber: true, kind: true },
     });
     if (!post) throw new NotFoundError("Post non trovato");
+    if (KIND_CONFIG[post.kind].internal) {
+      throw new ValidationError("Articoli e creatività ads non si programmano: esportali e segnali come consegnati");
+    }
 
     if (post.status === "SCHEDULING") return { kind: "noop" as const, status: post.status, reason: "already_in_progress" as const };
     if (post.status === "SCHEDULED") return { kind: "noop" as const, status: post.status, reason: "already_scheduled" as const };
@@ -388,6 +396,7 @@ export async function processSchedulePost(job: ScheduleJobLike): Promise<Process
   });
 
   if (!post) return { outcome: "skipped", reason: "not_found" };
+  if (KIND_CONFIG[post.kind].internal) return { outcome: "skipped", reason: "not_scheduling" };
   // The client approved exactly this version; anything else is a stale job.
   if (post.currentVersionNumber !== versionNumber) return { outcome: "skipped", reason: "stale_version" };
   if (post.status === "SCHEDULED") return { outcome: "skipped", reason: "already_scheduled" };
@@ -528,6 +537,7 @@ export async function sweepApprovedPosts(now: Date = new Date()): Promise<SweepR
   const approved = await prisma.post.findMany({
     where: {
       status: "APPROVED",
+      kind: "SOCIAL_POST",
       approvedAt: { lte: new Date(now.getTime() - SWEEP_APPROVED_GRACE_MS) },
       client: { autoSchedule: true, archivedAt: null },
     },
@@ -549,6 +559,7 @@ export async function sweepApprovedPosts(now: Date = new Date()): Promise<SweepR
   const stuck = await prisma.post.findMany({
     where: {
       status: "SCHEDULING",
+      kind: "SOCIAL_POST",
       updatedAt: { lte: new Date(now.getTime() - SWEEP_SCHEDULING_STUCK_MS) },
     },
     select: { id: true, currentVersionNumber: true },
