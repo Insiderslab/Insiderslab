@@ -192,16 +192,26 @@ model ClientReviewer {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  comments       PostComment[]
-  events         PostEvent[]
-  reviewSessions ReviewSession[]
+  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  comments          PostComment[]
+  events            PostEvent[]
+  reviewSessions    ReviewSession[]
+  creativeDecisions CreativeDecision[]
 
   @@unique([clientId, email])
   @@index([clientId])
 }
 
 // ─── Post e revisioni ────────────────────────────────────────────────────────
+
+/// Tipo di contenuto da approvare. La variante dell'app (APP_VARIANT, vedi
+/// lib/variant.ts) decide quali tipi sono attivi: social (Metricool), blog e
+/// ads sono a gestione interna (nessuna integrazione esterna).
+enum ContentKind {
+  SOCIAL_POST // post social: dopo l'approvazione va su Metricool
+  BLOG_ARTICLE // articolo di blog: revisione del testo, export interno
+  AD_CREATIVE // set di creatività ads (foto/video + copy) per una campagna
+}
 
 enum PostStatus {
   DRAFT // in lavorazione in agenzia, il cliente non lo vede
@@ -212,16 +222,18 @@ enum PostStatus {
   SCHEDULED // programmato su Metricool (metricoolPostId valorizzato)
   FAILED // programmazione fallita dopo i retry (vedi lastError)
   CANCELLED // archiviato/annullato dall'agenzia
+  DELIVERED // contenuti interni (blog, ads): approvato e segnato come pubblicato/consegnato dall'agenzia
 }
 
 model Post {
-  id             String     @id @default(cuid())
+  id             String      @id @default(cuid())
   workspaceId    String
   clientId       String
   /// Titolo del post, es. "Carosello lancio collezione autunno". Non viene
   /// pubblicato ma il cliente lo vede (portale, email, assistente).
   title          String
-  status         PostStatus @default(DRAFT)
+  kind           ContentKind @default(SOCIAL_POST)
+  status         PostStatus  @default(DRAFT)
   /// Data/ora di pubblicazione desiderata (istante UTC). La conversione nel
   /// fuso del cliente avviene solo quando si chiama Metricool.
   publishAt      DateTime
@@ -229,7 +241,7 @@ model Post {
   networks       String[]
   /// Opzioni per rete nel formato Metricool, es.
   /// { "instagramData": { "type": "POST" }, "facebookData": { "type": "POST" } }
-  networkOptions Json       @default("{}")
+  networkOptions Json        @default("{}")
 
   currentVersionNumber Int @default(1)
 
@@ -248,14 +260,16 @@ model Post {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy      User?           @relation("PostCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  versions       PostVersion[]
-  comments       PostComment[]
-  events         PostEvent[]
-  reviewSessions ReviewSession[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy         User?              @relation("PostCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  versions          PostVersion[]
+  comments          PostComment[]
+  events            PostEvent[]
+  reviewSessions    ReviewSession[]
+  creativeDecisions CreativeDecision[]
 
+  @@index([workspaceId, kind, status])
   @@index([workspaceId, status])
   @@index([clientId, status])
   @@index([publishAt])
@@ -274,6 +288,11 @@ model PostVersion {
   media            Json     @default("[]")
   /// Copertina del video: istante in millisecondi (Metricool videoCoverMilliseconds).
   videoCoverMs     Int?
+  /// Contenuto specifico del tipo (Post.kind), validato da lib/content/<tipo>.ts:
+  /// BLOG_ARTICLE → BlogContent (corpo Markdown, SEO, immagine in evidenza…),
+  /// AD_CREATIVE → AdContent (campagna + varianti con media, copy, CTA, posizionamenti).
+  /// Per SOCIAL_POST resta {} (usa text/firstCommentText/media).
+  content          Json     @default("{}")
   /// Nota dell'agenzia su cosa è cambiato rispetto alla versione precedente.
   changeNote       String?
   /// Data, reti e opzioni per rete di questa versione:
@@ -316,6 +335,11 @@ model PostComment {
   /// presenti, indicano il punto sul fotogramma a quell'istante.
   timeSec    Float?
   timeEndSec Float?
+  /// Blog: ancoraggio a un passaggio del testo selezionato dal cliente
+  /// { quote, prefix, suffix, blockIndex } (vedi lib/content/blog.ts).
+  anchor     Json?
+  /// Ads: variante della creatività a cui si riferisce il commento.
+  variantId  String?
   resolvedAt DateTime?
   createdAt  DateTime          @default(now())
 
@@ -340,6 +364,8 @@ enum PostEventType {
   SCHEDULE_FAILED
   CANCELLED
   COMMENTED
+  DELIVERED
+  VARIANT_DECIDED
   ASSISTANT_SESSION_COMPLETED
 }
 
@@ -443,4 +469,33 @@ model ReviewMessage {
   session ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
+}
+
+// ─── Ads: decisione del cliente per singola variante ─────────────────────────
+
+enum CreativeVerdict {
+  APPROVED
+  REJECTED
+}
+
+/// Per i set di creatività ads il cliente decide variante per variante
+/// (es. approva A e C, scarta B). Legata alla versione: una nuova versione
+/// richiede nuove decisioni. L'approvazione del post richiede che ogni
+/// variante abbia una decisione e almeno una sia APPROVED.
+model CreativeDecision {
+  id            String          @id @default(cuid())
+  postId        String
+  versionNumber Int
+  variantId     String
+  reviewerId    String?
+  verdict       CreativeVerdict
+  note          String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  post     Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reviewer ClientReviewer? @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@unique([postId, versionNumber, variantId])
+  @@index([postId])
 }

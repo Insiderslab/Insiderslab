@@ -6,7 +6,7 @@
  * approval rules live in exactly one place. Keep this file pure: no I/O.
  */
 
-import type { PostStatus } from "@/app/generated/prisma/client";
+import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 
 // ─── Networks ────────────────────────────────────────────────────────────────
 
@@ -82,6 +82,9 @@ export interface MediaItem {
   durationSec?: number;
   /** Videos only: poster frame URL for lists and thumbnails. */
   posterUrl?: string;
+  /** Pixel size when known (uploads record it); used by the ads spec checks. */
+  width?: number;
+  height?: number;
 }
 
 /** Formats that are video-first: reviewing them means commenting on moments. */
@@ -137,6 +140,7 @@ export const STATUS_LABELS: Record<PostStatus, string> = {
   SCHEDULED: "Programmato",
   FAILED: "Errore",
   CANCELLED: "Annullato",
+  DELIVERED: "Consegnato",
 };
 
 /** Tone used by StatusBadge. */
@@ -149,6 +153,7 @@ export const STATUS_TONES: Record<PostStatus, "neutral" | "info" | "warning" | "
   SCHEDULED: "success",
   FAILED: "error",
   CANCELLED: "neutral",
+  DELIVERED: "success",
 };
 
 export type PostAction =
@@ -160,6 +165,7 @@ export type PostAction =
   | "schedule_succeeded"
   | "schedule_failed"
   | "retry" //             agency retries a FAILED schedule
+  | "deliver" //           internal kinds (blog, ads): agency marks an approved item as published/delivered
   | "cancel";
 
 /**
@@ -183,6 +189,8 @@ const TRANSITIONS: Record<PostAction, Partial<Record<PostStatus, PostStatus>>> =
   schedule_succeeded: { SCHEDULING: "SCHEDULED" },
   schedule_failed: { SCHEDULING: "FAILED" },
   retry: { FAILED: "SCHEDULING" },
+  // Only for kinds without an external integration (see KIND_CONFIG.internal).
+  deliver: { APPROVED: "DELIVERED" },
   cancel: {
     DRAFT: "CANCELLED",
     IN_REVIEW: "CANCELLED",
@@ -221,7 +229,60 @@ export const CLIENT_VISIBLE_STATUSES: PostStatus[] = [
   "SCHEDULING",
   "SCHEDULED",
   "FAILED",
+  "DELIVERED",
 ];
 
 /** Statuses where the client can still act. */
 export const CLIENT_ACTIONABLE_STATUSES: PostStatus[] = ["IN_REVIEW"];
+
+// ─── Content kinds (product variants) ────────────────────────────────────────
+
+
+export const CONTENT_KINDS: ContentKind[] = ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"];
+
+export const KIND_CONFIG: Record<
+  ContentKind,
+  {
+    /** Singular / plural labels used across the UI. */
+    label: string;
+    plural: string;
+    /** Label of the planned date field. */
+    dateLabel: string;
+    /** true = no external integration: after approval the agency marks it DELIVERED. */
+    internal: boolean;
+    /** Label of the "deliver" action and of the DELIVERED status for this kind. */
+    deliverLabel: string;
+    deliveredLabel: string;
+  }
+> = {
+  SOCIAL_POST: {
+    label: "Post social",
+    plural: "Post social",
+    dateLabel: "Pubblicazione",
+    internal: false,
+    deliverLabel: "",
+    deliveredLabel: "",
+  },
+  BLOG_ARTICLE: {
+    label: "Articolo",
+    plural: "Articoli di blog",
+    dateLabel: "Pubblicazione prevista",
+    internal: true,
+    deliverLabel: "Segna come pubblicato",
+    deliveredLabel: "Pubblicato",
+  },
+  AD_CREATIVE: {
+    label: "Creatività ads",
+    plural: "Creatività ads",
+    dateLabel: "Inizio campagna",
+    internal: true,
+    deliverLabel: "Segna come consegnato",
+    deliveredLabel: "Consegnato",
+  },
+};
+
+/** Status label that reads right for the kind (DELIVERED = "Pubblicato" for blog). */
+export function statusLabelFor(kind: ContentKind, status: PostStatus): string {
+  if (status === "DELIVERED") return KIND_CONFIG[kind].deliveredLabel || STATUS_LABELS.DELIVERED;
+  return STATUS_LABELS[status];
+}

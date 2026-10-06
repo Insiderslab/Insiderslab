@@ -26,6 +26,7 @@ export const PORTAL_STATUS_LABELS: Record<PostStatus, string> = {
   SCHEDULED: "Programmato",
   FAILED: "Approvato",
   CANCELLED: "Annullato",
+  DELIVERED: "Pubblicato",
 };
 
 export type PortalTone = "action" | "waiting" | "done";
