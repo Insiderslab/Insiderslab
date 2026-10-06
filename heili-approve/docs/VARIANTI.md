@@ -9,7 +9,9 @@ Richiesta del titolare: **stessa base, funzionalità diverse**, varianti **a ges
 | `ads` | Approve by Heili — Ads | `AD_CREATIVE` | interno: pacchetto ZIP delle varianti approvate + "Segna come consegnato" → `DELIVERED` |
 | `all` | tutto in un'app | tutti e tre | come sopra per tipo |
 
-Ogni variante si pubblica come istanza separata (stessa immagine Docker, `APP_VARIANT` diverso, database proprio), es. `blog.heili.cloud`, `ads.heili.cloud`. Le correzioni alla base valgono per tutte.
+> **Decisione del titolare (aggiornamento):** niente domini separati. In produzione gira **una sola istanza** su `approve.heili.cloud` con `APP_VARIANT=all`, organizzata **per cliente**: `Client.services` (migrazione `client_services`) dice quali tipi l'agenzia prepara per ogni cliente; si creano solo contenuti di un servizio attivo (`createPost` → «Il servizio «…» non è attivo per questo cliente»), i contenuti di un servizio tolto restano visibili. Il portale del cliente è unico, con le schede «Tutti · Post social · Articoli · Creatività». Le istanze a tipo singolo descritte sotto restano possibili ma sono facoltative (README, «Servizi per cliente»).
+
+In origine ogni variante si pubblicava come istanza separata (stessa immagine Docker, `APP_VARIANT` diverso, database proprio), es. `blog.heili.cloud`, `ads.heili.cloud`. Le correzioni alla base valgono per tutte.
 
 Leggi anche `docs/CONTRATTO.md` (stack, sicurezza, regole) — vale tutto, salvo dove questo file lo estende.
 

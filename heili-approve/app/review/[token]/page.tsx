@@ -1,28 +1,49 @@
 import Link from "next/link";
-import { formatPortalDate, groupPortalPosts, portalNoun, portalPath } from "@/components/portal/helpers";
+import {
+  formatPortalDate,
+  groupPortalPosts,
+  parsePortalKind,
+  portalKindTabs,
+  portalKinds,
+  portalNoun,
+  portalPath,
+} from "@/components/portal/helpers";
+import KindTabs from "@/components/portal/kind-tabs";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
+import { clientServices } from "@/lib/clients";
 import { listPostsForReviewer } from "@/lib/posts";
-import { enabledKinds } from "@/lib/variant";
+import { enabledKinds, kindCountPhrase } from "@/lib/variant";
 import { getPortalReviewer } from "./reviewer";
 
 type ReviewHomeProps = {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ tipo?: string | string[] }>;
 };
 
 /**
- * Portal home: what needs the client's review first, then what the agency
- * is reworking, then what is already approved / scheduled. Each card says
- * what it is (social post, article, ads creatives); the wording follows the
- * kinds in the list ("post", "articoli", "contenuti").
+ * Portal home: what needs the client's review first (every kind together),
+ * then what the agency is reworking, then what is already approved /
+ * scheduled. Each card says what it is (social post, article, ads
+ * creatives); the wording follows the kinds in the list ("post",
+ * "articoli", "contenuti").
+ *
+ * One portal per client: when it shows more than one kind (the client's
+ * services, plus kinds it already has items of), tabs "Tutti · Post social ·
+ * Articoli · Creatività" filter the list (`?tipo=social|blog|ads`), each with
+ * the number of items waiting for the client.
  */
-export default async function ReviewHomePage({ params }: ReviewHomeProps) {
-  const { token } = await params;
+export default async function ReviewHomePage({ params, searchParams }: ReviewHomeProps) {
+  const [{ token }, query] = await Promise.all([params, searchParams]);
   const reviewer = await getPortalReviewer(token);
   if (!reviewer) return null; // the layout shows the invalid-link page
 
   const timeZone = reviewer.client.timezone;
   const now = new Date();
-  const posts = await listPostsForReviewer({ id: reviewer.id, clientId: reviewer.clientId });
+  const allPosts = await listPostsForReviewer({ id: reviewer.id, clientId: reviewer.clientId });
+  const kindsShown = portalKinds(clientServices(reviewer.client), allPosts);
+  const selected = parsePortalKind(query.tipo, kindsShown);
+  const tabs = portalKindTabs(token, kindsShown, allPosts, tabsSelected(selected, kindsShown));
+  const posts = selected ? allPosts.filter((p) => p.kind === selected) : allPosts;
   const cards = posts.map(
     (p): PortalPostCardData & { publishAt: Date } => ({
       id: p.id,
@@ -42,9 +63,15 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
     })
   );
   const groups = groupPortalPosts(cards, now);
-  // An empty list speaks of what this instance handles.
-  const kinds = posts.length > 0 ? posts.map((p) => p.kind) : enabledKinds();
+  // An empty list speaks of the tab, else of what the client gets here.
+  const kinds =
+    posts.length > 0 ? posts.map((p) => p.kind) : selected ? [selected] : kindsShown.length > 0 ? kindsShown : enabledKinds();
   const noun = portalNoun(kinds);
+  const toReviewByKind = groups.toReview.reduce<Partial<Record<(typeof posts)[number]["kind"], number>>>(
+    (counts, post) => ({ ...counts, [post.kind]: (counts[post.kind] ?? 0) + 1 }),
+    {}
+  );
+  const mixedToReview = Object.keys(toReviewByKind).length > 1;
   const socialOnly = kinds.every((k) => k === "SOCIAL_POST");
   const adsOnly = kinds.every((k) => k === "AD_CREATIVE");
   const firstName = reviewer.name.trim().split(/\s+/)[0] || reviewer.name;
@@ -58,7 +85,9 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
             ? `Non ci sono ${noun.many} da approvare in questo momento. Ti scriveremo quando ce ne saranno di nuovi.`
             : groups.toReview.length === 1
               ? `C'è un ${noun.one} che aspetta la tua approvazione.`
-              : `Ci sono ${groups.toReview.length} ${noun.many} che aspettano la tua approvazione.`}
+              : mixedToReview
+                ? `Ci sono ${groups.toReview.length} ${noun.many} che aspettano la tua approvazione: ${kindCountPhrase(toReviewByKind, { adSets: true })}.`
+                : `Ci sono ${groups.toReview.length} ${noun.many} che aspettano la tua approvazione.`}
         </p>
         {groups.toReview.length > 0 && (
           <Link
@@ -69,6 +98,8 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
           </Link>
         )}
       </section>
+
+      {tabs.length > 0 && <KindTabs tabs={tabs} />}
 
       {groups.toReview.length > 0 && (
         <Section title="Da approvare" count={groups.toReview.length} highlight>
@@ -128,6 +159,11 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
       )}
     </main>
   );
+}
+
+/** The selected tab; "Tutti" when the portal shows a single kind. */
+function tabsSelected<K>(selected: K | null, kinds: readonly K[]): K | null {
+  return kinds.length > 1 ? selected : null;
 }
 
 function Section({

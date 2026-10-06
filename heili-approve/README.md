@@ -17,8 +17,10 @@ su Metricool**.
 - Facoltativo: un **assistente AI** aiuta il cliente indeciso ("mmh, non mi
   convince") a trasformare l'impressione in richieste precise per l'agenzia.
 
-La stessa base serve anche **articoli di blog** e **creatività ads**, gestiti
-internamente (senza Metricool): vedi [Varianti](#varianti).
+La stessa piattaforma gestisce anche **articoli di blog** e **creatività ads**
+(internamente, senza Metricool), **organizzati per cliente**: ogni cliente ha i
+suoi servizi e un solo portale con tutto quello che deve approvare. Vedi
+[Servizi per cliente](#servizi-per-cliente).
 
 Usa la stessa tecnologia di **DM by Heili**: Next.js 16, Prisma 7 e Postgres 16,
 NextAuth con link via email, BullMQ e Redis, Tailwind 4, Docker.
@@ -68,24 +70,48 @@ il post: si corregge e si usa "Riprova") e `Annullato`.
   inviata a Metricool come `videoCoverMilliseconds`. Cambiare la copertina crea
   una nuova versione.
 
-## Varianti
+## Servizi per cliente
 
-Un solo codice e una sola immagine Docker, tre prodotti. La variante si sceglie
-con la variabile **`APP_VARIANT`**, letta all'avvio (un valore sbagliato ferma
-il server con un messaggio chiaro):
+Una sola piattaforma su **`approve.heili.cloud`** (una sola istanza, un solo
+database) con **`APP_VARIANT=all`**: post social, articoli e creatività convivono
+e si organizzano **per cliente**.
 
-| `APP_VARIANT` | Prodotto | Cosa si approva | Dopo l'approvazione |
-|---|---|---|---|
-| `social` (default, anche se vuota) | Approve by Heili | post social (testo, foto, video, Reel) | il worker programma su **Metricool** |
-| `blog` | Approve by Heili — Blog | **articoli** in Markdown, con immagine in evidenza e campi SEO | export **Markdown** o **HTML per WordPress**, poi «Segna come pubblicato» |
-| `ads` | Approve by Heili — Ads | **set di creatività** con varianti A/B/C (foto o video, testi, CTA, URL, posizionamenti) | **pacchetto ZIP** delle varianti approvate, poi «Segna come consegnato» |
-| `all` | Approve by Heili | tutti e tre | come sopra, per tipo (comodo in sviluppo) |
+| Servizio | Cosa si approva | Dopo l'approvazione |
+|---|---|---|
+| **Post social** | testo, foto, video, Reel, per rete | il worker programma su **Metricool** |
+| **Articoli** | articoli in Markdown, con immagine in evidenza e campi SEO | export **Markdown** o **HTML per WordPress**, poi «Segna come pubblicato» |
+| **Creatività** | set di creatività con varianti A/B/C (foto o video, testi, CTA, URL, posizionamenti) | **pacchetto ZIP** delle varianti approvate, poi «Segna come consegnato» |
 
-La variante decide il menu (Post / Articoli / Creatività), il nome del prodotto,
-le email e cosa si può creare: un'istanza `blog` non mostra né accetta post
-social o creatività ads (i servizi rifiutano di crearli, i link rispondono 404) e
-**non mostra nulla di Metricool** (impostazioni, «Metricool collegato», brand del
-cliente). Le regole di versione e di approvazione sono le stesse del social.
+- **Servizi del cliente.** Nella scheda del cliente (nuovo o modifica) si
+  spuntano i **Servizi**: almeno uno. Brand Metricool, reti social e
+  programmazione automatica compaiono solo se è spuntato *Post social*. I
+  clienti già esistenti sono stati configurati dalla migrazione
+  `client_services`: i tipi di contenuto che avevano già, più *Post social* se
+  avevano reti o un brand Metricool (mai vuoto: *Post social*).
+- **Scheda cliente.** Un riquadro per servizio con i numeri *Da approvare*,
+  *Modifiche richieste*, *Approvati* e *Programmati* / *Pubblicati* /
+  *Consegnati* (ognuno apre l'elenco filtrato), più bozze ed errori di
+  programmazione, e il pulsante «Nuovo post» / «Nuovo articolo» / «Nuova
+  creatività».
+- **Nuovo contenuto.** Si sceglie prima il cliente, poi solo i suoi servizi (se
+  ne ha uno solo si va diretti all'editor). Con il tipo già scelto, l'elenco dei
+  clienti mostra solo quelli con quel servizio. Il server rifiuta comunque di
+  creare un tipo non attivo: «Il servizio «Articoli» non è attivo per questo
+  cliente».
+- **Togliere un servizio** non cancella nulla: i contenuti già creati restano
+  visibili e modificabili, per l'agenzia e per il cliente; non se ne possono
+  creare di nuovi.
+- **Portale del cliente unificato.** Un solo link per referente. In alto il nome
+  del cliente e una riga come «I tuoi contenuti da approvare: post social,
+  articoli e creatività». Se il cliente ha più di un servizio, i pulsanti
+  **Tutti · Post social · Articoli · Creatività** (solo i suoi) filtrano
+  l'elenco, ognuno con il numero di contenuti che aspettano la sua risposta;
+  la sezione *Da approvare* viene sempre prima, con tutti i tipi insieme. Le
+  pagine dei singoli contenuti sono quelle di ogni tipo.
+- **Email.** Una sola email per referente anche quando l'invio mescola i tipi:
+  «2 post social e 1 articolo da approvare per Le Querce».
+
+Le regole di versione e di approvazione sono le stesse per tutti i tipi.
 
 ### Blog
 
@@ -123,80 +149,50 @@ cliente). Le regole di versione e di approvazione sono le stesse del social.
   `copy.csv` (separatore `;` per Excel in italiano) e `README.txt` con tutte le
   decisioni e le note del cliente, anche delle varianti scartate.
 
-### Una istanza per variante sul VPS Heili
+### Istanze separate per tipo (facoltativo, avanzato)
 
-Ogni variante gira come **stack Docker separato** con lo stesso
-`docker-compose.prod.yml`: database, Redis, volume dei media e porta propri. Il
-file d'ambiente di ogni istanza sceglie nome dello stack, variante e porta:
+La variabile **`APP_VARIANT`** (letta all'avvio; un valore sbagliato ferma il
+server con un messaggio chiaro) limita un'istanza a un solo tipo:
 
-| Istanza | File d'ambiente | `COMPOSE_PROJECT_NAME` | `APP_VARIANT` | `APP_PORT` | Dominio |
-|---|---|---|---|---|---|
-| Social | `.env` | `heili-approve` | `social` | `3200` | `approve.heili.cloud` |
-| Blog | `.env.blog` | `approve-blog` | `blog` | `3201` | `blog.heili.cloud` |
-| Ads | `.env.ads` | `approve-ads` | `ads` | `3202` | `ads.heili.cloud` |
+| `APP_VARIANT` | Prodotto | Tipi |
+|---|---|---|
+| `all` | Approve by Heili | tutti e tre (**produzione**, default di `docker-compose.prod.yml`) |
+| `social` | Approve by Heili | solo post social (default del codice se la variabile manca) |
+| `blog` | Approve by Heili — Blog | solo articoli |
+| `ads` | Approve by Heili — Ads | solo creatività |
 
-1. **DNS:** record A per `blog.heili.cloud` e `ads.heili.cloud` verso l'IP del VPS.
-2. **File d'ambiente** (accanto al compose, mai nel repository):
+Un'istanza a tipo singolo non mostra né accetta gli altri tipi (i servizi
+rifiutano di crearli, i link rispondono 404) e, senza post social, non mostra
+nulla di Metricool. I servizi dei clienti restano salvati: su un'istanza `blog`
+la scheda cliente mostra solo il servizio *Articoli* e non tocca gli altri.
 
-   ```bash
-   cd /opt/heili-approve/heili-approve
-   cp .env.example .env.blog && nano .env.blog
-   ```
+Non serve per l'uso normale. Se un giorno servisse un'istanza a parte (es. un
+dominio dedicato solo agli articoli), lo stesso `docker-compose.prod.yml`
+avvia uno **stack Docker separato** (database, Redis, media e porta propri) con
+un suo file d'ambiente:
 
-   Oltre ai valori della sezione [Deploy](#deploy-sul-vps-hostinger-accanto-a-dm-by-heili),
-   in `.env.blog` metti:
+```
+# .env.blog
+COMPOSE_PROJECT_NAME=approve-blog
+APP_VARIANT=blog
+APP_PORT=3201
+ENV_FILE=.env.blog
+NEXTAUTH_URL=https://blog.heili.cloud
+PUBLIC_BASE_URL=https://blog.heili.cloud
+POSTGRES_PASSWORD=<nuova password>
+DATABASE_URL=postgresql://postgres:<nuova password>@postgres:5432/approve
+# + segreti nuovi (NEXTAUTH_SECRET, CRON_SECRET, ENCRYPTION_KEY), email…
+```
 
-   ```
-   COMPOSE_PROJECT_NAME=approve-blog
-   APP_VARIANT=blog
-   APP_PORT=3201
-   ENV_FILE=.env.blog
-   NEXTAUTH_URL=https://blog.heili.cloud
-   PUBLIC_BASE_URL=https://blog.heili.cloud
-   POSTGRES_PASSWORD=<nuova password>
-   DATABASE_URL=postgresql://postgres:<nuova password>@postgres:5432/approve
-   ```
+```bash
+docker compose --env-file .env.blog -f docker-compose.prod.yml up -d --build
+curl -s http://127.0.0.1:3201/api/health
+```
 
-   Segreti **nuovi** per ogni istanza (`NEXTAUTH_SECRET`, `CRON_SECRET`,
-   `ENCRYPTION_KEY`). `METRICOOL_FAKE` non serve. Per gli ads, lo stesso con
-   `approve-ads`, `ads`, `3202`, `.env.ads` e `ads.heili.cloud`.
-3. **Avvio** (l'immagine è la stessa, si costruisce una volta):
-
-   ```bash
-   docker compose --env-file .env.blog -f docker-compose.prod.yml up -d --build
-   docker compose --env-file .env.ads  -f docker-compose.prod.yml up -d
-   curl -s http://127.0.0.1:3201/api/health && curl -s http://127.0.0.1:3202/api/health
-   ```
-
-   Ogni comando su un'istanza va lanciato con il suo `--env-file` (anche `ps`,
-   `logs`, `exec`, `down`). L'istanza social resta com'è: senza `--env-file` il
-   compose usa `.env`, il progetto `heili-approve` e la porta 3200.
-4. **Caddy** (accanto al blocco di `approve.heili.cloud`), poi `caddy reload`:
-
-   ```caddy
-   blog.heili.cloud {
-   	encode zstd gzip
-   	request_body {
-   		max_size 320MB
-   	}
-   	reverse_proxy localhost:3201
-   }
-
-   ads.heili.cloud {
-   	encode zstd gzip
-   	# Video delle creatività fino a 300 MB
-   	request_body {
-   		max_size 320MB
-   	}
-   	reverse_proxy localhost:3202
-   }
-   ```
-
-5. **Backup** per istanza: `docker compose --env-file .env.blog -f docker-compose.prod.yml exec postgres pg_dump -U postgres approve > blog.sql`;
-   i media sono nel volume `approve-blog_uploads` (e `approve-ads_uploads`).
-
-Il worker gira in tutte le istanze per uniformità (`/api/health`); su blog e ads
-non ha job da eseguire. Il cron serve a tutte: invia i **solleciti** ai clienti.
+Ogni comando su quell'istanza va lanciato con il suo `--env-file` (anche `ps`,
+`logs`, `exec`, `down`); poi un blocco Caddy `blog.heili.cloud { reverse_proxy
+localhost:3201 }` e un record DNS. I dati di un'istanza separata non sono
+condivisi con `approve.heili.cloud`.
 
 ---
 
@@ -223,7 +219,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/approve
 REDIS_URL=redis://localhost:6379
 METRICOOL_FAKE=1
 UPLOAD_DIR=          # vuoto = ./uploads
-APP_VARIANT=all      # social (default) | blog | ads | all
+APP_VARIANT=all      # come in produzione (social | blog | ads solo per istanze separate)
 ```
 
 **Entrare senza email (solo sviluppo).**
@@ -237,7 +233,9 @@ APP_VARIANT=all      # social (default) | blog | ads | all
   social, **Cantina Valdobbia** per il blog (un articolo in revisione e uno con
   un commento su una frase e la versione 2 pronta da reinviare) e **Palestra
   Kinetik** per gli ads (un set Meta con tre varianti: foto 1:1, foto 4:5 e un
-  video 9:16 generato con `ffmpeg`). Per vederli tutti avvia l'app con
+  video 9:16 generato con `ffmpeg`), e **Agriturismo Le Querce** con **tutti e tre
+  i servizi** e un contenuto per tipo in revisione: il suo link mostra il
+  portale unificato con i pulsanti per tipo. Per vederli tutti avvia l'app con
   `APP_VARIANT=all`.
 - Il seed si può rilanciare senza problemi: non duplica nulla. Si rifiuta di
   girare con `NODE_ENV=production`.
@@ -259,13 +257,13 @@ del server.
 npx prisma generate
 npx tsc --noEmit --incremental false
 npm run lint
-npx vitest run            # 418 test unitari
+npx vitest run            # 443 test unitari
 npm run build
 ```
 
 ### Test end-to-end (Playwright)
 
-I test usano l'app vera, avviata con `APP_VARIANT=all`. Quattro file in `e2e/`:
+I test usano l'app vera, avviata con `APP_VARIANT=all`. Cinque file in `e2e/`:
 
 - `approval-flow.spec.mjs` — social (sotto);
 - `blog-flow.spec.mjs` — l'agenzia scrive un articolo (Markdown, immagine in
@@ -278,6 +276,13 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Quattro file in `e2e/`:
   invia: *Approvato*; l'agenzia vede decisioni e note, scarica lo ZIP (solo i file
   di A e C, `copy.csv`, `README.txt`) e lo segna come consegnato. Un secondo set
   con tutte le varianti scartate torna a *Modifiche richieste*;
+- `client-services.spec.mjs` — servizi per cliente: il portale di Agriturismo Le
+  Querce (tre servizi) a 390 px mostra i pulsanti «Tutti · Post social · Articoli ·
+  Creatività» con i conteggi e il filtro funziona; un cliente con un solo servizio
+  non ha i pulsanti; la scheda cliente ha un riquadro per servizio; «Nuovo
+  contenuto» propone solo i servizi del cliente; un nuovo cliente con il solo
+  servizio *Articoli* nasconde Metricool; il servizio rifiuta di creare un tipo che
+  il cliente non ha (`e2e/support/create-content.ts`);
 - `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
   (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
   «Articoli», che non ci sia Metricool e che una creatività ads non si possa
@@ -303,8 +308,8 @@ E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e -- blog-flow # uno solo
 
 - Playwright non è una dipendenza del progetto. `e2e/run.sh` usa l'installazione
   globale (`npm i -g playwright && npx playwright install chromium`).
-- Gli screenshot finiscono in `docs/screenshots/` (`blog-*.png` e `ads-*.png`
-  per le nuove varianti).
+- Gli screenshot finiscono in `docs/screenshots/` (`blog-*.png`, `ads-*.png`,
+  `portale-unificato-mobile.png` e `agenzia-cliente-servizi.png`).
 - Le immagini di prova `ad-square.png` (1:1) e `blog-featured.png` (16:9) sono
   generate con `ffmpeg -f lavfi -i testsrc2=s=1080x1080 -frames:v 1 ad-square.png`
   e `ffmpeg -f lavfi -i smptebars=s=1600x900 -frames:v 1 blog-featured.png`.
@@ -351,6 +356,9 @@ Nel `.env` di produzione:
 - `RESEND_API_KEY` (oppure `EMAIL_SERVER`) e `EMAIL_FROM`
 - `ALLOWED_EMAILS`: le email del team che possono entrare
 - `METRICOOL_FAKE=0`
+- `APP_VARIANT=all` (oppure nessuna riga `APP_VARIANT`: il compose usa già `all`).
+  Se il `.env` arriva da una versione precedente con `APP_VARIANT=social`,
+  cambialo in `all`, altrimenti l'istanza resta solo social
 - per l'assistente: `REVIEW_ASSISTANT_PROVIDER=openai`, `OPENAI_API_KEY`
   (la stessa chiave ChatGPT già usata sui server Heili) e `OPENAI_MODEL`
 
@@ -391,7 +399,9 @@ rete Docker e usa il nome del servizio.
 1. Apri `https://approve.heili.cloud/login` e inserisci la tua email.
 2. Al primo login viene creato il workspace: rinominalo e invita il team da **Impostazioni**.
 3. Collega Metricool (sezione successiva).
-4. Crea i clienti e aggiungi i referenti: ognuno riceve il suo link.
+4. Crea i clienti, scegli i loro **servizi** (post social, articoli, creatività)
+   e aggiungi i referenti: ognuno riceve un solo link con tutto quello che deve
+   approvare.
 
 ### Aggiornamenti e backup
 
@@ -505,6 +515,9 @@ rimandato a ogni turno, per un totale di circa **30–60 mila token in ingresso 
   ma il pannello mostra i messaggi tradotti.
 - **Metricool reale non provato.** I test usano solo il Metricool finto. Prima di
   andare in produzione, prova un post vero su un brand di test.
+- **Servizi e istanze separate.** Su un'istanza a tipo singolo (`blog`, `ads`) i
+  clienti senza quel servizio non compaiono nell'editor; il portale e la scheda
+  cliente mostrano solo i tipi dell'istanza.
 - **Blog e ads: messaggi d'errore generici.** Alcuni errori dei servizi dicono
   ancora «post» per ogni tipo (per esempio «Post non trovato»).
 - **Selezione del testo su un telefono vero** (blog) e riproduzione dei video

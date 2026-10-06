@@ -20,7 +20,7 @@ import { KIND_CONFIG, NETWORK_LABELS, formatTimeRange, isNetwork, type Network }
 import { renderEmail, sendEmail, type EmailListItem } from "@/lib/email";
 import { getBaseUrl } from "@/lib/env";
 import { getReviewUrl } from "@/lib/reviewers";
-import { productName } from "@/lib/variant";
+import { kindCountPhrase, productName } from "@/lib/variant";
 
 // ─── Formatting (pure) ───────────────────────────────────────────────────────
 
@@ -171,7 +171,8 @@ export interface ReviewEmailCopy {
 /**
  * Subject and wording of a review request / reminder for the posts of one
  * client, by kind: "Nuovo articolo da approvare: …", "3 creatività da
- * approvare: …", "4 nuovi contenuti da approvare per …" (pure).
+ * approvare: …", and for a batch of several kinds "2 post social e 1
+ * articolo da approvare per …" (pure).
  */
 export function reviewEmailCopy(
   posts: NotifiedPost[],
@@ -180,14 +181,26 @@ export function reviewEmailCopy(
   const kinds = new Set(posts.map(kindOf));
   const batch: BatchKind = kinds.size === 1 ? [...kinds][0] : "MIXED";
   const words = BATCH_WORDS[batch];
-  const units = batch === "MIXED" ? posts.length : posts.reduce((sum, post) => sum + unitsOf(post), 0);
-  const phrase = units === 1 ? words.one : words.many(units);
+  const units = posts.reduce((sum, post) => sum + unitsOf(post), 0);
+  // A mixed batch says what it holds: "2 post social e 1 articolo".
+  const mixedPhrase =
+    batch === "MIXED"
+      ? kindCountPhrase(
+          posts.reduce<Partial<Record<ContentKind, number>>>((counts, post) => {
+            const kind = kindOf(post);
+            counts[kind] = (counts[kind] ?? 0) + unitsOf(post);
+            return counts;
+          }, {})
+        )
+      : null;
+  const phrase = mixedPhrase ?? (units === 1 ? words.one : words.many(units));
   const single = posts.length === 1 ? posts[0] : null;
 
   let subject: string;
   if (params.kind === "request") {
     if (single && batch === "AD_CREATIVE" && units > 1) subject = `${words.many(units)} da approvare: ${single.title}`;
     else if (single) subject = `${words.newOne} da approvare: ${single.title}`;
+    else if (mixedPhrase) subject = `${mixedPhrase} da approvare per ${params.clientName}`;
     else subject = `${words.newMany(units)} da approvare per ${params.clientName}`;
   } else {
     subject = single

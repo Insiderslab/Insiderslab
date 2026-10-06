@@ -16,6 +16,13 @@
  *   IN_REVIEW. The video comes from ffmpeg (testsrc); without ffmpeg the e2e
  *   fixture video is used instead.
  *
+ * - a client with all three services ("Agriturismo Le Querce": social posts,
+ *   articles and ads creatives) with one item of each kind IN_REVIEW, to see
+ *   the unified portal with its tabs.
+ *
+ * Every client gets its services (Client.services): Aurora and Verde social
+ * posts, Cantina articles, Kinetik ads creatives, Le Querce all three.
+ *
  * Blog and ads content is created whatever APP_VARIANT says (the seed runs
  * as "all"): an instance only shows the kinds it handles.
  *
@@ -46,6 +53,7 @@ import { buildAnchor, htmlToTextWithBlocks, renderMarkdownSafe } from "@/lib/con
 import { addComment, createPost, requestChanges, submitForReview, updatePost } from "@/lib/posts";
 import { createReviewer, getReviewUrl } from "@/lib/reviewers";
 import { saveMediaStream } from "@/lib/storage";
+import { sortKinds } from "@/lib/variant";
 
 if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PRODUCTION !== "1") {
   console.error("Seed rifiutato: NODE_ENV=production (imposta SEED_ALLOW_PRODUCTION=1 se sei sicuro).");
@@ -226,6 +234,7 @@ async function seedClient(
     name: string;
     metricoolBlogId: string | null;
     networks: Network[];
+    services: ContentKind[];
     reviewer: { name: string; email: string };
   }
 ) {
@@ -239,8 +248,13 @@ async function seedClient(
         timezone: "Europe/Rome",
         networks: data.networks,
         autoSchedule: true,
+        services: data.services,
       },
     });
+  } else if (data.services.some((kind) => !client!.services.includes(kind))) {
+    // Re-run on an older database: add the demo services, keep the others.
+    const services = sortKinds([...client.services, ...data.services]);
+    client = await prisma.client.update({ where: { id: client.id }, data: { services } });
   }
 
   let reviewer = await prisma.clientReviewer.findUnique({
@@ -736,6 +750,135 @@ async function seedAds(workspaceId: string, userId: string, clientId: string) {
   return [{ client: "", title: post.title, status: post.status, id: post.id, kind: post.kind }];
 }
 
+// ─── Multi-service client: one item of each kind in review ───────────────────
+
+const QUERCE_BODY = `Ottobre in Val d'Orcia è il mese che preferiamo: le colline cambiano colore ogni settimana, le giornate sono ancora tiepide e in cucina arrivano funghi, castagne e il primo olio nuovo. Abbiamo preparato un piccolo programma per chi vuole passare un fine settimana con noi senza correre.
+
+## Sabato: vendemmia tardiva e cena in cantina
+
+La mattina si raccolgono gli ultimi grappoli di Sangiovese insieme a Paolo, che racconta come si sceglie il momento giusto. La sera ceniamo in cantina, a lume di candela, con i piatti della nonna e i vini dell'azienda.
+
+## Domenica: frantoio e passeggiata
+
+Dopo colazione andiamo al frantoio di Montepulciano per assaggiare l'olio appena spremuto sul pane abbrustolito. Il pomeriggio è libero: consigliamo il sentiero tra i cipressi che parte dal cancello dell'agriturismo e arriva fino alla pieve.
+
+Le camere per i fine settimana di ottobre sono poche: scriveteci per sapere le date ancora libere.`;
+
+async function seedMultiService(
+  workspaceId: string,
+  userId: string,
+  clientId: string,
+  reviewer: { id: string; clientId: string }
+) {
+  const actor = userActor(userId);
+  const result: Array<{ title: string; status: PostStatus; id: string; kind: ContentKind }> = [];
+  const push = (post: Post) => result.push({ title: post.title, status: post.status, id: post.id, kind: post.kind });
+
+  // ── Social post ──
+  push(
+    await seedPost(
+      workspaceId,
+      userId,
+      clientId,
+      reviewer,
+      {
+        title: "Fine settimana d'ottobre in Val d'Orcia",
+        target: "IN_REVIEW",
+        days: 3,
+        time: "11:00",
+        networks: ["instagram", "facebook"],
+        networkOptions: IG_FB_POST,
+        text:
+          "Colline che cambiano colore, castagne sul fuoco e olio nuovo sul pane. 🍂\n" +
+          "Ottobre alle Querce è così: vi aspettiamo per un fine settimana lento.\n\n#ValdOrcia #agriturismo #autunno",
+        images: [{ palette: "garden", alt: "Colline della Val d'Orcia in autunno viste dalla terrazza" }],
+      },
+      70
+    )
+  );
+
+  // ── Blog article ──
+  const articleTitle = "Un fine settimana d'autunno in Val d'Orcia";
+  let article = await findSeeded(workspaceId, clientId, "BLOG_ARTICLE", articleTitle);
+  if (!article) {
+    const featured = await savePng(workspaceId, "querce-autunno-copertina.png", "sunset", 73, "Cipressi e colline della Val d'Orcia al tramonto", 1600, 900);
+    article = await createPost(
+      workspaceId,
+      {
+        clientId,
+        kind: "BLOG_ARTICLE",
+        title: articleTitle,
+        publishAt: romeAt(6, "09:00"),
+        content: {
+          headline: "Un fine settimana d'autunno in Val d'Orcia: vendemmia, frantoio e cipressi",
+          slug: "fine-settimana-autunno-val-d-orcia",
+          bodyMarkdown: QUERCE_BODY,
+          excerpt: "Vendemmia tardiva, cena in cantina e olio nuovo al frantoio: il nostro programma per i fine settimana di ottobre.",
+          metaTitle: "Fine settimana d'autunno in Val d'Orcia | Le Querce",
+          metaDescription:
+            "Cosa fare in Val d'Orcia a ottobre: vendemmia tardiva, cena in cantina, olio nuovo al frantoio e una passeggiata tra i cipressi.",
+          focusKeyword: "Val d'Orcia",
+          featuredImage: featured,
+          categories: ["Stagioni"],
+          tags: ["autunno", "Val d'Orcia", "weekend"],
+          author: "Agriturismo Le Querce",
+        } satisfies BlogContent,
+      },
+      actor
+    );
+    await submitForReview([article.id], workspaceId, actor);
+    article = await refetch(article.id);
+  }
+  push(article);
+
+  // ── Ads creative set ──
+  const adsTitle = "Weekend d'autunno — offerta camere";
+  let ads = await findSeeded(workspaceId, clientId, "AD_CREATIVE", adsTitle);
+  if (!ads) {
+    const square = await savePng(workspaceId, "querce-ads-1x1.png", "garden", 76, "Camera con vista sulle colline", 1080, 1080);
+    const portrait = await savePng(workspaceId, "querce-ads-4x5.png", "sunset", 78, "Tavola apparecchiata in cantina", 1080, 1350);
+    const url = "https://www.agriturismolequerce.it/autunno";
+    const content: AdContent = {
+      campaign: {
+        name: "Weekend d'autunno",
+        platform: "meta",
+        objective: "Traffico al sito",
+        budgetNote: "€15/giorno per 14 giorni",
+        audienceNote: "30–60 anni, Toscana, Lazio ed Emilia-Romagna, interessi viaggi ed enogastronomia",
+      },
+      variants: [
+        {
+          id: "A",
+          name: "Variante A — Camera",
+          media: [square],
+          primaryText: "Ottobre in Val d'Orcia: colline dorate, olio nuovo e silenzio. Due notti con cena in cantina.",
+          headline: "Il tuo weekend d'autunno",
+          description: "Cena in cantina inclusa",
+          cta: "Prenota ora",
+          destinationUrl: url,
+          placements: ["meta_feed"],
+        },
+        {
+          id: "B",
+          name: "Variante B — Cena",
+          media: [portrait],
+          primaryText: "Una cena a lume di candela tra le botti, i piatti della nonna e i nostri vini. Solo a ottobre.",
+          headline: "Cena in cantina",
+          description: "Weekend di ottobre",
+          cta: "Scopri di più",
+          destinationUrl: url,
+          placements: ["meta_feed"],
+        },
+      ],
+    };
+    ads = await createPost(workspaceId, { clientId, kind: "AD_CREATIVE", title: adsTitle, publishAt: romeAt(8, "08:00"), content }, actor);
+    await submitForReview([ads.id], workspaceId, actor);
+    ads = await refetch(ads.id);
+  }
+  push(ads);
+  return result;
+}
+
 async function main() {
   const { user, workspace } = await seedOwner();
 
@@ -743,12 +886,14 @@ async function main() {
     name: "Caffè Aurora",
     metricoolBlogId: "123456",
     networks: ["instagram", "facebook", "linkedin"],
+    services: ["SOCIAL_POST"],
     reviewer: { name: "Giulia Bianchi", email: "giulia@caffeaurora.it" },
   });
   const verde = await seedClient(workspace.id, {
     name: "Studio Verde Architetti",
     metricoolBlogId: null,
     networks: ["instagram", "linkedin"],
+    services: ["SOCIAL_POST"],
     reviewer: { name: "Marco Rossi", email: "marco@studioverde.it" },
   });
 
@@ -767,12 +912,14 @@ async function main() {
     name: "Cantina Valdobbia",
     metricoolBlogId: null,
     networks: [],
+    services: ["BLOG_ARTICLE"],
     reviewer: { name: "Elena Valdobbia", email: "elena@cantinavaldobbia.it" },
   });
   const kinetik = await seedClient(workspace.id, {
     name: "Palestra Kinetik",
     metricoolBlogId: null,
     networks: [],
+    services: ["AD_CREATIVE"],
     reviewer: { name: "Davide Conti", email: "davide@palestrakinetik.it" },
   });
   const articles = (await seedBlog(workspace.id, user.id, cantina.client.id, cantina.reviewer)).map((p) => ({
@@ -780,6 +927,16 @@ async function main() {
     client: cantina.client.name,
   }));
   const adSets = (await seedAds(workspace.id, user.id, kinetik.client.id)).map((p) => ({ ...p, client: kinetik.client.name }));
+
+  // One client, three services: the unified portal.
+  const querce = await seedClient(workspace.id, {
+    name: "Agriturismo Le Querce",
+    metricoolBlogId: null,
+    networks: ["instagram", "facebook"],
+    services: ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"],
+    reviewer: { name: "Chiara Fabbri", email: "chiara@agriturismolequerce.it" },
+  });
+  const mixed = await seedMultiService(workspace.id, user.id, querce.client.id, querce.reviewer);
 
   const baseUrl = (process.env.PUBLIC_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
   console.log("");
@@ -792,6 +949,9 @@ async function main() {
   console.log(`Link revisione ${verde.client.name} (${verde.reviewer.name}): ${verde.reviewUrl}`);
   console.log(`Link revisione ${cantina.client.name} (${cantina.reviewer.name}): ${cantina.reviewUrl}`);
   console.log(`Link revisione ${kinetik.client.name} (${kinetik.reviewer.name}): ${kinetik.reviewUrl}`);
+  console.log(
+    `Link revisione ${querce.client.name} (${querce.reviewer.name}, portale unificato: post social, articoli e creatività): ${querce.reviewUrl}`
+  );
   console.log("Post social:");
   for (const post of posts) console.log(`  [${post.status}] ${post.client} — ${post.title}`);
   console.log("Articoli (blog):");
@@ -806,6 +966,8 @@ async function main() {
     console.log(`      cliente: ${kinetik.reviewUrl}/posts/${post.id}`);
     console.log(`      agenzia: ${baseUrl}/posts/${post.id}`);
   }
+  console.log(`Tre servizi (${querce.client.name}):`);
+  for (const post of mixed) console.log(`  [${post.status}] ${post.kind} — ${post.title}`);
   console.log(
     "SEED_JSON " +
       JSON.stringify({
@@ -825,6 +987,10 @@ async function main() {
         ads: {
           client: { id: kinetik.client.id, name: kinetik.client.name, reviewerId: kinetik.reviewer.id, reviewUrl: kinetik.reviewUrl },
           posts: adSets,
+        },
+        multi: {
+          client: { id: querce.client.id, name: querce.client.name, reviewerId: querce.reviewer.id, reviewUrl: querce.reviewUrl },
+          posts: mixed,
         },
       })
   );

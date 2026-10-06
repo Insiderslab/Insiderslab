@@ -10,6 +10,11 @@
  * Pages never show a kind that is not enabled, services refuse to create one,
  * and Metricool UI only appears when SOCIAL_POST is enabled.
  *
+ * Production runs ONE instance with APP_VARIANT=all (approve.heili.cloud):
+ * what each client gets is decided per client by its services
+ * (Client.services, lib/clients.ts). Single-kind variants remain possible
+ * for separate instances (optional, see README "Servizi per cliente").
+ *
  * Everything here except getAppVariant() is pure and safe to import from
  * client components: the server reads the variant once per render and passes
  * it down as a prop (process.env.APP_VARIANT does not exist in the browser).
@@ -259,4 +264,30 @@ export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
     { label: "Clienti", href: "/clients", kind: null },
     { label: "Impostazioni", href: "/settings", kind: null },
   ];
+}
+
+// ─── Counting mixed content ──────────────────────────────────────────────────
+
+const COUNT_WORDS: Record<ContentKind, [one: string, many: string]> = {
+  SOCIAL_POST: ["post social", "post social"],
+  BLOG_ARTICLE: ["articolo", "articoli"],
+  AD_CREATIVE: ["creatività", "creatività"],
+};
+
+/**
+ * "2 post social e 1 articolo", "1 articolo e 3 creatività" (menu order,
+ * zero counts skipped). Ads count variants ("3 creatività") unless
+ * `adSets` is set: then they count sets ("1 set di creatività").
+ */
+export function kindCountPhrase(
+  counts: Partial<Record<ContentKind, number>>,
+  { adSets = false }: { adSets?: boolean } = {}
+): string {
+  return joinItalian(
+    KIND_ORDER.filter((kind) => (counts[kind] ?? 0) > 0).map((kind) => {
+      const n = counts[kind]!;
+      if (kind === "AD_CREATIVE" && adSets) return `${n} set di creatività`;
+      return `${n} ${COUNT_WORDS[kind][n === 1 ? 0 : 1]}`;
+    })
+  );
 }

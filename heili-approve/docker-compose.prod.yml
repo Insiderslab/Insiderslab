@@ -1,25 +1,26 @@
 # Approve by Heili — produzione (VPS Hostinger, accanto a DM by Heili)
 #
-# Un solo file per le tre varianti: ogni istanza è uno "stack" Compose
-# separato, con il suo progetto, il suo database, il suo Redis, il suo volume
-# dei media e la sua porta. Cambia solo il file d'ambiente:
+# UNA sola istanza su approve.heili.cloud con APP_VARIANT=all: post social,
+# articoli e creatività nella stessa app, organizzati PER CLIENTE (i "servizi"
+# di ogni cliente si scelgono nella sua scheda). Avvio:
 #
-#   docker compose --env-file .env        -f docker-compose.prod.yml up -d --build   # social  → :3200
-#   docker compose --env-file .env.blog   -f docker-compose.prod.yml up -d --build   # blog    → :3201
-#   docker compose --env-file .env.ads    -f docker-compose.prod.yml up -d --build   # ads     → :3202
+#   docker compose -f docker-compose.prod.yml up -d --build      # → 127.0.0.1:3200
 #
-# Ogni file d'ambiente imposta (vedi .env.example):
-#   COMPOSE_PROJECT_NAME  nome dello stack: heili-approve | approve-blog | approve-ads.
-#                         I volumi prendono questo prefisso (approve-blog_pgdata…),
-#                         quindi gli stack non condividono dati.
-#   APP_VARIANT           social | blog | ads (| all)
-#   APP_PORT              porta su 127.0.0.1 a cui Caddy inoltra: 3200 | 3201 | 3202
-#   ENV_FILE              lo stesso file, passato anche ai container (.env.blog…)
-# più le variabili dell'app (NEXTAUTH_URL, segreti, DATABASE_URL…). Senza
-# queste variabili il file si comporta come prima: stack "heili-approve",
-# variante social, porta 3200, file .env (l'istanza approve.heili.cloud).
+# Le variabili sotto hanno già il valore giusto per questa istanza, quindi il
+# file d'ambiente (.env) deve contenere solo le variabili dell'app
+# (NEXTAUTH_URL, segreti, DATABASE_URL…). POSTGRES_PASSWORD deve coincidere
+# con la password dentro DATABASE_URL.
 #
-# POSTGRES_PASSWORD deve coincidere con la password dentro DATABASE_URL.
+# Avanzato (facoltativo): lo stesso file può avviare istanze separate con una
+# sola variante (es. un'istanza solo blog su un altro dominio). Ogni istanza
+# è uno stack Compose a sé, con il suo file d'ambiente passato con
+# --env-file, che imposta:
+#   COMPOSE_PROJECT_NAME  nome dello stack (default heili-approve); i volumi
+#                         prendono questo prefisso, gli stack non condividono dati
+#   APP_VARIANT           all (default) | social | blog | ads
+#   APP_PORT              porta su 127.0.0.1 per Caddy (default 3200)
+#   ENV_FILE              lo stesso file, passato anche ai container (default .env)
+# Vedi README, "Servizi per cliente" → "Istanze separate per tipo".
 
 name: ${COMPOSE_PROJECT_NAME:-heili-approve}
 
@@ -27,7 +28,7 @@ x-app-env: &app-env
   env_file: ${ENV_FILE:-.env}
   environment:
     UPLOAD_DIR: /data/uploads
-    APP_VARIANT: ${APP_VARIANT:-social}
+    APP_VARIANT: ${APP_VARIANT:-all}
 
 services:
   postgres:
@@ -87,15 +88,17 @@ services:
     image: heili-approve:latest
     restart: unless-stopped
     <<: *app-env
-    # Social: sends approved posts to Metricool. Blog/ads never queue jobs, so
-    # there it only reports its heartbeat (kept for a uniform /api/health).
+    # Sends approved social posts to Metricool (blog and ads never queue jobs;
+    # a blog- or ads-only instance just reports its heartbeat for /api/health).
     command: ["npm", "run", "worker"]
     volumes:
       - uploads:/data/uploads
+    # service_started, not service_healthy: /api/health includes the worker
+    # heartbeat, so waiting for a healthy web would deadlock.
     depends_on:
       # Started after web, so the migrations have run.
       web:
-        condition: service_healthy
+        condition: service_started
 
   cron:
     build: .
@@ -106,10 +109,10 @@ services:
     environment:
       # The web service of THIS stack (each project has its own network).
       CRON_BASE_URL: http://web:3000
-      APP_VARIANT: ${APP_VARIANT:-social}
+      APP_VARIANT: ${APP_VARIANT:-all}
     depends_on:
       web:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   pgdata:

@@ -2,8 +2,9 @@
 
 /**
  * Header of the client portal: the client's logo and name first (it is their
- * space), the product name ("Approve by Heili — Blog"…) small on the side.
- * No agency navigation.
+ * space) with a short line on what they find here ("I tuoi contenuti da
+ * approvare: post social, articoli e creatività"), the product name small on
+ * the side. No agency navigation.
  */
 
 import Link from "next/link";
@@ -14,11 +15,14 @@ export default function PortalHeader({
   logoUrl,
   homeHref,
   productName = "Approve by Heili",
+  tagline,
 }: {
   clientName: string;
   logoUrl: string | null;
   homeHref: string;
   productName?: string;
+  /** What the client finds here, from their services (portalTagline). */
+  tagline?: string;
 }) {
   return (
     <header className="border-b border-border bg-background">
@@ -39,7 +43,10 @@ export default function PortalHeader({
               {initials(clientName)}
             </span>
           )}
-          <span className="truncate text-base font-semibold">{clientName}</span>
+          <span className="min-w-0">
+            <span className="block truncate text-base font-semibold">{clientName}</span>
+            {tagline && <span className="block text-xs leading-snug text-muted">{tagline}</span>}
+          </span>
         </Link>
         <span className="shrink-0 text-[11px] text-muted">{productName}</span>
       </div>

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import InvalidLink from "@/components/portal/invalid-link";
 import PortalHeader from "@/components/portal/portal-header";
-import { portalPath, portalTitle } from "@/components/portal/helpers";
+import { portalPath, portalTagline, portalTitle } from "@/components/portal/helpers";
+import { clientServices } from "@/lib/clients";
 import { enabledKinds, productName } from "@/lib/variant";
 import { getPortalReviewer } from "./reviewer";
 
@@ -22,8 +23,14 @@ export async function generateMetadata({ params }: Pick<ReviewLayoutProps, "para
   const reviewer = await getPortalReviewer(token);
   return {
     ...PRIVATE_METADATA,
-    title: reviewer ? `${portalTitle(enabledKinds())} · ${reviewer.client.name}` : `Link non valido · ${productName()}`,
+    title: reviewer ? `${portalTitle(portalServices(reviewer.client))} · ${reviewer.client.name}` : `Link non valido · ${productName()}`,
   };
+}
+
+/** The client's services on this instance (the instance's kinds when none). */
+function portalServices(client: Parameters<typeof clientServices>[0]) {
+  const services = clientServices(client);
+  return services.length > 0 ? services : enabledKinds();
 }
 
 /**
@@ -43,6 +50,7 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
         logoUrl={reviewer.client.logoUrl}
         homeHref={portalPath(token)}
         productName={productName()}
+        tagline={portalTagline(portalServices(reviewer.client))}
       />
       <div className="mx-auto w-full max-w-3xl flex-1 px-4 pb-10 pt-4">{children}</div>
     </div>
