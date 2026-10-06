@@ -53,3 +53,22 @@
 - Clientify: nessun canale WhatsApp API collegato, automazione "Nuovo Lead" non usa WhatsApp. Rischio doppie risposte: basso.
 - Nota sul numero: +1 555 779 6249 è un numero fornito da Meta (prefisso 555, non raggiungibile con chiamate o SMS). Va bene per il test; per un cliente serve un numero reale suo.
 - A1 in corso: utente di sistema `WhatsappBot` (ID 61572964465934) senza risorse; prossimo clic = assegna app + WABA, poi token "Mai" con i due permessi.
+
+### 6/10 (sessione Chrome, resoconto riportato da Stefano; registro scritto dalla sessione cloud)
+**Fatto**
+- A1 risorse: a `WhatsappBot` (ID 61572964465934) assegnati con accesso completo l'app 609974691965875 e il WABA 1027272492350148. **Assegnate per errore anche:** Pixel Insiderlabs (come Pixel e come Dataset), i 2 WABA "Insiderslab" senza numero/offline, il Test WhatsApp Business Account. Da rimuovere (minimo privilegio). `Openclaw` resta senza risorse.
+- A1 token permanente: generazione avviata (permessi messaging + management; `whatsapp_business_manage_events` aggiunto da Meta) ma **bloccata dalla verifica email**: Meta chiede un codice a stefano@insiderslab.it che non arriva. Controllo dalla sessione cloud su entrambe le caselle (inbox, spam, cestino, ultimi 2 giorni): **nessun codice ricevuto** né su stefano@insiderslab.it né su stefano.finoti@gmail.com. I codici precedenti (23/9, 27/9) erano arrivati da `notification@email.meta.com` su stefano@insiderslab.it, quindi la consegna in sé funziona: probabile che la verifica stia andando a un indirizzo diverso impostato come principale sull'account Meta, oppure al profilo personale "Stefano Finoti Araya". Da controllare in Centro gestione account → Dati personali → Contatti.
+- Ripiego: token **temporaneo (24 h)** da app → WhatsApp → Passaggio 1 → "Genera token". Cliccato, campo ancora "Not generated yet" (popup di consenso probabilmente fuori vista). La pagina mostra il numero di prova Meta (+1 555 615-0255, Phone Number ID 1249087948277495, WABA 2153322095219505): **non è il nostro**. Nel CRM vanno usati WABA 1027272492350148 e Phone Number ID 671133866076775; il token temporaneo è dell'utente e vale su tutti i WABA che l'app vede, da confermare con "Prova connessione" (B2).
+
+**Non fatto**
+- n8n: login non riuscito; workflow 942f3c9d… non verificato; token di verifica non annotato. **Decisione proposta: procedere senza** (vedi registro del 5/10: nessuna traccia di uso; il numero è di test). Rollback verso n8n = token nuovo in entrambi i posti.
+- A2 pagamento: **rinviabile**. Dal 1/10 ogni numero ha 1.000 messaggi di servizio al mese gratis anche senza metodo di pagamento (email Meta del 29/9); i messaggi in entrata e le risposte entro 24 h del test non lo richiedono. Serve solo per i template.
+- A3, A4, A5, B, C: da fare.
+
+**Effetti del token temporaneo**
+- Dopo 24 h il CRM segna la connessione "da riconnettere" e mette in pausa gli invii. Va sostituito con il token permanente di `WhatsappBot` appena la verifica email di Meta funziona (3 clic: le risorse sono già assegnate).
+
+**Azioni per Stefano**
+1. Meta → Centro gestione account → Password e sicurezza: aggiungere app di autenticazione o telefono; verificare quale email è "principale" (è lì che va il codice). Poi rigenerare il token permanente.
+2. Togliere a `WhatsappBot` le 5 risorse in più.
+3. Decidere su n8n: verificare con il login oppure procedere senza (consigliato).
