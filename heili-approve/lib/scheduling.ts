@@ -219,7 +219,8 @@ export async function requestScheduling(
       select: { id: true, status: true, currentVersionNumber: true, kind: true },
     });
     if (!post) throw new NotFoundError("Post non trovato");
-    if (KIND_CONFIG[post.kind].internal) {
+    // `?.`: rows read without `kind` (older mocks, partial selects) count as social.
+    if (KIND_CONFIG[post.kind]?.internal) {
       throw new ValidationError("Articoli e creatività ads non si programmano: esportali e segnali come consegnati");
     }
 
@@ -396,7 +397,7 @@ export async function processSchedulePost(job: ScheduleJobLike): Promise<Process
   });
 
   if (!post) return { outcome: "skipped", reason: "not_found" };
-  if (KIND_CONFIG[post.kind].internal) return { outcome: "skipped", reason: "not_scheduling" };
+  if (KIND_CONFIG[post.kind]?.internal) return { outcome: "skipped", reason: "not_scheduling" };
   // The client approved exactly this version; anything else is a stale job.
   if (post.currentVersionNumber !== versionNumber) return { outcome: "skipped", reason: "stale_version" };
   if (post.status === "SCHEDULED") return { outcome: "skipped", reason: "already_scheduled" };

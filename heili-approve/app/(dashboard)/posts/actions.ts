@@ -1,8 +1,10 @@
 "use server";
 
 /**
- * Server actions for the agency's posts: create / edit, submit for review
- * (single and bulk), schedule now / retry on Metricool, cancel, comments.
+ * Server actions for the agency's content: create / edit (social posts, blog
+ * articles, ad sets), submit for review (single and bulk), schedule now /
+ * retry on Metricool (social), mark as published / delivered (blog, ads),
+ * cancel, comments.
  *
  * Actions are plain POST endpoints, so every one re-reads the workspace from
  * the session and hands it to the lib/ services, which match each id against
@@ -12,15 +14,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { ActionResult, CommentInput, PostFormInput } from "@/components/posts/types";
+import type { ContentKind } from "@/app/generated/prisma/client";
+import type { ActionResult, CommentInput, ContentFormInput, PostFormInput } from "@/components/posts/types";
 import { userActor } from "@/lib/actor";
 import { prisma } from "@/lib/db/client";
-import type { MediaItem, Network } from "@/lib/domain";
+import { KIND_CONFIG, type MediaItem, type Network } from "@/lib/domain";
 import { isDomainError, parseOrThrow, publicErrorMessage } from "@/lib/errors";
 import {
   addComment,
+  blogAnchorSchema,
   cancelPost,
   createPost,
+  deliverPost,
   resolveComment,
   submitForReview,
   updatePost,
@@ -45,6 +50,16 @@ const postFormSchema = z.object({
   changeNote: z.string().max(1000).optional(),
 });
 
+/** Blog / ads: the content itself is validated by lib/content (parseBlogContent / parseAdContent). */
+const contentFormSchema = z.object({
+  kind: z.enum(["BLOG_ARTICLE", "AD_CREATIVE"], { error: "Tipo di contenuto non valido" }).optional(),
+  clientId: idSchema,
+  title: z.string().max(500),
+  publishAt: z.iso.datetime({ error: "Data non valida" }),
+  content: z.unknown(),
+  changeNote: z.string().max(1000).optional(),
+});
+
 const submitSchema = z.object({
   postIds: z.array(idSchema).min(1, "Seleziona almeno un post").max(200),
   reviewDueAt: z.iso.datetime({ error: "Scadenza non valida" }).nullable().optional(),
@@ -59,6 +74,8 @@ const commentSchema = z.object({
   pinY: z.number().min(0).max(1).optional(),
   timeSec: z.number().min(0).optional(),
   timeEndSec: z.number().min(0).optional(),
+  anchor: blogAnchorSchema.optional(),
+  variantId: z.string().trim().min(1).max(64).optional(),
 });
 
 const resolveSchema = z.object({
@@ -67,6 +84,21 @@ const resolveSchema = z.object({
 });
 
 const SESSION_EXPIRED = "Sessione scaduta: accedi di nuovo.";
+
+/** "Post", "Articolo", "Set di creatività" — subjects of the confirmation messages. */
+const KIND_SUBJECT: Record<ContentKind, { one: string; many: string }> = {
+  SOCIAL_POST: { one: "Post", many: "post" },
+  BLOG_ARTICLE: { one: "Articolo", many: "articoli" },
+  AD_CREATIVE: { one: "Set di creatività", many: "set di creatività" },
+};
+
+/** "Post inviato in revisione." / "3 articoli inviati in revisione." / "4 contenuti…" when mixed. */
+function sentMessage(count: number, kinds: ContentKind[]): string {
+  const unique = [...new Set(kinds)];
+  const subject = unique.length > 1 ? { one: "Contenuto", many: "contenuti" } : KIND_SUBJECT[unique[0] ?? "SOCIAL_POST"];
+  return count === 1 ? `${subject.one} inviato in revisione.` : `${count} ${subject.many} inviati in revisione.`;
+}
+
 
 /** Runs `fn` for the signed-in workspace, mapping domain errors to messages. */
 async function withWorkspace<T>(
@@ -146,6 +178,90 @@ export async function updatePostAction(
   });
 }
 
+// ─── Blog articles and ad sets ───────────────────────────────────────────────
+
+/** Creates a blog article or an ad set (draft, version 1). */
+export async function createContentAction(input: ContentFormInput): Promise<ActionResult<{ id: string }>> {
+  return withWorkspace(async ({ workspaceId, userId }) => {
+    const data = parseOrThrow(contentFormSchema, input);
+    if (!data.kind) return { ok: false, error: "Scegli il tipo di contenuto." };
+    const post = await createPost(
+      workspaceId,
+      {
+        kind: data.kind,
+        clientId: data.clientId,
+        title: data.title,
+        publishAt: new Date(data.publishAt),
+        content: data.content,
+      },
+      userActor(userId)
+    );
+    revalidatePosts();
+    return { ok: true, data: { id: post.id }, message: "Bozza salvata." };
+  });
+}
+
+/**
+ * Saves an article / ad set. Once the client has been sent a version, a
+ * content change creates a new version (lib/posts) and the item goes back to
+ * draft until it is sent again.
+ */
+export async function updateContentAction(
+  postId: string,
+  input: ContentFormInput
+): Promise<ActionResult<{ status: string; versionNumber: number }>> {
+  return withWorkspace(async ({ workspaceId, userId }) => {
+    const id = parseOrThrow(idSchema, postId);
+    const data = parseOrThrow(contentFormSchema, input);
+    const before = await prisma.post.findFirst({
+      where: { id, workspaceId },
+      select: { status: true, currentVersionNumber: true, kind: true },
+    });
+    const post = await updatePost(
+      id,
+      workspaceId,
+      {
+        clientId: data.clientId,
+        title: data.title,
+        publishAt: new Date(data.publishAt),
+        content: data.content,
+        ...(data.changeNote !== undefined ? { changeNote: data.changeNote } : {}),
+      },
+      userActor(userId)
+    );
+    revalidatePosts([id]);
+
+    let message = "Modifiche salvate.";
+    if (before && post.currentVersionNumber > before.currentVersionNumber) {
+      message = `Salvato come versione ${post.currentVersionNumber}.`;
+    }
+    if (before && before.status !== post.status && post.status === "DRAFT") {
+      message +=
+        before.kind === "BLOG_ARTICLE"
+          ? " L'articolo è tornato in bozza: invialo di nuovo in revisione."
+          : " Il set è tornato in bozza: invialo di nuovo in revisione.";
+    }
+    return { ok: true, data: { status: post.status, versionNumber: post.currentVersionNumber }, message };
+  });
+}
+
+/** Blog: "Segna come pubblicato"; ads: "Segna come consegnato" (APPROVED → DELIVERED). */
+export async function deliverPostAction(postId: string): Promise<ActionResult<{ status: string }>> {
+  return withWorkspace(async ({ workspaceId, userId }) => {
+    const id = parseOrThrow(idSchema, postId);
+    const post = await deliverPost(id, workspaceId, userActor(userId));
+    revalidatePosts([id]);
+    return {
+      ok: true,
+      data: { status: post.status },
+      message:
+        post.kind === "BLOG_ARTICLE"
+          ? "Articolo segnato come pubblicato."
+          : `Set di creatività segnato come ${KIND_CONFIG[post.kind].deliveredLabel.toLowerCase()}.`,
+    };
+  });
+}
+
 // ─── Status changes ──────────────────────────────────────────────────────────
 
 /** Sends one or more posts to the client (one email per reviewer). */
@@ -164,7 +280,14 @@ export async function submitForReviewAction(
     revalidatePosts(result.submitted);
 
     const count = result.submitted.length;
-    let message = count === 1 ? "Post inviato in revisione." : `${count} post inviati in revisione.`;
+    const kinds = await prisma.post.findMany({
+      where: { id: { in: result.submitted }, workspaceId },
+      select: { kind: true },
+    });
+    let message = sentMessage(
+      count,
+      kinds.map((p) => p.kind)
+    );
     if (result.clientsWithoutReviewers.length > 0) {
       message += ` Attenzione: ${result.clientsWithoutReviewers.join(", ")} non ha referenti attivi, quindi nessuno riceverà l'email. Aggiungili nella scheda del cliente.`;
     }
@@ -204,15 +327,23 @@ export async function schedulePostAction(postId: string): Promise<ActionResult<{
 export async function cancelPostAction(postId: string): Promise<ActionResult> {
   return withWorkspace(async ({ workspaceId, userId }) => {
     const id = parseOrThrow(idSchema, postId);
-    await cancelPost(id, workspaceId, userActor(userId));
+    const post = await cancelPost(id, workspaceId, userActor(userId));
     revalidatePosts([id]);
-    return { ok: true, data: undefined, message: "Post annullato: il cliente non lo vede più." };
+    const subject = KIND_SUBJECT[post.kind].one;
+    return {
+      ok: true,
+      data: undefined,
+      message: `${subject} annullato: il cliente non lo vede più.`,
+    };
   });
 }
 
 // ─── Comments ────────────────────────────────────────────────────────────────
 
-/** Agency comment or reply (a reply copies the anchor of the comment it answers). */
+/**
+ * Agency comment or reply (a reply copies the anchor of the comment it
+ * answers: pin / moment, the passage of an article, the variant of a set).
+ */
 export async function addCommentAction(input: CommentInput): Promise<ActionResult<{ id: string }>> {
   return withWorkspace(async ({ workspaceId, userId }) => {
     const data = parseOrThrow(commentSchema, input);

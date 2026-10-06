@@ -6,6 +6,7 @@
 
 import type { ReviewMessage, ReviewSession } from "@/app/generated/prisma/client";
 import type { MediaItem } from "@/lib/domain";
+import { resolveArticleQuote, type AssistantItemTarget } from "./content";
 import type { HistoryMessage } from "./prompt";
 import {
   MAX_CLIENT_MESSAGES_PER_DAY,
@@ -15,6 +16,7 @@ import {
   isVerdict,
   parseActionItems,
   type ActionItem,
+  type ActionItemLabels,
   type AssistantSessionView,
 } from "./shared";
 
@@ -81,53 +83,116 @@ function cleanTime(value: number | null): number | null {
   return Math.round(value * 10) / 10;
 }
 
+function cleanRequest(request: string): string {
+  return request.trim().replace(/\s+/g, " ").slice(0, MAX_ACTION_REQUEST_LENGTH);
+}
+
+type MediaRef = Pick<MediaItem, "type" | "durationSec">;
+
 /**
- * Cleans the model's action items: trims, drops empty and duplicate requests,
- * nulls out-of-range media indexes, keeps video times only when they make
- * sense (on a video, within its duration when known, end after start) and
- * caps the list. A timed item with no media goes to the post's only video.
+ * Media index and video times of one item against a media list: out-of-range
+ * indexes become null, times are kept only on a video (within its duration
+ * when known, end after start), and a timed item with no media goes to the
+ * list's only video.
  */
-export function sanitizeActionItems(
-  items: ActionItem[],
-  media: Array<Pick<MediaItem, "type" | "durationSec">>
-): ActionItem[] {
-  const videoIndexes = media.flatMap((item, index) => (item.type === "video" ? [index] : []));
+function placeOnMedia(
+  item: Pick<ActionItem, "mediaIndex" | "timeSec" | "timeEndSec">,
+  media: MediaRef[]
+): Pick<ActionItem, "mediaIndex" | "timeSec" | "timeEndSec"> {
+  const videoIndexes = media.flatMap((m, index) => (m.type === "video" ? [index] : []));
+  let mediaIndex =
+    item.mediaIndex !== null && Number.isInteger(item.mediaIndex) && item.mediaIndex >= 0 && item.mediaIndex < media.length
+      ? item.mediaIndex
+      : null;
+  let timeSec = cleanTime(item.timeSec);
+  let timeEndSec = timeSec === null ? null : cleanTime(item.timeEndSec);
+
+  if (timeSec !== null && mediaIndex === null && videoIndexes.length === 1) mediaIndex = videoIndexes[0];
+  const target = mediaIndex !== null ? media[mediaIndex] : null;
+  if (timeSec !== null && (!target || target.type !== "video")) {
+    // A moment only means something on a video.
+    timeSec = null;
+    timeEndSec = null;
+  }
+  const duration = target?.durationSec;
+  if (timeSec !== null && typeof duration === "number" && duration > 0) {
+    // One second of slack for rounding in what the client said.
+    if (timeSec > duration + 1) {
+      timeSec = null;
+      timeEndSec = null;
+    } else if (timeEndSec !== null && timeEndSec > duration) {
+      timeEndSec = Math.round(duration * 10) / 10;
+    }
+  }
+  if (timeSec !== null && timeEndSec !== null && timeEndSec <= timeSec) timeEndSec = null;
+  return { mediaIndex, timeSec, timeEndSec };
+}
+
+/**
+ * Cleans the model's action items for a social post: trims, drops empty and
+ * duplicate requests, nulls out-of-range media indexes, keeps video times
+ * only when they make sense (on a video, within its duration when known, end
+ * after start) and caps the list. A timed item with no media goes to the
+ * post's only video. Variant and passage do not apply to social posts.
+ */
+export function sanitizeActionItems(items: ActionItem[], media: MediaRef[]): ActionItem[] {
+  return sanitizeActionItemsFor(items, { kind: "SOCIAL_POST", media });
+}
+
+const NO_PLACE = { mediaIndex: null, timeSec: null, timeEndSec: null } as const;
+
+/** Variant an item names: by id (any case), else by name; the only one when there is one. */
+function matchVariant<T extends { id: string; name: string }>(variants: T[], variantId: string | null): T | null {
+  const wanted = variantId?.trim();
+  if (wanted) {
+    const lower = wanted.toLowerCase();
+    const found =
+      variants.find((v) => v.id === wanted) ??
+      variants.find((v) => v.id.toLowerCase() === lower) ??
+      variants.find((v) => v.name.trim().toLowerCase() === lower) ??
+      variants.find((v) => `variante ${v.id}`.toLowerCase() === lower);
+    if (found) return found;
+  }
+  return variants.length === 1 ? variants[0] : null;
+}
+
+/**
+ * sanitizeActionItems for every kind:
+ * - social: media and moments of the post (variant and passage dropped);
+ * - blog: only the passage, kept when the article really contains it (as it
+ *   appears there), so it can be anchored; no media or moments;
+ * - ads: the variant (matched by id or name; the only one when the set has
+ *   one), then media and moments of that variant; without a variant, no media.
+ * Duplicates are the same request on the same variant/passage.
+ */
+export function sanitizeActionItemsFor(items: ActionItem[], target: AssistantItemTarget): ActionItem[] {
   const seen = new Set<string>();
   const result: ActionItem[] = [];
   for (const item of items) {
-    const request = item.request.trim().replace(/\s+/g, " ").slice(0, MAX_ACTION_REQUEST_LENGTH);
+    const request = cleanRequest(item.request);
     if (!request) continue;
-    const key = request.toLowerCase();
+
+    let cleaned: ActionItem;
+    if (target.kind === "BLOG_ARTICLE") {
+      const anchorQuote = resolveArticleQuote({ text: target.articleText }, item.anchorQuote);
+      cleaned = { ...item, request, ...NO_PLACE, variantId: null, anchorQuote };
+    } else if (target.kind === "AD_CREATIVE") {
+      const variant = matchVariant(target.variants, item.variantId);
+      cleaned = {
+        ...item,
+        request,
+        ...(variant ? placeOnMedia(item, variant.media) : NO_PLACE),
+        variantId: variant?.id ?? null,
+        anchorQuote: null,
+      };
+    } else {
+      cleaned = { ...item, request, ...placeOnMedia(item, target.media), variantId: null, anchorQuote: null };
+    }
+
+    const key = `${cleaned.variantId ?? ""}|${cleaned.anchorQuote?.toLowerCase() ?? ""}|${request.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-
-    let mediaIndex =
-      item.mediaIndex !== null && Number.isInteger(item.mediaIndex) && item.mediaIndex >= 0 && item.mediaIndex < media.length
-        ? item.mediaIndex
-        : null;
-    let timeSec = cleanTime(item.timeSec);
-    let timeEndSec = timeSec === null ? null : cleanTime(item.timeEndSec);
-
-    if (timeSec !== null && mediaIndex === null && videoIndexes.length === 1) mediaIndex = videoIndexes[0];
-    const target = mediaIndex !== null ? media[mediaIndex] : null;
-    if (timeSec !== null && (!target || target.type !== "video")) {
-      // A moment only means something on a video.
-      timeSec = null;
-      timeEndSec = null;
-    }
-    const duration = target?.durationSec;
-    if (timeSec !== null && typeof duration === "number" && duration > 0) {
-      // One second of slack for rounding in what the client said.
-      if (timeSec > duration + 1) {
-        timeSec = null;
-        timeEndSec = null;
-      } else if (timeEndSec !== null && timeEndSec > duration) {
-        timeEndSec = Math.round(duration * 10) / 10;
-      }
-    }
-    if (timeSec !== null && timeEndSec !== null && timeEndSec <= timeSec) timeEndSec = null;
-
-    result.push({ ...item, request, mediaIndex, timeSec, timeEndSec });
+    result.push(cleaned);
     if (result.length >= MAX_ACTION_ITEMS) break;
   }
   return result;
@@ -144,7 +209,8 @@ export function toHistory(messages: Array<Pick<ReviewMessage, "role" | "content"
   return messages.map((m) => ({ role: m.role, content: m.content, inputMode: m.inputMode }));
 }
 
-export function toSessionView(session: SessionWithMessages): AssistantSessionView {
+/** API view of a session; `labels` names the ads variants in the ready-made message. */
+export function toSessionView(session: SessionWithMessages, labels?: ActionItemLabels): AssistantSessionView {
   const messages = sortMessages(session.messages);
   const clientMessages = messages.filter((m) => m.role === "CLIENT").length;
   const actionItems = parseActionItems(session.actionItems);
@@ -165,6 +231,8 @@ export function toSessionView(session: SessionWithMessages): AssistantSessionVie
     // A completed session can be reopened by a new message (same version).
     clientMessagesLeft: Math.max(0, MAX_CLIENT_MESSAGES_PER_SESSION - clientMessages),
     changesMessage:
-      session.status === "COMPLETED" && session.summary ? formatChangesMessage(session.summary, actionItems) : null,
+      session.status === "COMPLETED" && session.summary
+        ? formatChangesMessage(session.summary, actionItems, undefined, labels)
+        : null,
   };
 }

@@ -208,6 +208,13 @@ export function reviewEmailCopy(
   };
 }
 
+/** CTA of agency emails about one item. */
+function openLabel(kind: ContentKind): string {
+  if (kind === "BLOG_ARTICLE") return "Apri l'articolo";
+  if (kind === "AD_CREATIVE") return "Apri le creatività";
+  return "Apri il post";
+}
+
 /** "al post", "all'articolo", "alle creatività" + title. */
 function aboutPost(kind: ContentKind, title: string): string {
   if (kind === "BLOG_ARTICLE") return `all'articolo "${title}"`;
@@ -543,7 +550,7 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       paragraphs,
       quote: comment?.body,
       items: [...formatClientComments(clientComments, variantNames), ...actions.map((title) => ({ title }))],
-      cta: { label: "Apri il post", url: agencyPostUrl(post.id) },
+      cta: { label: openLabel(post.kind), url: agencyPostUrl(post.id) },
     });
   } catch (error) {
     logFailure("notifyChangesRequested", error);
@@ -569,7 +576,7 @@ export async function notifyApproved(postId: string): Promise<void> {
           "Esporta l'articolo dal pannello e, quando è online, segnalo come pubblicato.",
         ],
         items: [postListItem(post, post.client.timezone)],
-        cta: { label: "Apri l'articolo", url: agencyPostUrl(post.id) },
+        cta: { label: openLabel(post.kind), url: agencyPostUrl(post.id) },
       });
       return;
     }
@@ -596,7 +603,7 @@ export async function notifyApproved(postId: string): Promise<void> {
             decision?.verdict === "APPROVED" ? "approvata" : decision?.verdict === "REJECTED" ? "scartata" : "senza decisione";
           return { title: `${variant.name} — ${verdict}`, ...(decision?.note ? { detail: decision.note } : {}) };
         }),
-        cta: { label: "Apri le creatività", url: agencyPostUrl(post.id) },
+        cta: { label: openLabel(post.kind), url: agencyPostUrl(post.id) },
       });
       return;
     }

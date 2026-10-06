@@ -4,6 +4,7 @@
  * strings; the actions validate everything again.
  */
 
+import type { BlogAnchor } from "@/lib/content/types";
 import type { MediaItem, NetworkOptions } from "@/lib/domain";
 
 export type ActionResult<T = undefined> =
@@ -22,6 +23,23 @@ export interface PostFormInput {
   firstCommentText: string | null;
   media: MediaItem[];
   videoCoverMs: number | null;
+  /** Edits only: note for the client about what changed. */
+  changeNote?: string;
+}
+
+/**
+ * What the blog / ads editor sends to createContentAction /
+ * updateContentAction: no networks, caption or media of their own, the
+ * whole article or ad set is in `content` (BlogContent / AdContent).
+ */
+export interface ContentFormInput {
+  /** Create only: "BLOG_ARTICLE" | "AD_CREATIVE" (fixed afterwards). */
+  kind?: "BLOG_ARTICLE" | "AD_CREATIVE";
+  clientId: string;
+  title: string;
+  /** ISO instant: planned publication (blog) or campaign start (ads). */
+  publishAt: string;
+  content: unknown;
   /** Edits only: note for the client about what changed. */
   changeNote?: string;
 }
@@ -46,4 +64,8 @@ export interface CommentInput {
   pinY?: number;
   timeSec?: number;
   timeEndSec?: number;
+  /** Blog: the commented passage. */
+  anchor?: BlogAnchor;
+  /** Ads: the variant (mediaIndex then refers to its media). */
+  variantId?: string;
 }

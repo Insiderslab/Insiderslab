@@ -19,7 +19,7 @@ import { z } from "zod";
 import type { CreativeDecision, Post } from "@/app/generated/prisma/client";
 import { reviewerActor } from "@/lib/actor";
 import { parseAdContent } from "@/lib/content/ads";
-import type { AdContent, VariantDecision } from "@/lib/content/types";
+import type { VariantDecision } from "@/lib/content/types";
 import { prisma } from "@/lib/db/client";
 import { CLIENT_VISIBLE_STATUSES, InvalidTransitionError } from "@/lib/domain";
 import { ConflictError, NotFoundError, ValidationError, parseOrThrow } from "@/lib/errors";
@@ -90,12 +90,15 @@ export function variantLabel(variant: { id: string; name?: string | null } | und
   return name ? name : `Variante ${fallbackId}`;
 }
 
-function labelsFor(ids: string[], content: Pick<AdContent, "variants">): string {
+/** The part of an AdContent the messages need. */
+type VariantNames = { variants: ReadonlyArray<{ id: string; name?: string | null }> };
+
+function labelsFor(ids: string[], content: VariantNames): string {
   return ids.map((id) => variantLabel(content.variants.find((v) => v.id === id), id)).join(", ");
 }
 
 /** Italian reason why the set cannot be approved yet, or null when it can. */
-export function approvalBlocker(evaluation: DecisionEvaluation, content: Pick<AdContent, "variants">): string | null {
+export function approvalBlocker(evaluation: DecisionEvaluation, content: VariantNames): string | null {
   if (content.variants.length === 0) return "Questo set non ha varianti da approvare";
   if (evaluation.outcome === "incomplete") {
     return `Decidi tutte le varianti prima di inviare: manca ${labelsFor(evaluation.missing, content)}`;
@@ -109,7 +112,7 @@ export function approvalBlocker(evaluation: DecisionEvaluation, content: Pick<Ad
 /** Change request sent to the agency when every variant was discarded. */
 export function buildRejectionMessage(
   evaluation: DecisionEvaluation,
-  content: Pick<AdContent, "variants">
+  content: VariantNames
 ): string {
   const lines = evaluation.rejected.map(
     ({ variantId, note }) => `- ${labelsFor([variantId], content)}: ${note ?? "scartata senza nota"}`

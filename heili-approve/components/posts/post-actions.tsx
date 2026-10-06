@@ -5,27 +5,38 @@
  *
  * The status buttons of the post page, limited to what the state machine
  * allows (availableCommands): Invia in revisione (with an optional deadline
- * for the client), Programma ora, Riprova, Annulla. Cancelling asks first.
+ * for the client), Programma ora, Riprova (social), Segna come pubblicato /
+ * consegnato (blog, ads), Annulla. Cancelling and delivering ask first.
  */
 
 import { useState, useTransition } from "react";
-import type { PostStatus } from "@/app/generated/prisma/client";
+import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import {
   cancelPostAction,
+  deliverPostAction,
   schedulePostAction,
   submitForReviewAction,
 } from "@/app/(dashboard)/posts/actions";
-import { availableCommands, localPartsToUtc, timeZoneAbbr } from "./helpers";
+import { KIND_CONFIG } from "@/lib/domain";
+import { KIND_NOUNS, availableCommands, localPartsToUtc, timeZoneAbbr } from "./helpers";
 
 interface PostActionsProps {
   postId: string;
   status: PostStatus;
   timezone: string;
-  /** Problems validateForNetworks found on the current version. */
+  /** Problems found on the current version (validateForNetworks, or the blog/ads review checks). */
   issueCount: number;
   activeReviewers: number;
   hasMetricoolBrand: boolean;
+  /** Default SOCIAL_POST. */
+  kind?: ContentKind;
 }
+
+const CANCEL_LABELS: Record<ContentKind, string> = {
+  SOCIAL_POST: "Annulla post",
+  BLOG_ARTICLE: "Annulla articolo",
+  AD_CREATIVE: "Annulla set",
+};
 
 export default function PostActions({
   postId,
@@ -34,9 +45,12 @@ export default function PostActions({
   issueCount,
   activeReviewers,
   hasMetricoolBrand,
+  kind = "SOCIAL_POST",
 }: PostActionsProps) {
-  const commands = availableCommands(status);
-  const [panel, setPanel] = useState<"submit" | "cancel" | null>(null);
+  const commands = availableCommands(status, kind);
+  const internal = KIND_CONFIG[kind].internal;
+  const noun = KIND_NOUNS[kind];
+  const [panel, setPanel] = useState<"submit" | "cancel" | "deliver" | null>(null);
   const [dueDate, setDueDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -100,6 +114,16 @@ export default function PostActions({
             {pending ? "Attendi…" : "Riprova"}
           </button>
         )}
+        {commands.includes("deliver") && (
+          <button
+            type="button"
+            className={primary}
+            disabled={pending}
+            onClick={() => setPanel(panel === "deliver" ? null : "deliver")}
+          >
+            {KIND_CONFIG[kind].deliverLabel}
+          </button>
+        )}
         {commands.includes("cancel") && (
           <button
             type="button"
@@ -107,25 +131,31 @@ export default function PostActions({
             disabled={pending}
             onClick={() => setPanel(panel === "cancel" ? null : "cancel")}
           >
-            Annulla post
+            {CANCEL_LABELS[kind]}
           </button>
         )}
       </div>
 
       {panel === "submit" && (
         <div className="panel space-y-3 rounded p-4 text-sm">
-          <p>Il cliente riceverà un&apos;email con il link per rivedere e approvare il post.</p>
+          <p>Il cliente riceverà un&apos;email con il link per rivedere e approvare {noun.the}.</p>
           {activeReviewers === 0 && (
             <p className="text-warning">
               Il cliente non ha referenti attivi: nessuno riceverà l&apos;email. Aggiungili nella scheda del cliente.
             </p>
           )}
-          {issueCount > 0 && (
-            <p className="text-warning">
-              Il post ha {issueCount === 1 ? "un problema" : `${issueCount} problemi`} che ne impedirebbero la
-              pubblicazione: correggili nella scheda Modifica prima di inviarlo.
-            </p>
-          )}
+          {issueCount > 0 &&
+            (internal ? (
+              <p className="text-warning">
+                {noun.It} ha {issueCount === 1 ? "un punto da sistemare" : `${issueCount} punti da sistemare`} prima
+                dell&apos;invio al cliente: correggili nella scheda Modifica.
+              </p>
+            ) : (
+              <p className="text-warning">
+                Il post ha {issueCount === 1 ? "un problema" : `${issueCount} problemi`} che ne impedirebbero la
+                pubblicazione: correggili nella scheda Modifica prima di inviarlo.
+              </p>
+            ))}
           <label className="flex flex-wrap items-center gap-2">
             <span className="text-muted">Risposta entro (facoltativo)</span>
             <input
@@ -151,11 +181,30 @@ export default function PostActions({
         </div>
       )}
 
+      {panel === "deliver" && (
+        <div className="panel space-y-3 rounded p-4 text-sm">
+          <p>
+            {kind === "BLOG_ARTICLE"
+              ? "Segna l'articolo come pubblicato quando è online sul sito del cliente. Dopo non si potrà più modificare."
+              : "Segna il set come consegnato quando le creatività approvate sono state caricate nella campagna. Dopo non si potrà più modificare."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={pending} onClick={() => run(() => deliverPostAction(postId))}>
+              {pending ? "Attendi…" : `Sì, ${KIND_CONFIG[kind].deliverLabel.toLowerCase()}`}
+            </button>
+            <button type="button" className={secondary} disabled={pending} onClick={() => setPanel(null)}>
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
+
       {panel === "cancel" && (
         <div className="panel space-y-3 rounded p-4 text-sm">
           <p>
-            Il post verrà annullato: il cliente non lo vedrà più e non sarà programmato. L&apos;operazione non si può
-            annullare.
+            {internal
+              ? `${noun.It} verrà annullato: il cliente non lo vedrà più. L'operazione non si può annullare.`
+              : "Il post verrà annullato: il cliente non lo vedrà più e non sarà programmato. L'operazione non si può annullare."}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -164,7 +213,7 @@ export default function PostActions({
               disabled={pending}
               onClick={() => run(() => cancelPostAction(postId))}
             >
-              {pending ? "Attendi…" : "Sì, annulla il post"}
+              {pending ? "Attendi…" : `Sì, annulla ${noun.the}`}
             </button>
             <button type="button" className={secondary} disabled={pending} onClick={() => setPanel(null)}>
               No, tienilo

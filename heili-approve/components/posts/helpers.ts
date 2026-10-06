@@ -4,8 +4,10 @@
  * grids, caption counters, comment threads, Italian event descriptions.
  */
 
-import type { PostStatus } from "@/app/generated/prisma/client";
+import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
+import type { BlogAnchor } from "@/lib/content/types";
 import {
+  KIND_CONFIG,
   NETWORK_LABELS,
   NETWORK_TEXT_LIMITS,
   STATUS_LABELS,
@@ -13,10 +15,12 @@ import {
   canTransition,
   formatTimeRange,
   isNetwork,
+  statusLabelFor,
   type Network,
   type NetworkOptions,
 } from "@/lib/domain";
 import { getNetworkFormat, toZonedDateTimeString, zonedDateTimeToUtc } from "@/lib/metricool/payload";
+import { kindParam } from "@/lib/variant";
 
 export const DEFAULT_TIME_ZONE = "Europe/Rome";
 
@@ -29,9 +33,36 @@ export const POST_STATUSES: readonly PostStatus[] = [
   "APPROVED",
   "SCHEDULING",
   "SCHEDULED",
+  "DELIVERED",
   "FAILED",
   "CANCELLED",
 ];
+
+/** Statuses only social posts reach (Metricool scheduling). */
+const SOCIAL_ONLY_STATUSES: readonly PostStatus[] = ["SCHEDULING", "SCHEDULED", "FAILED"];
+
+/**
+ * Statuses posts of these kinds can be in, in display order: the filters
+ * and legends of a blog/ads-only instance do not offer Metricool statuses,
+ * a social-only one does not offer "Consegnato".
+ */
+export function statusesForKinds(kinds: readonly ContentKind[]): PostStatus[] {
+  const social = kinds.includes("SOCIAL_POST");
+  const internal = kinds.some((kind) => KIND_CONFIG[kind].internal);
+  return POST_STATUSES.filter((status) => {
+    if (SOCIAL_ONLY_STATUSES.includes(status)) return social;
+    if (status === "DELIVERED") return internal;
+    return true;
+  });
+}
+
+/**
+ * Status label for a list that may mix kinds: the kind's own wording when
+ * known ("Pubblicato" for an article), the generic one otherwise.
+ */
+export function kindStatusLabel(status: PostStatus, kind: ContentKind | null = null): string {
+  return kind ? statusLabelFor(kind, status) : STATUS_LABELS[status];
+}
 
 /** `?status=attention`: what is waiting on the agency (same as the top bar counter). */
 export const ATTENTION_STATUSES: readonly PostStatus[] = ["CHANGES_REQUESTED", "FAILED"];
@@ -64,8 +95,10 @@ export function statusesForFilter(filter: StatusFilter): PostStatus[] {
   }
 }
 
-/** URL state of the posts list (/posts?status=&clientId=&periodo=&q=&pagina=). */
+/** URL state of the posts list (/posts?kind=&status=&clientId=&periodo=&q=&pagina=). */
 export interface PostFilterValues {
+  /** "" (every enabled kind) or a kind slug ("social" | "blog" | "ads"). */
+  kind?: string;
   status: string;
   clientId: string;
   /** "" | "prossimi" | "passati" */
@@ -75,6 +108,7 @@ export interface PostFilterValues {
 
 export function buildPostsHref(values: Partial<PostFilterValues> & { pagina?: number }): string {
   const params = new URLSearchParams();
+  if (values.kind) params.set("kind", values.kind);
   if (values.status) params.set("status", values.status);
   if (values.clientId) params.set("clientId", values.clientId);
   if (values.periodo) params.set("periodo", values.periodo);
@@ -115,14 +149,20 @@ export function statusTone(status: PostStatus): Tone {
   return STATUS_TONES[status];
 }
 
-export type PostCommand = "submit" | "schedule" | "retry" | "cancel";
+export type PostCommand = "submit" | "schedule" | "retry" | "deliver" | "cancel";
 
-/** Buttons the detail page offers for a status, in display order. */
-export function availableCommands(status: PostStatus): PostCommand[] {
+/**
+ * Buttons the detail page offers for a status, in display order. Social
+ * posts go to Metricool (schedule / retry); blog and ads are marked
+ * published / delivered by hand (deliver).
+ */
+export function availableCommands(status: PostStatus, kind: ContentKind = "SOCIAL_POST"): PostCommand[] {
+  const internal = KIND_CONFIG[kind].internal;
   const commands: PostCommand[] = [];
   if (canTransition(status, "submit")) commands.push("submit");
-  if (canTransition(status, "schedule")) commands.push("schedule");
-  if (canTransition(status, "retry")) commands.push("retry");
+  if (!internal && canTransition(status, "schedule")) commands.push("schedule");
+  if (!internal && canTransition(status, "retry")) commands.push("retry");
+  if (internal && canTransition(status, "deliver")) commands.push("deliver");
   if (canTransition(status, "cancel")) commands.push("cancel");
   return commands;
 }
@@ -132,8 +172,41 @@ export function isEditable(status: PostStatus): boolean {
   return canTransition(status, "edit");
 }
 
+/** Italian nouns per kind, for sentences ("l'articolo è in revisione"). */
+export const KIND_NOUNS: Record<
+  ContentKind,
+  { the: string; a: string; It: string; plural: string }
+> = {
+  SOCIAL_POST: { the: "il post", a: "un post", It: "Il post", plural: "post" },
+  BLOG_ARTICLE: {
+    the: "l'articolo",
+    a: "un articolo",
+    It: "L'articolo",
+    plural: "articoli",
+  },
+  AD_CREATIVE: {
+    the: "il set di creatività",
+    a: "un set di creatività",
+    It: "Il set di creatività",
+    plural: "set di creatività",
+  },
+};
+
 /** What saving does to the status, said before the agency saves. */
-export function editWarning(status: PostStatus): string | null {
+export function editWarning(status: PostStatus, kind: ContentKind = "SOCIAL_POST"): string | null {
+  if (kind !== "SOCIAL_POST") {
+    const { It, the } = KIND_NOUNS[kind];
+    switch (status) {
+      case "IN_REVIEW":
+        return `${It} è in revisione: se modifichi contenuto o data torna in bozza e va inviato di nuovo al cliente.`;
+      case "APPROVED":
+        return `${It} è già approvato: se modifichi contenuto o data torna in bozza e il cliente dovrà approvarlo di nuovo.`;
+      case "CHANGES_REQUESTED":
+        return `Le modifiche creano una nuova versione: quando hai finito, invia di nuovo ${the} in revisione.`;
+      default:
+        return null;
+    }
+  }
   switch (status) {
     case "IN_REVIEW":
       return "Il post è in revisione: se modifichi contenuto, data o reti torna in bozza e va inviato di nuovo al cliente.";
@@ -146,6 +219,19 @@ export function editWarning(status: PostStatus): string | null {
     default:
       return null;
   }
+}
+
+/** /posts/new for a kind, keeping the client and day chosen elsewhere. */
+export function newContentHref(
+  kind: ContentKind | null,
+  options: { clientId?: string | null; day?: string | null } = {}
+): string {
+  const params = new URLSearchParams();
+  if (kind) params.set("kind", kindParam(kind));
+  if (options.clientId) params.set("clientId", options.clientId);
+  if (options.day) params.set("data", options.day);
+  const query = params.toString();
+  return query ? `/posts/new?${query}` : "/posts/new";
 }
 
 // ─── Dates and time zones ────────────────────────────────────────────────────
@@ -442,17 +528,27 @@ export interface CommentLike {
   timeEndSec: number | null;
   resolvedAt: Date | string | null;
   createdAt: Date | string;
+  /** Blog: the commented passage. */
+  anchor?: BlogAnchor | null;
+  /** Ads: the variant the comment is about (mediaIndex then refers to its media). */
+  variantId?: string | null;
 }
 
 /**
- * Comments on the same spot (version + media + moment + pin) form a thread:
- * an agency reply copies the anchor of the comment it answers. General
- * comments have no anchor and stand alone.
+ * Comments on the same spot (version + media + moment + pin, the passage of
+ * an article, or the variant's media spot) form a thread: an agency reply
+ * copies the anchor of the comment it answers. General comments (also the
+ * general ones on a variant) have no anchor and stand alone.
  */
 export function commentAnchorKey(comment: CommentLike): string | null {
+  if (comment.anchor) {
+    const { quote, prefix, suffix } = comment.anchor;
+    return [comment.versionId ?? "", "passage", quote, prefix, suffix].join("|");
+  }
   if (comment.mediaIndex === null && comment.timeSec === null) return null;
   return [
     comment.versionId ?? "",
+    ...(comment.variantId ? [`variant:${comment.variantId}`] : []),
     comment.mediaIndex ?? "",
     comment.timeSec ?? "",
     comment.timeEndSec ?? "",
@@ -547,7 +643,12 @@ function statusLabel(value: unknown): string | null {
 }
 
 /** One line of the activity timeline, in Italian. */
-export function describeEvent(event: EventLike, timeZone?: string | null): EventDescription {
+export function describeEvent(
+  event: EventLike,
+  timeZone?: string | null,
+  kind: ContentKind = "SOCIAL_POST"
+): EventDescription {
+  const noun = KIND_NOUNS[kind].the;
   const m = meta(event.metadata);
   const v = event.versionNumber ? ` (versione ${event.versionNumber})` : "";
   const agency = personName(event.user, "L'agenzia");
@@ -556,7 +657,7 @@ export function describeEvent(event: EventLike, timeZone?: string | null): Event
 
   switch (event.type) {
     case "CREATED":
-      return { title: `${agency} ha creato il post`, details, tone: "neutral" };
+      return { title: `${agency} ha creato ${noun}`, details, tone: "neutral" };
     case "VERSION_CREATED": {
       if (Array.isArray(m.changes)) details.push(...m.changes.filter((c): c is string => typeof c === "string"));
       if (typeof m.changeNote === "string" && m.changeNote) details.push(`Nota: ${m.changeNote}`);
@@ -566,7 +667,7 @@ export function describeEvent(event: EventLike, timeZone?: string | null): Event
     }
     case "SUBMITTED_FOR_REVIEW":
       if (typeof m.reviewDueAt === "string") details.push(`Risposta attesa entro ${formatDateTime(m.reviewDueAt, timeZone)}`);
-      return { title: `${agency} ha inviato il post in revisione${v}`, details, tone: "info" };
+      return { title: `${agency} ha inviato ${noun} in revisione${v}`, details, tone: "info" };
     case "REMINDER_SENT":
       return {
         title: `Sollecito inviato al cliente${typeof m.reminderNumber === "number" ? ` (n. ${m.reminderNumber})` : ""}`,
@@ -574,7 +675,7 @@ export function describeEvent(event: EventLike, timeZone?: string | null): Event
         tone: "neutral",
       };
     case "CLIENT_VIEWED":
-      return { title: `${client} ha aperto il post${v}`, details, tone: "neutral" };
+      return { title: `${client} ha aperto ${noun}${v}`, details, tone: "neutral" };
     case "CHANGES_REQUESTED":
       if (Array.isArray(m.actionCommentIds) && m.actionCommentIds.length > 0) {
         details.push(
@@ -586,7 +687,7 @@ export function describeEvent(event: EventLike, timeZone?: string | null): Event
       if (typeof m.reviewSessionId === "string") details.push("Con la conversazione dell'assistente AI");
       return { title: `${client} ha chiesto modifiche${v}`, details, tone: "warning" };
     case "APPROVED":
-      return { title: `${client} ha approvato il post${v}`, details, tone: "success" };
+      return { title: `${client} ha approvato ${noun}${v}`, details, tone: "success" };
     case "SCHEDULE_REQUESTED":
       return {
         title: m.retry === true ? `${personName(event.user, "Il sistema")} ha riprovato la programmazione` : `Programmazione su Metricool richiesta${event.user ? ` da ${agency}` : ""}`,
@@ -602,9 +703,27 @@ export function describeEvent(event: EventLike, timeZone?: string | null): Event
     case "CANCELLED": {
       const from = statusLabel(m.fromStatus);
       if (from) details.push(`Era: ${from}`);
-      return { title: `${agency} ha annullato il post`, details, tone: "neutral" };
+      return { title: `${agency} ha annullato ${noun}`, details, tone: "neutral" };
+    }
+    case "DELIVERED":
+      return {
+        title:
+          kind === "BLOG_ARTICLE"
+            ? `${agency} ha segnato l'articolo come pubblicato${v}`
+            : `${agency} ha segnato ${noun} come consegnato${v}`,
+        details,
+        tone: "success",
+      };
+    case "VARIANT_DECIDED": {
+      const name = typeof m.variantName === "string" ? m.variantName : typeof m.variantId === "string" ? `Variante ${m.variantId}` : "una variante";
+      if (typeof m.note === "string" && m.note) details.push(`Nota: ${m.note}`);
+      return m.verdict === "REJECTED"
+        ? { title: `${client} ha scartato ${name}${v}`, details, tone: "warning" }
+        : { title: `${client} ha approvato ${name}${v}`, details, tone: "success" };
     }
     case "COMMENTED": {
+      if (typeof m.quote === "string" && m.quote) details.push(`Sul passaggio «${m.quote}»`);
+      if (typeof m.variantId === "string") details.push(`Sulla variante ${m.variantId}`);
       if (typeof m.timeSec === "number") {
         details.push(`Al momento ${formatMoment(m.timeSec, typeof m.timeEndSec === "number" ? m.timeEndSec : null)}`);
       } else if (typeof m.mediaIndex === "number") {

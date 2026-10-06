@@ -7,6 +7,7 @@
  */
 
 import { z } from "zod";
+import type { ContentKind } from "@/app/generated/prisma/client";
 import { formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ export const turnOutputSchema = z.object({
 });
 export type TurnOutput = z.infer<typeof turnOutputSchema>;
 
-export const ACTION_AREAS = ["testo", "media", "tono", "cta", "hashtag", "orario", "altro"] as const;
+export const ACTION_AREAS = ["testo", "media", "tono", "cta", "hashtag", "orario", "seo", "altro"] as const;
 export type ActionArea = (typeof ACTION_AREAS)[number];
 
 export const ACTION_PRIORITIES = ["alta", "media", "bassa"] as const;
@@ -46,11 +47,11 @@ export type Verdict = (typeof VERDICTS)[number];
 /**
  * One change requested by the client. Plain numbers (no int/min constraints)
  * keep the JSON schema inside what both providers' structured outputs accept;
- * rules.sanitizeActionItems enforces ranges afterwards.
+ * rules.sanitizeActionItems / sanitizeActionItemsFor enforce ranges afterwards.
  */
 export const actionItemSchema = z.object({
   area: z.enum(ACTION_AREAS),
-  /** 0-based index into PostVersion.media, or null when not about one media. */
+  /** 0-based index into PostVersion.media (ads: into the variant's media), or null. */
   mediaIndex: z.number().nullable(),
   /** Videos: second the change refers to ("verso il settimo secondo" → 7). */
   timeSec: z.number().nullable(),
@@ -58,6 +59,10 @@ export const actionItemSchema = z.object({
   timeEndSec: z.number().nullable(),
   request: z.string(),
   priority: z.enum(ACTION_PRIORITIES),
+  /** Ads: id of the variant the change is about, else null. */
+  variantId: z.string().nullable(),
+  /** Blog: the passage of the article the change is about, copied verbatim, else null. */
+  anchorQuote: z.string().nullable(),
 });
 export type ActionItem = z.infer<typeof actionItemSchema>;
 
@@ -130,6 +135,7 @@ export const ACTION_AREA_LABELS: Record<ActionArea, string> = {
   cta: "Invito all'azione",
   hashtag: "Hashtag",
   orario: "Data e orario",
+  seo: "SEO",
   altro: "Altro",
 };
 
@@ -158,14 +164,22 @@ export function mediaLabel(mediaIndex: number): string {
 
 /**
  * Reads ReviewSession.actionItems (JSON) defensively: invalid entries are
- * dropped, and fields added later (timeSec, timeEndSec) default to null.
+ * dropped, and fields added later (timeSec, timeEndSec, variantId,
+ * anchorQuote) default to null.
  */
 export function parseActionItems(value: unknown): ActionItem[] {
   if (!Array.isArray(value)) return [];
   const items: ActionItem[] = [];
   for (const entry of value) {
     if (typeof entry !== "object" || entry === null) continue;
-    const parsed = actionItemSchema.safeParse({ mediaIndex: null, timeSec: null, timeEndSec: null, ...entry });
+    const parsed = actionItemSchema.safeParse({
+      mediaIndex: null,
+      timeSec: null,
+      timeEndSec: null,
+      variantId: null,
+      anchorQuote: null,
+      ...entry,
+    });
     if (parsed.success) items.push(parsed.data);
   }
   return items;
@@ -181,13 +195,38 @@ export function formatActionItemTime(item: Pick<ActionItem, "timeSec" | "timeEnd
   return formatTimeRange(item.timeSec, item.timeEndSec);
 }
 
-/** One bullet line, e.g. "[Immagini/video · Media n°2 · 0:07 · Priorità alta] Tagliare la clip". */
-export function formatActionItem(item: ActionItem): string {
-  const tags = [ACTION_AREA_LABELS[item.area]];
+/** Names that make action items readable: ads variants by id. */
+export interface ActionItemLabels {
+  variantNames?: Record<string, string>;
+}
+
+/** "Variante A — Prima/dopo" (its name), or "Variante A" from the id. */
+export function variantNameFor(variantId: string, labels?: ActionItemLabels): string {
+  const name = labels?.variantNames?.[variantId]?.trim();
+  return name || `Variante ${variantId}`;
+}
+
+/** «Le nostre colombe sono…» — a passage shortened for tags and chips. */
+export function shortQuote(quote: string, max = 80): string {
+  const flat = quote.replace(/\s+/g, " ").trim();
+  const chars = Array.from(flat);
+  return `«${chars.length > max ? `${chars.slice(0, max - 1).join("").trimEnd()}…` : flat}»`;
+}
+
+/** Where an item points, as tags: variant, passage, media, moment. */
+export function actionItemPlaceTags(item: ActionItem, labels?: ActionItemLabels): string[] {
+  const tags: string[] = [];
+  if (item.variantId) tags.push(variantNameFor(item.variantId, labels));
+  if (item.anchorQuote) tags.push(`Passaggio ${shortQuote(item.anchorQuote)}`);
   if (item.mediaIndex !== null) tags.push(mediaLabel(item.mediaIndex));
   const time = formatActionItemTime(item);
   if (time) tags.push(time);
-  tags.push(ACTION_PRIORITY_LABELS[item.priority]);
+  return tags;
+}
+
+/** One bullet line, e.g. "[Immagini/video · Media n°2 · 0:07 · Priorità alta] Tagliare la clip". */
+export function formatActionItem(item: ActionItem, labels?: ActionItemLabels): string {
+  const tags = [ACTION_AREA_LABELS[item.area], ...actionItemPlaceTags(item, labels), ACTION_PRIORITY_LABELS[item.priority]];
   return `[${tags.join(" · ")}] ${item.request}`;
 }
 
@@ -219,16 +258,172 @@ export function splitVideoMoments(text: string): MessageSegment[] {
   return segments;
 }
 
+// ─── Blog passages and ads variants ──────────────────────────────────────────
+
+/** Longest passage the panel inserts into a message. */
+export const MAX_MARKER_QUOTE = 400;
+
+/** Marker text can hold no brackets or guillemets (they delimit it). */
+function markerSafe(value: string): string {
+  return value
+    .replace(/[«»]/g, '"')
+    .replace(/\[/g, "(")
+    .replace(/\]/g, ")")
+    .replace(/·/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Text the panel inserts when the client taps "Usa il passaggio selezionato"
+ * on an article: the selected text, quoted. The prompt tells the model to
+ * copy it as the item's anchorQuote.
+ */
+export function passageMarker(quote: string): string {
+  const clean = markerSafe(quote);
+  const chars = Array.from(clean);
+  const shown = chars.length > MAX_MARKER_QUOTE ? `${chars.slice(0, MAX_MARKER_QUOTE - 1).join("").trimEnd()}…` : clean;
+  return `[passaggio «${shown}»]`;
+}
+
+export interface VariantMarkerInput {
+  variantId: string;
+  variantName?: string | null;
+  /** "Storie e Reels", already a label. */
+  placementLabel?: string | null;
+  timeSec?: number | null;
+}
+
+/**
+ * Text the panel inserts when the client taps "Usa la variante e il momento
+ * attuali" on an ads set: which variant, in which placement, at which moment.
+ */
+export function variantMarker(input: VariantMarkerInput): string {
+  const parts = [`variante ${markerSafe(input.variantId)}${input.variantName?.trim() ? ` «${markerSafe(input.variantName)}»` : ""}`];
+  if (input.placementLabel?.trim()) parts.push(markerSafe(input.placementLabel));
+  if (typeof input.timeSec === "number" && Number.isFinite(input.timeSec) && input.timeSec >= 0) {
+    parts.push(`al momento ${formatTimecode(input.timeSec)}`);
+  }
+  return `[${parts.join(" · ")}]`;
+}
+
+export type MarkerSegment =
+  | MessageSegment
+  | { type: "passage"; quote: string }
+  | {
+      type: "variant";
+      variantId: string;
+      variantName: string | null;
+      placementLabel: string | null;
+      timeSec: number | null;
+      label: string;
+    };
+
+const MARKER_RE = new RegExp(
+  [
+    String.raw`\[al momento ((?:\d+:)?\d{1,2}:\d{2}) del video\]`,
+    String.raw`\[passaggio «([^«»\[\]]{1,500})»\]`,
+    String.raw`\[variante ([A-Za-z0-9_-]{1,32})(?: «([^«»\[\]]{1,200})»)?((?: · [^·\[\]]{1,80})*)\]`,
+  ].join("|"),
+  "g"
+);
+
+/**
+ * Splits a message into text and the markers the panel inserts (video
+ * moments, article passages, ads variants), rendered as chips.
+ */
+export function splitMessageMarkers(text: string): MarkerSegment[] {
+  const segments: MarkerSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(MARKER_RE)) {
+    let segment: MarkerSegment | null = null;
+    if (match[1] !== undefined) {
+      const timeSec = parseTimecode(match[1]);
+      if (timeSec !== null) segment = { type: "moment", label: match[1], timeSec };
+    } else if (match[2] !== undefined) {
+      segment = { type: "passage", quote: match[2] };
+    } else if (match[3] !== undefined) {
+      const extras = (match[5] ?? "").split(" · ").map((p) => p.trim()).filter(Boolean);
+      let timeSec: number | null = null;
+      let placementLabel: string | null = null;
+      for (const extra of extras) {
+        const moment = /^al momento ((?:\d+:)?\d{1,2}:\d{2})$/.exec(extra);
+        if (moment) timeSec = parseTimecode(moment[1]);
+        else placementLabel ??= extra;
+      }
+      const variantName = match[4]?.trim() || null;
+      const label = [
+        variantName ?? `Variante ${match[3]}`,
+        placementLabel,
+        timeSec !== null ? formatTimecode(timeSec) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      segment = { type: "variant", variantId: match[3], variantName, placementLabel, timeSec, label };
+    }
+    if (!segment) continue;
+    if (match.index > last) segments.push({ type: "text", value: text.slice(last, match.index) });
+    segments.push(segment);
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) segments.push({ type: "text", value: text.slice(last) });
+  return segments;
+}
+
+// ─── Copy per content kind ───────────────────────────────────────────────────
+
+/** Content kinds as plain strings (the Prisma enum is server-side). */
+export type AssistantContentKind = ContentKind;
+
+export interface AssistantKindCopy {
+  /** First bubble of the chat. */
+  intro: string;
+  placeholder: string;
+  /** Shown when the client approved through the panel. */
+  approvedText: string;
+  /** Label of the panel's approve button. */
+  approveLabel: string;
+}
+
+export const ASSISTANT_KIND_COPY: Record<AssistantContentKind, AssistantKindCopy> = {
+  SOCIAL_POST: {
+    intro:
+      "Ciao! Dimmi pure cosa ne pensi di questo post: cosa ti piace e cosa cambieresti. Puoi scrivere o dettare a voce.",
+    placeholder: "Es. «Il testo mi convince, la seconda foto meno»",
+    approvedText: "Post approvato. Grazie!",
+    approveLabel: "Approva",
+  },
+  BLOG_ARTICLE: {
+    intro:
+      "Ciao! Dimmi pure cosa ne pensi di questo articolo: cosa ti convince e cosa cambieresti. Se si tratta di un punto preciso, selezionalo nel testo e tocca «Usa il passaggio selezionato». Puoi scrivere o dettare a voce.",
+    placeholder: "Es. «Il secondo paragrafo è troppo tecnico»",
+    approvedText: "Articolo approvato. Grazie!",
+    approveLabel: "Approva",
+  },
+  AD_CREATIVE: {
+    intro:
+      "Ciao! Dimmi pure cosa ne pensi di queste creatività: quale variante ti convince e cosa cambieresti. Se parli di una variante o di un momento del video, tocca «Usa la variante e il momento attuali». Puoi scrivere o dettare a voce.",
+    placeholder: "Es. «Nella variante B la scritta finale passa troppo veloce»",
+    approvedText: "Decisioni inviate all'agenzia. Grazie!",
+    approveLabel: "Approva le varianti",
+  },
+};
+
 // ─── Message to the agency ───────────────────────────────────────────────────
 
 /**
  * Message posted to the agency as the client's change request: the summary
  * followed by a bulleted list of the actions. Kept under the comment limit.
  */
-export function formatChangesMessage(summary: string, actionItems: ActionItem[], maxLength = 5000): string {
+export function formatChangesMessage(
+  summary: string,
+  actionItems: ActionItem[],
+  maxLength = 5000,
+  labels?: ActionItemLabels
+): string {
   const parts = [summary.trim()];
   if (actionItems.length > 0) {
-    parts.push(["Modifiche richieste:", ...actionItems.map((item) => `• ${formatActionItem(item)}`)].join("\n"));
+    parts.push(["Modifiche richieste:", ...actionItems.map((item) => `• ${formatActionItem(item, labels)}`)].join("\n"));
   }
   const message = parts.filter(Boolean).join("\n\n");
   return message.length > maxLength ? `${message.slice(0, maxLength - 1)}…` : message;

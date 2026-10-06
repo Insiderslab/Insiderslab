@@ -5,6 +5,7 @@
  * and when, with the details stored in the event (changes, errors, deadline).
  */
 
+import type { ContentKind } from "@/app/generated/prisma/client";
 import { describeEvent, formatDateTime, TONE_DOT, type EventLike } from "./helpers";
 
 export interface TimelineEvent extends EventLike {
@@ -12,13 +13,22 @@ export interface TimelineEvent extends EventLike {
   createdAt: Date | string;
 }
 
-export default function EventTimeline({ events, timezone }: { events: TimelineEvent[]; timezone: string }) {
+export default function EventTimeline({
+  events,
+  timezone,
+  kind = "SOCIAL_POST",
+}: {
+  events: TimelineEvent[];
+  timezone: string;
+  /** Words the descriptions use ("il post", "l'articolo"…). */
+  kind?: ContentKind;
+}) {
   if (events.length === 0) return <p className="text-sm text-muted">Nessuna attività registrata.</p>;
 
   return (
     <ol className="relative space-y-4 border-l border-border pl-5">
       {events.map((event) => {
-        const description = describeEvent(event, timezone);
+        const description = describeEvent(event, timezone, kind);
         return (
           <li key={event.id} className="relative">
             <span
