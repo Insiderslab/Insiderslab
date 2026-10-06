@@ -47,3 +47,6 @@ next-env.d.ts
 
 # e2e (Playwright)
 /test-results
+
+# redis-server locale
+dump.rdb
