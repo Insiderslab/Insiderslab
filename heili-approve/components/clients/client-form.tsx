@@ -5,7 +5,10 @@
  *
  * Create / edit a client: name, logo, Metricool brand, time zone, networks
  * and automatic scheduling. Fields are controlled so a validation error from
- * the server never wipes what the user typed.
+ * the server never wipes what the user typed. On instances without social
+ * posts (blog, ads: `metricool` false) only name, logo and time zone are
+ * shown; the stored brand / networks are sent back unchanged and the server
+ * ignores them there.
  */
 
 import Link from "next/link";
@@ -35,6 +38,8 @@ interface ClientFormProps {
   brands: BrandsState;
   /** Archived clients are shown read-only until restored. */
   readOnly?: boolean;
+  /** Social posts enabled: show the Metricool brand, networks and automatic scheduling. Default true. */
+  metricool?: boolean;
 }
 
 const OTHER_ZONE = "__other__";
@@ -49,6 +54,7 @@ export default function ClientForm({
   timeZoneOptions,
   brands,
   readOnly = false,
+  metricool = true,
 }: ClientFormProps) {
   const [values, setValues] = useState<ClientFormValues>(initial);
   const knownZone = timeZoneOptions.some((option) => option.value === initial.timezone);
@@ -182,91 +188,95 @@ export default function ClientForm({
               )}
             </div>
             <p className="text-xs text-muted">
-              Compare nel portale del cliente e nelle anteprime dei post.
+              {metricool
+                ? "Compare nel portale del cliente e nelle anteprime dei post."
+                : "Compare nel portale del cliente e nelle anteprime."}
             </p>
           </div>
         </div>
 
         {/* Metricool brand */}
-        <div className="space-y-1.5">
-          <label htmlFor="client-brand" className="block text-sm font-medium">
-            Brand su Metricool
-          </label>
-          {brands.status === "ok" ? (
-            <>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <select
-                  id="client-brand"
-                  value={values.metricoolBlogId}
-                  onChange={(e) => update("metricoolBlogId", e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Nessun brand collegato</option>
-                  {brandList.map((brand) => (
-                    <option key={brand.blogId} value={brand.blogId}>
-                      {brand.label}
-                    </option>
-                  ))}
-                  {brandMissing && (
-                    <option value={values.metricoolBlogId}>
-                      Brand {values.metricoolBlogId} (non trovato su Metricool)
-                    </option>
-                  )}
-                </select>
-                {selectedBrand && (selectedBrand.timezone || selectedBrand.networks.length > 0) && (
-                  <button
-                    type="button"
-                    onClick={applyBrandSettings}
-                    className="shrink-0 rounded border border-border px-3 py-2 text-sm text-muted hover:text-foreground"
+        {metricool && (
+          <div className="space-y-1.5">
+            <label htmlFor="client-brand" className="block text-sm font-medium">
+              Brand su Metricool
+            </label>
+            {brands.status === "ok" ? (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    id="client-brand"
+                    value={values.metricoolBlogId}
+                    onChange={(e) => update("metricoolBlogId", e.target.value)}
+                    className={inputClass}
                   >
-                    Usa fuso e reti del brand
-                  </button>
+                    <option value="">Nessun brand collegato</option>
+                    {brandList.map((brand) => (
+                      <option key={brand.blogId} value={brand.blogId}>
+                        {brand.label}
+                      </option>
+                    ))}
+                    {brandMissing && (
+                      <option value={values.metricoolBlogId}>
+                        Brand {values.metricoolBlogId} (non trovato su Metricool)
+                      </option>
+                    )}
+                  </select>
+                  {selectedBrand && (selectedBrand.timezone || selectedBrand.networks.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={applyBrandSettings}
+                      className="shrink-0 rounded border border-border px-3 py-2 text-sm text-muted hover:text-foreground"
+                    >
+                      Usa fuso e reti del brand
+                    </button>
+                  )}
+                </div>
+                {brandList.length === 0 && (
+                  <p className="text-xs text-warning">
+                    Nessun brand trovato sull&apos;account Metricool collegato.
+                  </p>
+                )}
+                {brandMissing && (
+                  <p className="text-xs text-warning">
+                    Il brand salvato non risulta più tra quelli dell&apos;account Metricool: scegline un altro.
+                  </p>
+                )}
+                {brands.fake && (
+                  <p className="text-xs text-muted">Modalità di prova: brand finti, nessuna chiamata a Metricool.</p>
+                )}
+              </>
+            ) : (
+              <div className="rounded border border-border bg-background p-3 text-sm">
+                {brands.status === "not_configured" ? (
+                  <p className="text-muted">
+                    Metricool non è collegato.{" "}
+                    <Link href="/settings" className="text-accent hover:underline">
+                      Collegalo nelle Impostazioni
+                    </Link>{" "}
+                    per scegliere il brand: senza brand i post approvati non possono essere programmati.
+                  </p>
+                ) : (
+                  <p className="text-warning">
+                    {brands.message}{" "}
+                    <Link href="/settings" className="text-accent hover:underline">
+                      Controlla le Impostazioni
+                    </Link>
+                    .
+                  </p>
+                )}
+                {values.metricoolBlogId && (
+                  <p className="mt-1 text-xs text-muted">
+                    Brand attualmente collegato: {values.metricoolBlogId} (resta invariato).
+                  </p>
                 )}
               </div>
-              {brandList.length === 0 && (
-                <p className="text-xs text-warning">
-                  Nessun brand trovato sull&apos;account Metricool collegato.
-                </p>
-              )}
-              {brandMissing && (
-                <p className="text-xs text-warning">
-                  Il brand salvato non risulta più tra quelli dell&apos;account Metricool: scegline un altro.
-                </p>
-              )}
-              {brands.fake && (
-                <p className="text-xs text-muted">Modalità di prova: brand finti, nessuna chiamata a Metricool.</p>
-              )}
-            </>
-          ) : (
-            <div className="rounded border border-border bg-background p-3 text-sm">
-              {brands.status === "not_configured" ? (
-                <p className="text-muted">
-                  Metricool non è collegato.{" "}
-                  <Link href="/settings" className="text-accent hover:underline">
-                    Collegalo nelle Impostazioni
-                  </Link>{" "}
-                  per scegliere il brand: senza brand i post approvati non possono essere programmati.
-                </p>
-              ) : (
-                <p className="text-warning">
-                  {brands.message}{" "}
-                  <Link href="/settings" className="text-accent hover:underline">
-                    Controlla le Impostazioni
-                  </Link>
-                  .
-                </p>
-              )}
-              {values.metricoolBlogId && (
-                <p className="mt-1 text-xs text-muted">
-                  Brand attualmente collegato: {values.metricoolBlogId} (resta invariato).
-                </p>
-              )}
-            </div>
-          )}
-          <p className="text-xs text-muted">
-            I post approvati vengono programmati su questo brand.
-          </p>
-        </div>
+            )}
+            <p className="text-xs text-muted">
+              I post approvati vengono programmati su questo brand.
+            </p>
+          </div>
+        )}
 
         {/* Time zone */}
         <div className="space-y-1.5">
@@ -306,62 +316,68 @@ export default function ClientForm({
             </p>
           ) : (
             <p className="text-xs text-muted">
-              Gli orari di pubblicazione dei post di questo cliente sono in questo fuso.
+              {metricool
+                ? "Gli orari di pubblicazione dei post di questo cliente sono in questo fuso."
+                : "Le date dei contenuti di questo cliente sono in questo fuso."}
             </p>
           )}
         </div>
 
         {/* Networks */}
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Reti social</legend>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {NETWORKS.map((network) => {
-              const checked = values.networks.includes(network);
-              const connected = selectedBrand?.networks.includes(network);
-              return (
-                <label
-                  key={network}
-                  className={`flex min-h-11 cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm ${
-                    checked ? "border-accent/50 bg-background" : "border-border"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleNetwork(network)}
-                    className="accent-accent"
-                  />
-                  <span className="min-w-0 truncate">{NETWORK_LABELS[network]}</span>
-                  {selectedBrand && connected && (
-                    <span className="ml-auto text-xs text-success" title="Account collegato al brand su Metricool">
-                      ✓
-                    </span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted">
-            Le reti su cui si possono preparare post per questo cliente. Nessuna selezionata = tutte.
-          </p>
-        </fieldset>
+        {metricool && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Reti social</legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {NETWORKS.map((network) => {
+                const checked = values.networks.includes(network);
+                const connected = selectedBrand?.networks.includes(network);
+                return (
+                  <label
+                    key={network}
+                    className={`flex min-h-11 cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm ${
+                      checked ? "border-accent/50 bg-background" : "border-border"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleNetwork(network)}
+                      className="accent-accent"
+                    />
+                    <span className="min-w-0 truncate">{NETWORK_LABELS[network]}</span>
+                    {selectedBrand && connected && (
+                      <span className="ml-auto text-xs text-success" title="Account collegato al brand su Metricool">
+                        ✓
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted">
+              Le reti su cui si possono preparare post per questo cliente. Nessuna selezionata = tutte.
+            </p>
+          </fieldset>
+        )}
 
         {/* Auto scheduling */}
-        <label className="flex cursor-pointer items-start gap-3 rounded border border-border p-3">
-          <input
-            type="checkbox"
-            checked={values.autoSchedule}
-            onChange={(e) => update("autoSchedule", e.target.checked)}
-            className="mt-0.5 accent-accent"
-          />
-          <span>
-            <span className="block text-sm font-medium">Programma automaticamente dopo l&apos;approvazione</span>
-            <span className="block text-xs text-muted mt-0.5">
-              Appena il cliente approva, il post viene programmato su Metricool. Se disattivato, resta
-              &quot;Approvato&quot; finché qualcuno dell&apos;agenzia non lo programma.
+        {metricool && (
+          <label className="flex cursor-pointer items-start gap-3 rounded border border-border p-3">
+            <input
+              type="checkbox"
+              checked={values.autoSchedule}
+              onChange={(e) => update("autoSchedule", e.target.checked)}
+              className="mt-0.5 accent-accent"
+            />
+            <span>
+              <span className="block text-sm font-medium">Programma automaticamente dopo l&apos;approvazione</span>
+              <span className="block text-xs text-muted mt-0.5">
+                Appena il cliente approva, il post viene programmato su Metricool. Se disattivato, resta
+                &quot;Approvato&quot; finché qualcuno dell&apos;agenzia non lo programma.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
       </fieldset>
 
       {error && <p className="text-sm text-error">{error}</p>}

@@ -9,6 +9,11 @@ import {
 import { recordWorkerAlert, recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { processSchedulePost, sweepApprovedPosts } from "@/lib/scheduling";
 import { isMetricoolFake } from "@/lib/metricool/client";
+import { getAppVariant } from "@/lib/variant";
+
+// Fails at boot on an invalid APP_VARIANT, like the web process. Blog and ads
+// never reach the scheduling queue: on those instances the worker idles.
+const VARIANT = getAppVariant();
 
 const startedAt = new Date().toISOString();
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -36,7 +41,7 @@ const worker = new Worker<SchedulePostJob>(
 );
 
 console.log(
-  `[Approve Worker] Started (concurrency ${CONCURRENCY}${isMetricoolFake() ? ", METRICOOL_FAKE" : ""})`
+  `[Approve Worker] Started (variant ${VARIANT}, concurrency ${CONCURRENCY}${isMetricoolFake() ? ", METRICOOL_FAKE" : ""})`
 );
 
 worker.on("completed", (job) => {

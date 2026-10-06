@@ -641,6 +641,7 @@ describe("GET /api/export/ads/[postId]", () => {
   beforeEach(() => {
     vi.stubEnv("PUBLIC_BASE_URL", base);
     vi.stubEnv("UPLOAD_DIR", uploadDir);
+    vi.stubEnv("APP_VARIANT", "all");
     routeState.context = { workspaceId: "ws1" };
     routeState.post = {
       id: "post1",
@@ -695,6 +696,11 @@ describe("GET /api/export/ads/[postId]", () => {
 
     routeState.post = { ...routeState.post!, kind: "BLOG_ARTICLE" };
     expect((await call()).status).toBe(400);
+  });
+
+  it("does not exist on an instance without ads (APP_VARIANT)", async () => {
+    vi.stubEnv("APP_VARIANT", "blog");
+    expect((await call()).status).toBe(404);
   });
 
   it("zips the approved variants' local files, copy.csv and README.txt", async () => {

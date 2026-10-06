@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { formatPortalDate, groupPortalPosts, portalPath } from "@/components/portal/helpers";
+import { formatPortalDate, groupPortalPosts, portalNoun, portalPath } from "@/components/portal/helpers";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
 import { listPostsForReviewer } from "@/lib/posts";
+import { enabledKinds } from "@/lib/variant";
 import { getPortalReviewer } from "./reviewer";
 
 type ReviewHomeProps = {
@@ -10,7 +11,9 @@ type ReviewHomeProps = {
 
 /**
  * Portal home: what needs the client's review first, then what the agency
- * is reworking, then what is already approved / scheduled.
+ * is reworking, then what is already approved / scheduled. Each card says
+ * what it is (social post, article, ads creatives); the wording follows the
+ * kinds in the list ("post", "articoli", "contenuti").
  */
 export default async function ReviewHomePage({ params }: ReviewHomeProps) {
   const { token } = await params;
@@ -23,6 +26,7 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
   const cards = posts.map(
     (p): PortalPostCardData & { publishAt: Date } => ({
       id: p.id,
+      kind: p.kind,
       title: p.title,
       status: p.status,
       canAct: p.canAct,
@@ -30,6 +34,7 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
       versionNumber: p.currentVersionNumber,
       cover: p.cover,
       mediaCount: p.mediaCount,
+      variantCount: p.variantCount,
       excerpt: p.excerpt,
       publishAt: p.publishAt,
       publishLabel: formatPortalDate(p.publishAt, timeZone, { now }),
@@ -37,6 +42,11 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
     })
   );
   const groups = groupPortalPosts(cards, now);
+  // An empty list speaks of what this instance handles.
+  const kinds = posts.length > 0 ? posts.map((p) => p.kind) : enabledKinds();
+  const noun = portalNoun(kinds);
+  const socialOnly = kinds.every((k) => k === "SOCIAL_POST");
+  const adsOnly = kinds.every((k) => k === "AD_CREATIVE");
   const firstName = reviewer.name.trim().split(/\s+/)[0] || reviewer.name;
 
   return (
@@ -45,17 +55,17 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
         <h1 className="text-2xl font-semibold">Ciao {firstName}!</h1>
         <p className="text-base text-muted">
           {groups.toReview.length === 0
-            ? "Non ci sono post da approvare in questo momento. Ti scriveremo quando ce ne saranno di nuovi."
+            ? `Non ci sono ${noun.many} da approvare in questo momento. Ti scriveremo quando ce ne saranno di nuovi.`
             : groups.toReview.length === 1
-              ? "C'è un post che aspetta la tua approvazione."
-              : `Ci sono ${groups.toReview.length} post che aspettano la tua approvazione.`}
+              ? `C'è un ${noun.one} che aspetta la tua approvazione.`
+              : `Ci sono ${groups.toReview.length} ${noun.many} che aspettano la tua approvazione.`}
         </p>
         {groups.toReview.length > 0 && (
           <Link
             href={portalPath(token, groups.toReview[0].id)}
             className="mt-2 flex min-h-12 w-full items-center justify-center rounded-lg bg-accent px-5 text-base font-semibold text-white hover:bg-accent-hover sm:w-auto sm:inline-flex"
           >
-            {groups.toReview.length === 1 ? "Rivedi il post" : "Inizia dal primo"}
+            {groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Inizia dal primo"}
           </Link>
         )}
       </section>
@@ -82,11 +92,15 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
 
       {(groups.approvedUpcoming.length > 0 || groups.approvedPast.length > 0) && (
         <Section
-          title="Approvati / programmati"
+          title={socialOnly ? "Approvati / programmati" : "Approvati"}
           count={groups.approvedUpcoming.length + groups.approvedPast.length}
         >
           {groups.approvedUpcoming.length === 0 && (
-            <p className="text-sm text-muted">Nessun post in uscita nei prossimi giorni.</p>
+            <p className="text-sm text-muted">
+              {adsOnly
+                ? "Nessuna campagna in partenza nei prossimi giorni."
+                : `Nessun ${noun.one} in uscita nei prossimi giorni.`}
+            </p>
           )}
           {groups.approvedUpcoming.map((post) => (
             <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
@@ -94,7 +108,7 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
           {groups.approvedPast.length > 0 && (
             <details className="group rounded-lg border border-border">
               <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm text-muted">
-                Già pubblicati ({groups.approvedPast.length})
+                {`${adsOnly ? "Campagne già partite" : socialOnly ? "Già pubblicati" : "Date già passate"} (${groups.approvedPast.length})`}
               </summary>
               <div className="space-y-3 p-3 pt-0">
                 {groups.approvedPast.map((post) => (
@@ -108,8 +122,8 @@ export default async function ReviewHomePage({ params }: ReviewHomeProps) {
 
       {posts.length === 0 && (
         <p className="rounded-lg border border-border bg-surface p-4 text-sm text-muted">
-          Qui troverai i post che l&apos;agenzia prepara per {reviewer.client.name}, pronti da rivedere e
-          approvare.
+          Qui troverai {noun.theMany} che l&apos;agenzia prepara per {reviewer.client.name}, pronti da rivedere
+          e approvare.
         </p>
       )}
     </main>

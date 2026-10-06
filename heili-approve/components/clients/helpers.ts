@@ -3,8 +3,8 @@
  * time zone options, post counts per status, date labels.
  */
 
-import type { PostStatus } from "@/app/generated/prisma/client";
-import { STATUS_LABELS } from "@/lib/domain";
+import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
+import { STATUS_LABELS, statusLabelFor } from "@/lib/domain";
 import { isValidTimeZone } from "@/lib/metricool/payload";
 
 // ─── Time zones ──────────────────────────────────────────────────────────────
@@ -89,6 +89,7 @@ export const STATUS_COUNT_ORDER: PostStatus[] = [
   "APPROVED",
   "SCHEDULING",
   "SCHEDULED",
+  "DELIVERED",
 ];
 
 export type StatusCounts = Partial<Record<PostStatus, number>>;
@@ -106,15 +107,19 @@ export function groupStatusCounts(
   return result;
 }
 
-/** Non-zero counts in display order, with their Italian label. */
+/**
+ * Non-zero counts in display order, with their Italian label (worded for
+ * `kind` when the instance has a single one: "Pubblicato" for articles).
+ */
 export function statusCountEntries(
-  counts: StatusCounts | undefined
+  counts: StatusCounts | undefined,
+  kind: ContentKind | null = null
 ): Array<{ status: PostStatus; count: number; label: string }> {
   if (!counts) return [];
   return STATUS_COUNT_ORDER.filter((status) => (counts[status] ?? 0) > 0).map((status) => ({
     status,
     count: counts[status]!,
-    label: STATUS_LABELS[status],
+    label: kind ? statusLabelFor(kind, status) : STATUS_LABELS[status],
   }));
 }
 

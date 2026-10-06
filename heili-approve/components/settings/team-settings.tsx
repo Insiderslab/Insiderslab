@@ -39,6 +39,10 @@ interface TeamSettingsProps {
   /** From the server session; the API enforces it again. */
   canManage: boolean;
   currentUserId: string;
+  /** Social instances: admins also manage Metricool. Default true. */
+  metricool?: boolean;
+  /** What members prepare, with the article: "i post" (default), "gli articoli"… */
+  contentsThe?: string;
 }
 
 const dateFormat = new Intl.DateTimeFormat("it-IT", {
@@ -47,7 +51,12 @@ const dateFormat = new Intl.DateTimeFormat("it-IT", {
   timeZone: "Europe/Rome",
 });
 
-export default function TeamSettings({ canManage, currentUserId }: TeamSettingsProps) {
+export default function TeamSettings({
+  canManage,
+  currentUserId,
+  metricool = true,
+  contentsThe = "i post",
+}: TeamSettingsProps) {
   const [membersData, setMembersData] = useState<WorkspaceMembersData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -260,7 +269,8 @@ export default function TeamSettings({ canManage, currentUserId }: TeamSettingsP
           </button>
           {memberError && <p className="text-sm text-error sm:col-span-3">{memberError}</p>}
           <p className="text-xs text-muted sm:col-span-3">
-            Gli amministratori gestiscono team e Metricool; i membri preparano i post e gestiscono i clienti.
+            Gli amministratori gestiscono {metricool ? "team e Metricool" : "il team"}; i membri preparano {contentsThe} e
+            gestiscono i clienti.
           </p>
         </form>
       ) : (

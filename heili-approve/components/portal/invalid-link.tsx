@@ -3,7 +3,7 @@
  * clients). Deliberately says nothing about which case it is.
  */
 
-export default function InvalidLink() {
+export default function InvalidLink({ productName = "Approve by Heili" }: { productName?: string }) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-12">
       <div className="space-y-4">
@@ -14,10 +14,10 @@ export default function InvalidLink() {
         </p>
         <p className="text-base leading-relaxed text-muted">
           Cerca l&apos;email più recente dell&apos;agenzia o chiedi di inviarti di nuovo il link per rivedere i
-          post.
+          contenuti.
         </p>
       </div>
-      <p className="mt-10 text-xs text-muted">Approve by Heili</p>
+      <p className="mt-10 text-xs text-muted">{productName}</p>
     </main>
   );
 }

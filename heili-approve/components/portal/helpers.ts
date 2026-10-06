@@ -1,13 +1,14 @@
 /**
  * Pure helpers for the client portal (/review/<token>): grouping, Italian
- * dates in the client's time zone, comment ordering and the "next post" queue.
+ * dates in the client's time zone, comment ordering, the "next post" queue,
+ * and the per-kind wording (social posts, blog articles, ads creatives).
  *
  * No I/O and no React: safe in server and client components, unit-tested in
  * __tests__/portal.test.ts.
  */
 
-import type { PostStatus } from "@/app/generated/prisma/client";
-import { formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
+import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
+import { KIND_CONFIG, formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
 
 const FALLBACK_TIME_ZONE = "Europe/Rome";
 
@@ -28,6 +29,23 @@ export const PORTAL_STATUS_LABELS: Record<PostStatus, string> = {
   CANCELLED: "Annullato",
   DELIVERED: "Pubblicato",
 };
+
+/**
+ * Status as the client reads it for a kind: an ads set is plural in Italian
+ * ("Approvate", "Consegnate"), an article delivered is "Pubblicato".
+ */
+export function portalStatusLabel(kind: ContentKind, status: PostStatus): string {
+  if (kind === "AD_CREATIVE") {
+    if (status === "APPROVED" || status === "SCHEDULING" || status === "SCHEDULED" || status === "FAILED") {
+      return "Approvate";
+    }
+    if (status === "DELIVERED") return "Consegnate";
+    if (status === "CANCELLED") return "Annullate";
+    return PORTAL_STATUS_LABELS[status];
+  }
+  if (status === "DELIVERED") return KIND_CONFIG[kind].deliveredLabel || PORTAL_STATUS_LABELS.DELIVERED;
+  return PORTAL_STATUS_LABELS[status];
+}
 
 export type PortalTone = "action" | "waiting" | "done";
 
@@ -237,6 +255,125 @@ export function checkMomentInput(
 export function mediaName(type: "image" | "video" | undefined, index: number, total: number): string {
   const noun = type === "video" ? "Video" : "Immagine";
   return total > 1 ? `${noun} ${index + 1}` : noun;
+}
+
+// ─── Wording per kind ────────────────────────────────────────────────────────
+
+/** How the portal names what it lists, from the kinds it lists. */
+export interface PortalNoun {
+  /** "post", "articolo", "contenuto". */
+  one: string;
+  /** "post", "articoli", "contenuti". */
+  many: string;
+  /** "il post", "l'articolo", "il contenuto". */
+  theOne: string;
+  /** "i post", "gli articoli", "i contenuti". */
+  theMany: string;
+  /** "dei post", "degli articoli", "dei contenuti". */
+  ofMany: string;
+}
+
+const NOUNS = {
+  post: { one: "post", many: "post", theOne: "il post", theMany: "i post", ofMany: "dei post" },
+  article: { one: "articolo", many: "articoli", theOne: "l'articolo", theMany: "gli articoli", ofMany: "degli articoli" },
+  content: { one: "contenuto", many: "contenuti", theOne: "il contenuto", theMany: "i contenuti", ofMany: "dei contenuti" },
+} satisfies Record<string, PortalNoun>;
+
+/**
+ * Social only → "post" (the original wording), blog only → "articolo",
+ * anything else (ads sets, mixed lists) → "contenuto". An empty list reads
+ * as the instance's kinds when given, else as social.
+ */
+export function portalNoun(kinds: readonly ContentKind[]): PortalNoun {
+  const distinct = new Set(kinds);
+  if (distinct.size === 0 || (distinct.size === 1 && distinct.has("SOCIAL_POST"))) return NOUNS.post;
+  if (distinct.size === 1 && distinct.has("BLOG_ARTICLE")) return NOUNS.article;
+  return NOUNS.content;
+}
+
+/** Page title of the portal for the instance's kinds. */
+export function portalTitle(kinds: readonly ContentKind[]): string {
+  const noun = portalNoun(kinds);
+  return noun === NOUNS.post ? "Post da approvare" : noun === NOUNS.article ? "Articoli da approvare" : "Da approvare";
+}
+
+/** "Prossimo post →" for social, "Prossimo contenuto →" otherwise. */
+export function nextLabel(kinds: readonly ContentKind[]): string {
+  return portalNoun(kinds) === NOUNS.post ? "Prossimo post →" : "Prossimo contenuto →";
+}
+
+/** Navigation and outcome wording of a review page (client-safe: plain strings). */
+export interface PortalWording {
+  /** "← Tutti i post". */
+  backLabel: string;
+  /** "Post 1 di 3 da approvare". */
+  position: (position: number, total: number) => string;
+  /** "Prossimo post →". */
+  nextLabel: string;
+  /** "C'è ancora un post da rivedere." */
+  remaining: (count: number) => string;
+  /** "Hai rivisto tutti i post in attesa. Grazie!" */
+  allDone: string;
+  /** "Torna all'elenco dei post". */
+  homeLabel: string;
+}
+
+export function portalWording(kinds: readonly ContentKind[]): PortalWording {
+  const noun = portalNoun(kinds);
+  const capital = noun.one.charAt(0).toUpperCase() + noun.one.slice(1);
+  return {
+    backLabel: `← Tutti ${noun.theMany}`,
+    position: (position, total) => `${capital} ${position} di ${total} da approvare`,
+    nextLabel: nextLabel(kinds),
+    remaining: (count) =>
+      count === 1 ? `C'è ancora un ${noun.one} da rivedere.` : `Ci sono ancora ${count} ${noun.many} da rivedere.`,
+    allDone: `Hai rivisto tutti ${noun.theMany} in attesa. Grazie!`,
+    homeLabel: `Torna all'elenco ${noun.ofMany}`,
+  };
+}
+
+/** "Pubblicazione", "Pubblicazione prevista", "Inizio campagna". */
+export function dateLabelFor(kind: ContentKind): string {
+  return KIND_CONFIG[kind].dateLabel;
+}
+
+// ─── Blog comments ───────────────────────────────────────────────────────────
+
+// Shared with the agency's article view: one numbering on both sides.
+export { numberPassageComments, type PassagePlacement } from "@/lib/content/blog-text";
+
+// ─── Ads decisions ───────────────────────────────────────────────────────────
+
+export interface DecisionCount {
+  decided: number;
+  total: number;
+  approved: string[];
+  rejected: string[];
+  /** Variant ids still without a decision, in content order. */
+  missing: string[];
+}
+
+/** Where the client stands on a set: decisions on the variants that exist. */
+export function countDecisions(
+  variantIds: readonly string[],
+  decisions: Readonly<Record<string, { verdict: "APPROVED" | "REJECTED" } | null | undefined>>
+): DecisionCount {
+  const approved: string[] = [];
+  const rejected: string[] = [];
+  const missing: string[] = [];
+  for (const id of variantIds) {
+    const verdict = decisions[id]?.verdict;
+    if (verdict === "APPROVED") approved.push(id);
+    else if (verdict === "REJECTED") rejected.push(id);
+    else missing.push(id);
+  }
+  return { decided: approved.length + rejected.length, total: variantIds.length, approved, rejected, missing };
+}
+
+/** "2 di 3 varianti decise" (singular for a set of one). */
+export function decisionProgressLabel(count: Pick<DecisionCount, "decided" | "total">): string {
+  if (count.total === 1) return count.decided === 1 ? "Variante decisa" : "Variante da decidere";
+  return `${count.decided} di ${count.total} varianti decise`;
 }
 
 // ─── Links ───────────────────────────────────────────────────────────────────

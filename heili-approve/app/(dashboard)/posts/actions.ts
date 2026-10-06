@@ -19,7 +19,7 @@ import type { ActionResult, CommentInput, ContentFormInput, PostFormInput } from
 import { userActor } from "@/lib/actor";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, type MediaItem, type Network } from "@/lib/domain";
-import { isDomainError, parseOrThrow, publicErrorMessage } from "@/lib/errors";
+import { NotFoundError, isDomainError, parseOrThrow, publicErrorMessage } from "@/lib/errors";
 import {
   addComment,
   blogAnchorSchema,
@@ -32,6 +32,7 @@ import {
   type PostInput,
 } from "@/lib/posts";
 import { requestScheduling } from "@/lib/scheduling";
+import { enabledKinds } from "@/lib/variant";
 import { getCurrentWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-access";
 
 const idSchema = z.string().trim().min(1).max(64);
@@ -99,7 +100,6 @@ function sentMessage(count: number, kinds: ContentKind[]): string {
   return count === 1 ? `${subject.one} inviato in revisione.` : `${count} ${subject.many} inviati in revisione.`;
 }
 
-
 /** Runs `fn` for the signed-in workspace, mapping domain errors to messages. */
 async function withWorkspace<T>(
   fn: (context: WorkspaceContext) => Promise<ActionResult<T>>
@@ -112,6 +112,17 @@ async function withWorkspace<T>(
     if (!isDomainError(error)) console.error("[posts] Action failed:", error);
     return { ok: false, error: publicErrorMessage(error) };
   }
+}
+
+/**
+ * Items of a kind this instance does not handle (APP_VARIANT) do not exist
+ * for it: no page shows them, and no action changes them either.
+ */
+async function assertKindsEnabled(postIds: string[], workspaceId: string): Promise<void> {
+  const hidden = await prisma.post.count({
+    where: { id: { in: postIds }, workspaceId, kind: { notIn: enabledKinds() } },
+  });
+  if (hidden > 0) throw new NotFoundError("Post non trovato");
 }
 
 /** Pages that show post statuses (the layout's counter refreshes with them). */
@@ -155,6 +166,7 @@ export async function updatePostAction(
   return withWorkspace(async ({ workspaceId, userId }) => {
     const id = parseOrThrow(idSchema, postId);
     const data = parseOrThrow(postFormSchema, input);
+    await assertKindsEnabled([id], workspaceId);
     const before = await prisma.post.findFirst({
       where: { id, workspaceId },
       select: { status: true, currentVersionNumber: true },
@@ -213,6 +225,7 @@ export async function updateContentAction(
   return withWorkspace(async ({ workspaceId, userId }) => {
     const id = parseOrThrow(idSchema, postId);
     const data = parseOrThrow(contentFormSchema, input);
+    await assertKindsEnabled([id], workspaceId);
     const before = await prisma.post.findFirst({
       where: { id, workspaceId },
       select: { status: true, currentVersionNumber: true, kind: true },
@@ -249,6 +262,7 @@ export async function updateContentAction(
 export async function deliverPostAction(postId: string): Promise<ActionResult<{ status: string }>> {
   return withWorkspace(async ({ workspaceId, userId }) => {
     const id = parseOrThrow(idSchema, postId);
+    await assertKindsEnabled([id], workspaceId);
     const post = await deliverPost(id, workspaceId, userActor(userId));
     revalidatePosts([id]);
     return {
@@ -276,6 +290,7 @@ export async function submitForReviewAction(
       return { ok: false, error: "La scadenza per la risposta è già passata." };
     }
 
+    await assertKindsEnabled(data.postIds, workspaceId);
     const result = await submitForReview(data.postIds, workspaceId, userActor(userId), { reviewDueAt });
     revalidatePosts(result.submitted);
 
@@ -284,10 +299,7 @@ export async function submitForReviewAction(
       where: { id: { in: result.submitted }, workspaceId },
       select: { kind: true },
     });
-    let message = sentMessage(
-      count,
-      kinds.map((p) => p.kind)
-    );
+    let message = sentMessage(count, kinds.map((p) => p.kind));
     if (result.clientsWithoutReviewers.length > 0) {
       message += ` Attenzione: ${result.clientsWithoutReviewers.join(", ")} non ha referenti attivi, quindi nessuno riceverà l'email. Aggiungili nella scheda del cliente.`;
     }
@@ -299,6 +311,7 @@ export async function submitForReviewAction(
 export async function schedulePostAction(postId: string): Promise<ActionResult<{ status: string }>> {
   return withWorkspace(async ({ workspaceId, userId }) => {
     const id = parseOrThrow(idSchema, postId);
+    await assertKindsEnabled([id], workspaceId);
     const result = await requestScheduling(id, userActor(userId), { workspaceId });
     revalidatePosts([id]);
 
@@ -327,6 +340,7 @@ export async function schedulePostAction(postId: string): Promise<ActionResult<{
 export async function cancelPostAction(postId: string): Promise<ActionResult> {
   return withWorkspace(async ({ workspaceId, userId }) => {
     const id = parseOrThrow(idSchema, postId);
+    await assertKindsEnabled([id], workspaceId);
     const post = await cancelPost(id, workspaceId, userActor(userId));
     revalidatePosts([id]);
     const subject = KIND_SUBJECT[post.kind].one;
@@ -347,6 +361,7 @@ export async function cancelPostAction(postId: string): Promise<ActionResult> {
 export async function addCommentAction(input: CommentInput): Promise<ActionResult<{ id: string }>> {
   return withWorkspace(async ({ workspaceId, userId }) => {
     const data = parseOrThrow(commentSchema, input);
+    await assertKindsEnabled([data.postId], workspaceId);
     const comment = await addComment({ ...data, actor: userActor(userId), workspaceId });
     revalidatePath(`/posts/${data.postId}`);
     return { ok: true, data: { id: comment.id }, message: "Commento aggiunto." };
@@ -362,6 +377,12 @@ export async function resolveCommentsAction(
   return withWorkspace(async ({ workspaceId }) => {
     const id = parseOrThrow(idSchema, postId);
     const data = parseOrThrow(resolveSchema, { commentIds, resolved });
+    await assertKindsEnabled([id], workspaceId);
+    // The thread must be of this post (the revalidated page and the kind check above).
+    const own = await prisma.postComment.count({
+      where: { id: { in: data.commentIds }, postId: id, post: { workspaceId } },
+    });
+    if (own !== new Set(data.commentIds).size) throw new NotFoundError("Commento non trovato");
     for (const commentId of data.commentIds) {
       await resolveComment(commentId, workspaceId, data.resolved);
     }

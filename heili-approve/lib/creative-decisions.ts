@@ -18,13 +18,14 @@
 import { z } from "zod";
 import type { CreativeDecision, Post } from "@/app/generated/prisma/client";
 import { reviewerActor } from "@/lib/actor";
-import { parseAdContent } from "@/lib/content/ads";
+import { parseAdContent, variantDisplayName } from "@/lib/content/ads";
 import type { VariantDecision } from "@/lib/content/types";
 import { prisma } from "@/lib/db/client";
 import { CLIENT_VISIBLE_STATUSES, InvalidTransitionError } from "@/lib/domain";
 import { ConflictError, NotFoundError, ValidationError, parseOrThrow } from "@/lib/errors";
 import { recordEvent, type DbClient } from "@/lib/events";
 import type { ReviewerRef } from "@/lib/posts";
+import { isKindEnabled } from "@/lib/variant";
 
 export const MAX_DECISION_NOTE_LENGTH = 2000;
 
@@ -86,8 +87,7 @@ export function evaluateCreativeDecisions(
 
 /** "Variante A — Prima/dopo" or the id when the variant has no name. */
 export function variantLabel(variant: { id: string; name?: string | null } | undefined, fallbackId: string): string {
-  const name = variant?.name?.trim();
-  return name ? name : `Variante ${fallbackId}`;
+  return variantDisplayName({ id: variant?.id ?? fallbackId, name: variant?.name ?? "" });
 }
 
 /** The part of an AdContent the messages need. */
@@ -128,6 +128,7 @@ async function loadAdSetForDecision(db: DbClient, postId: string, reviewer: Revi
     !post ||
     post.clientId !== reviewer.clientId ||
     post.kind !== "AD_CREATIVE" ||
+    !isKindEnabled("AD_CREATIVE") ||
     !CLIENT_VISIBLE_STATUSES.includes(post.status)
   ) {
     throw new NotFoundError("Creatività non trovate");
@@ -226,7 +227,8 @@ export async function decideVariant(
 /**
  * "Invia le mie decisioni": once every variant is decided, approves the set
  * (≥ 1 variant approved; approvePost re-checks the decisions atomically) or
- * sends it back with the notes when every variant was discarded.
+ * sends it back with the notes when every variant was discarded (requestChanges
+ * re-checks that under the same row lock).
  */
 export async function finalizeCreativeReview(
   postId: string,
@@ -250,6 +252,8 @@ export async function finalizeCreativeReview(
     const post = await approvePost(postId, reviewer, versionNumber);
     return { outcome: "APPROVED", post, evaluation };
   }
-  const { post } = await requestChanges(postId, reviewer, versionNumber, buildRejectionMessage(evaluation, content));
+  const { post } = await requestChanges(postId, reviewer, versionNumber, buildRejectionMessage(evaluation, content), {
+    allVariantsRejected: true,
+  });
   return { outcome: "CHANGES_REQUESTED", post, evaluation };
 }

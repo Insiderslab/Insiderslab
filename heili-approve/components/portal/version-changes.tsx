@@ -3,9 +3,11 @@
 /**
  * "Cosa è cambiato": what the agency changed since the version the client
  * last saw — the agency's notes, a word-level diff of the caption and first
- * comment, and the media changes. Rendered on the server.
+ * comment, and the media changes. Rendered on the server. Articles and ads
+ * sets pass their own diff as children (BlogVersionDiff, variant changes).
  */
 
+import type { ReactNode } from "react";
 import type { DiffSegment } from "@/lib/posts";
 import type { PortalVersionChanges } from "./types";
 
@@ -32,11 +34,15 @@ function DiffText({ segments }: { segments: DiffSegment[] }) {
 export default function VersionChanges({
   changes,
   currentNumber,
+  children,
 }: {
   changes: PortalVersionChanges;
   currentNumber: number;
+  /** Kind-specific diff, under the agency's notes. */
+  children?: ReactNode;
 }) {
   const nothingVisible =
+    !children &&
     changes.notes.length === 0 &&
     changes.summary.length === 0 &&
     changes.text.length === 0 &&
@@ -87,6 +93,8 @@ export default function VersionChanges({
           <DiffText segments={changes.firstComment} />
         </div>
       )}
+
+      {children}
 
       {changes.addedMedia.length > 0 && (
         <div className="space-y-1">

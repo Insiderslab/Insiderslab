@@ -7,6 +7,7 @@ import {
   buildBlogMarkdownExport,
   coerceBlogContent,
 } from "@/lib/content/blog";
+import { isKindEnabled } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 /**
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
     where: { id: postId, workspaceId: context.workspaceId },
     select: { id: true, title: true, kind: true, status: true, publishAt: true, currentVersionNumber: true },
   });
-  if (!post) return errorResponse("Articolo non trovato", 404);
+  // A kind this instance does not enable (APP_VARIANT) does not exist for it.
+  if (!post || !isKindEnabled(post.kind)) return errorResponse("Articolo non trovato", 404);
   if (post.kind !== "BLOG_ARTICLE") return errorResponse("Questo contenuto non è un articolo di blog", 400);
 
   const approved = APPROVED_STATUSES.has(post.status);

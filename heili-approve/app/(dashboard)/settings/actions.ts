@@ -6,7 +6,8 @@
  * The API token is written encrypted (encryptSecret) and is never returned:
  * none of these actions echo it, and error messages come from MetricoolError,
  * which never includes it. Only owners and admins can change the connection;
- * anyone in the workspace can test it.
+ * anyone in the workspace can test it. Instances without social posts (blog,
+ * ads) have no Metricool integration: every action refuses.
  */
 
 import { revalidatePath } from "next/cache";
@@ -21,6 +22,7 @@ import {
   MetricoolError,
   getWorkspaceMetricoolClient,
 } from "@/lib/metricool/client";
+import { isMetricoolEnabled, productName } from "@/lib/variant";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -57,6 +59,9 @@ async function withManager<T>(
 ): Promise<ActionResult<T>> {
   const context = await getCurrentWorkspaceContext();
   if (!context) return { ok: false, error: SESSION_EXPIRED };
+  if (!isMetricoolEnabled()) {
+    return { ok: false, error: `Metricool non è disponibile in ${productName()}.` };
+  }
   if (options.requireManager && !canManageWorkspace(context.role)) {
     return { ok: false, error: ADMIN_ONLY };
   }

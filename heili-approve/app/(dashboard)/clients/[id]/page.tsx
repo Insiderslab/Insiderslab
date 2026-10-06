@@ -2,7 +2,8 @@
  * Client Detail Page
  *
  * Reviewers and their links, client settings (Metricool brand, time zone,
- * networks, automatic scheduling), post counts and latest posts, archive.
+ * networks, automatic scheduling — Metricool parts only when social posts
+ * are enabled), counts and latest items of the enabled kinds, archive.
  */
 
 import Link from "next/link";
@@ -19,21 +20,20 @@ import {
   totalPosts,
 } from "@/components/clients/helpers";
 import ReviewerList, { type ReviewerRow } from "@/components/clients/reviewer-list";
-import StatusBadge from "@/components/status-badge";
+import { contentWords, newContentHref } from "@/components/posts/helpers";
+import { KindBadge, KindStatusBadge } from "@/components/posts/kind-badge";
 import { getClient } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
-import {
-  NETWORK_LABELS,
-  STATUS_TONES,
-  formatTimecode,
-  isNetwork,
-  parseMediaItems,
-} from "@/lib/domain";
+import { NETWORK_LABELS, STATUS_TONES, formatTimecode, isNetwork, parseMediaItems } from "@/lib/domain";
 import { NotFoundError } from "@/lib/errors";
+import { summarizeVersionForList } from "@/lib/posts";
 import { getReviewUrl } from "@/lib/reviewers";
+import { KIND_UI, enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
-export const metadata = { title: "Cliente - Approve by Heili" };
+export async function generateMetadata() {
+  return { title: `Cliente - ${productName()}` };
+}
 
 const RECENT_POSTS = 8;
 
@@ -75,24 +75,37 @@ export default async function ClientDetailPage({
     throw error;
   }
 
+  const kinds = enabledKinds();
+  const metricool = isMetricoolEnabled();
+  const singleKind = kinds.length === 1 ? kinds[0] : null;
+  const words = contentWords(kinds);
+  const postWhere = {
+    workspaceId: context.workspaceId,
+    clientId: client.id,
+    kind: { in: kinds },
+    status: { not: "CANCELLED" as const },
+  };
+
   const [brands, grouped, recentPosts] = await Promise.all([
-    loadBrandOptions(context.workspaceId),
+    // No Metricool call at all on blog / ads instances.
+    metricool ? loadBrandOptions(context.workspaceId) : Promise.resolve({ status: "not_configured" as const }),
     prisma.post.groupBy({
       by: ["clientId", "status"],
-      where: { workspaceId: context.workspaceId, clientId: client.id, status: { not: "CANCELLED" } },
+      where: postWhere,
       _count: { _all: true },
     }),
     prisma.post.findMany({
-      where: { workspaceId: context.workspaceId, clientId: client.id, status: { not: "CANCELLED" } },
+      where: postWhere,
       orderBy: { publishAt: "desc" },
       take: RECENT_POSTS,
       select: {
         id: true,
         title: true,
+        kind: true,
         status: true,
         publishAt: true,
         networks: true,
-        versions: { orderBy: { number: "desc" }, take: 1, select: { media: true } },
+        versions: { orderBy: { number: "desc" }, take: 1, select: { text: true, media: true, content: true } },
       },
     }),
   ]);
@@ -100,7 +113,7 @@ export default async function ClientDetailPage({
   const counts = groupStatusCounts(
     grouped.map((row) => ({ clientId: row.clientId, status: row.status, count: row._count._all }))
   )[client.id];
-  const entries = statusCountEntries(counts);
+  const entries = statusCountEntries(counts, singleKind);
   const total = totalPosts(counts);
   const archived = Boolean(client.archivedAt);
 
@@ -139,8 +152,8 @@ export default async function ClientDetailPage({
           <h2 className="truncate text-xl font-semibold">{client.name}</h2>
           <p className="text-sm text-muted">
             {client.timezone}
-            {client.metricoolBlogId ? " · brand Metricool collegato" : ""}
-            {client.autoSchedule ? " · programmazione automatica" : " · programmazione manuale"}
+            {metricool && client.metricoolBlogId ? " · brand Metricool collegato" : ""}
+            {metricool ? (client.autoSchedule ? " · programmazione automatica" : " · programmazione manuale") : ""}
           </p>
         </div>
       </div>
@@ -150,36 +163,37 @@ export default async function ClientDetailPage({
           <p className="text-warning">
             Cliente archiviato il {formatDateTime(client.archivedAt!)}: i link dei referenti non funzionano.
           </p>
-          <p className="mt-1 text-muted">Ripristinalo per modificarlo o inviare nuovi post.</p>
+          <p className="mt-1 text-muted">Ripristinalo per modificarlo o inviare nuovi {words.plural}.</p>
         </div>
       )}
 
       {query.nuovo === "1" && !archived && activeReviewers === 0 && (
         <div className="panel rounded p-4 text-sm">
           <span className="text-success">Cliente creato.</span>{" "}
-          <span className="text-muted">Ora aggiungi chi deve approvare i post.</span>
+          <span className="text-muted">Ora aggiungi chi deve approvare {words.the}.</span>
         </div>
       )}
 
       {/* Posts */}
       <section className="panel rounded p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-base font-semibold">Post</h3>
+          <h3 className="text-base font-semibold">{words.Plural}</h3>
           <div className="flex gap-2">
             {total > 0 && (
               <Link
                 href={`/posts?clientId=${client.id}`}
                 className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
               >
-                Tutti i post ({total})
+                {words.all} ({total})
               </Link>
             )}
             {!archived && (
               <Link
-                href={`/posts/new?clientId=${client.id}`}
+                // Several kinds: /posts/new asks which one.
+                href={newContentHref(singleKind, { clientId: client.id })}
                 className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
               >
-                Nuovo post
+                {singleKind ? KIND_UI[singleKind].newTitle : "Nuovo contenuto"}
               </Link>
             )}
           </div>
@@ -199,15 +213,17 @@ export default async function ClientDetailPage({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted">Nessun post per questo cliente.</p>
+          <p className="text-sm text-muted">Nessun contenuto per questo cliente.</p>
         )}
 
         {recentPosts.length > 0 && (
           <ul className="divide-y divide-border rounded border border-border bg-background">
             {recentPosts.map((post) => {
-              const media = parseMediaItems(post.versions[0]?.media);
+              const social = post.kind === "SOCIAL_POST";
+              const media = social ? parseMediaItems(post.versions[0]?.media) : [];
               const video = media.find((item) => item.type === "video");
-              const networks = post.networks.filter(isNetwork);
+              const networks = social ? post.networks.filter(isNetwork) : [];
+              const summary = post.kind === "AD_CREATIVE" ? summarizeVersionForList(post.kind, post.versions[0]) : null;
               return (
                 <li key={post.id}>
                   <Link
@@ -215,15 +231,21 @@ export default async function ClientDetailPage({
                     className="flex flex-col gap-1 p-3 hover:bg-surface-hover sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{post.title}</p>
+                      <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                        {!singleKind && <KindBadge kind={post.kind} iconOnly />}
+                        <span className="truncate">{post.title}</span>
+                      </p>
                       <p className="truncate text-xs text-muted">
                         {formatDateTime(post.publishAt, client.timezone)}
                         {networks.length > 0 && ` · ${networks.map((n) => NETWORK_LABELS[n]).join(", ")}`}
                         {video &&
                           ` · video${video.durationSec ? ` ${formatTimecode(video.durationSec)}` : ""}`}
+                        {summary?.variantCount
+                          ? ` · ${summary.variantCount === 1 ? "1 variante" : `${summary.variantCount} varianti`}`
+                          : ""}
                       </p>
                     </div>
-                    <StatusBadge status={post.status} />
+                    <KindStatusBadge kind={post.kind} status={post.status} />
                   </Link>
                 </li>
               );
@@ -236,13 +258,14 @@ export default async function ClientDetailPage({
       <section className="panel rounded p-4 sm:p-6">
         <h3 className="mb-1 text-base font-semibold">Referenti</h3>
         <p className="mb-4 text-sm text-muted">
-          Le persone di {client.name} che rivedono e approvano i post dal proprio link personale.
+          Le persone di {client.name} che rivedono e approvano {words.the} dal proprio link personale.
         </p>
         <ReviewerList
           clientId={client.id}
           clientName={client.name}
           reviewers={reviewers}
           archived={archived}
+          contentsThe={words.the}
         />
       </section>
 
@@ -263,6 +286,7 @@ export default async function ClientDetailPage({
           timeZoneOptions={buildTimeZoneOptions()}
           brands={brands}
           readOnly={archived}
+          metricool={metricool}
         />
       </section>
 
@@ -272,7 +296,7 @@ export default async function ClientDetailPage({
         <p className="mb-4 text-sm text-muted">
           {archived
             ? "Il cliente torna negli elenchi; i referenti attivi possono di nuovo usare il loro link."
-            : "Il cliente sparisce dagli elenchi e i link dei referenti smettono di funzionare. Post e storico restano."}
+            : `Il cliente sparisce dagli elenchi e i link dei referenti smettono di funzionare. ${words.Plural} e storico restano.`}
         </p>
         <ArchiveButton clientId={client.id} clientName={client.name} archived={archived} />
       </section>

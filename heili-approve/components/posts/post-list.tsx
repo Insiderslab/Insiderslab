@@ -3,26 +3,30 @@
 /**
  * Post List
  *
- * Table on desktop, cards on phones. Drafts (and posts with changes
+ * Table on desktop, cards on phones. Drafts (and items with changes
  * requested) can be selected and sent to their clients in one go: each
- * reviewer gets a single email listing all of their posts.
+ * reviewer gets a single email listing all of their items. With several
+ * kinds in the list each row shows its kind's icon; statuses are worded for
+ * the kind ("Pubblicato" for a delivered article).
  */
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import type { PostStatus } from "@/app/generated/prisma/client";
+import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
-import StatusBadge from "@/components/status-badge";
 import { canTransition, type MediaType } from "@/lib/domain";
 import { DEFAULT_TIME_ZONE, TONE_BORDER, formatDateTime, localPartsToUtc, statusTone, timeZoneAbbr } from "./helpers";
+import { KindBadge, KindIcon, KindStatusBadge } from "./kind-badge";
 
 export interface PostListRow {
   id: string;
+  kind: ContentKind;
   title: string;
   clientId: string;
   clientName: string;
   timezone: string;
-  networkLabels: string[];
+  /** Networks (social), slug (blog), platform and variants (ads). */
+  detail: string;
   publishAt: Date | string;
   status: PostStatus;
   versionNumber: number;
@@ -31,9 +35,16 @@ export interface PostListRow {
   thumbnail: { url: string; type: MediaType; posterUrl?: string } | null;
 }
 
-function Thumbnail({ media }: { media: PostListRow["thumbnail"] }) {
+function Thumbnail({ media, kind }: { media: PostListRow["thumbnail"]; kind: ContentKind }) {
   if (!media) {
-    return <div className="h-11 w-11 shrink-0 rounded border border-border bg-surface-hover" aria-hidden />;
+    return (
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-hover text-muted"
+        aria-hidden
+      >
+        {kind !== "SOCIAL_POST" && <KindIcon kind={kind} className="h-5 w-5" />}
+      </div>
+    );
   }
   if (media.type === "video") {
     return (
@@ -65,7 +76,17 @@ function Extra({ row }: { row: PostListRow }) {
   );
 }
 
-export default function PostList({ rows }: { rows: PostListRow[] }) {
+export default function PostList({
+  rows,
+  showKind = false,
+  detailLabel = "Reti",
+}: {
+  rows: PostListRow[];
+  /** The list mixes kinds: show each row's kind. */
+  showKind?: boolean;
+  /** Header of the detail column ("Reti" for social-only lists). */
+  detailLabel?: string;
+}) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [dueDate, setDueDate] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -175,10 +196,10 @@ export default function PostList({ rows }: { rows: PostListRow[] }) {
           <thead className="bg-surface text-left text-xs text-muted">
             <tr>
               <th className="w-10 px-3 py-2" />
-              <th className="px-3 py-2 font-medium">Post</th>
+              <th className="px-3 py-2 font-medium">Titolo</th>
               <th className="px-3 py-2 font-medium">Cliente</th>
-              <th className="px-3 py-2 font-medium">Reti</th>
-              <th className="px-3 py-2 font-medium">Pubblicazione</th>
+              <th className="px-3 py-2 font-medium">{detailLabel}</th>
+              <th className="px-3 py-2 font-medium">Data</th>
               <th className="px-3 py-2 font-medium">Stato</th>
             </tr>
           </thead>
@@ -188,13 +209,16 @@ export default function PostList({ rows }: { rows: PostListRow[] }) {
                 <td className="px-3 py-3">{checkbox(row)}</td>
                 <td className="px-3 py-3">
                   <div className="flex min-w-0 gap-3">
-                    <Thumbnail media={row.thumbnail} />
+                    <Thumbnail media={row.thumbnail} kind={row.kind} />
                     <div className="min-w-0">
                       <Link href={`/posts/${row.id}`} className="font-medium text-foreground hover:underline">
                         {row.title}
                       </Link>
                       <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted">
-                        <span>Versione {row.versionNumber}</span>
+                        <span className="flex flex-wrap items-center gap-x-2">
+                          {showKind && <KindBadge kind={row.kind} />}
+                          <span>Versione {row.versionNumber}</span>
+                        </span>
                         <Extra row={row} />
                       </div>
                     </div>
@@ -205,7 +229,7 @@ export default function PostList({ rows }: { rows: PostListRow[] }) {
                     {row.clientName}
                   </Link>
                 </td>
-                <td className="px-3 py-3 text-muted">{row.networkLabels.join(", ")}</td>
+                <td className="px-3 py-3 text-muted">{row.detail}</td>
                 <td className="whitespace-nowrap px-3 py-3">
                   {formatDateTime(row.publishAt, row.timezone, { year: false })}
                   {row.timezone !== DEFAULT_TIME_ZONE && (
@@ -213,7 +237,7 @@ export default function PostList({ rows }: { rows: PostListRow[] }) {
                   )}
                 </td>
                 <td className="px-3 py-3">
-                  <StatusBadge status={row.status} />
+                  <KindStatusBadge kind={row.kind} status={row.status} />
                 </td>
               </tr>
             ))}
@@ -229,18 +253,21 @@ export default function PostList({ rows }: { rows: PostListRow[] }) {
             className={`flex gap-3 rounded border border-l-4 border-border bg-surface p-3 ${TONE_BORDER[statusTone(row.status)]}`}
           >
             <div className="pt-0.5">{checkbox(row)}</div>
-            <Thumbnail media={row.thumbnail} />
+            <Thumbnail media={row.thumbnail} kind={row.kind} />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <Link href={`/posts/${row.id}`} className="min-w-0 break-words text-sm font-medium hover:underline">
                   {row.title}
                 </Link>
-                <StatusBadge status={row.status} />
+                <KindStatusBadge kind={row.kind} status={row.status} />
               </div>
               <p className="mt-0.5 text-xs text-muted">
                 {row.clientName} · {formatDateTime(row.publishAt, row.timezone, { year: false })}
               </p>
-              <p className="truncate text-xs text-muted">{row.networkLabels.join(", ")}</p>
+              <p className="flex min-w-0 items-center gap-2 text-xs text-muted">
+                {showKind && <KindBadge kind={row.kind} />}
+                <span className="truncate">{row.detail}</span>
+              </p>
               <div className="mt-1 flex flex-col gap-0.5 text-xs">
                 <Extra row={row} />
               </div>

@@ -6,7 +6,8 @@
  * - "Note sul video": moments sorted by time, each with a timecode chip that
  *   seeks the player there (`onSeek`).
  * - "Note sulle immagini": pins, numbered like the circles on the preview.
- * - "Commenti": general comments and agency replies, oldest first.
+ * - "Commenti": general comments and agency replies, oldest first (an
+ *   article comment shows the passage it is about).
  */
 
 import type { MediaItem } from "@/lib/domain";
@@ -130,6 +131,11 @@ function CommentItem({
                 </span>
               )}
             </div>
+          )}
+          {comment.anchor && (
+            <blockquote className="line-clamp-3 border-l-2 border-warning pl-2 text-xs italic text-muted">
+              «{comment.anchor.quote}»
+            </blockquote>
           )}
           <p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p>
         </div>

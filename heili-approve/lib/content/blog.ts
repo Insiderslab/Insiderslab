@@ -129,7 +129,10 @@ export const blogContentSchema = z.object({
 
 /** A client comment's anchor (PostComment.anchor), as sent by BlogReader. */
 export const blogAnchorSchema = z.object({
-  quote: z.string().min(1, "Seleziona il testo da commentare").max(2000, "Seleziona un passaggio più breve"),
+  quote: z
+    .string()
+    .max(2000, "Seleziona un passaggio più breve")
+    .refine((quote) => quote.trim().length > 0, "Seleziona il testo da commentare"),
   prefix: z.string().max(200).default(""),
   suffix: z.string().max(200).default(""),
   blockIndex: z.number().int().min(0).max(100_000).nullable().default(null),
@@ -198,9 +201,9 @@ export function coerceBlogContent(value: unknown): BlogContent {
 
 /** Validated anchor, or null when the value is not a usable anchor. */
 export function parseBlogAnchor(value: unknown): BlogAnchor | null {
+  if (value === null || value === undefined) return null;
   const result = blogAnchorSchema.safeParse(value);
-  if (!result.success || !result.data.quote.trim()) return null;
-  return result.data;
+  return result.success ? result.data : null;
 }
 
 // ─── Small text helpers ──────────────────────────────────────────────────────
@@ -310,6 +313,111 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
 /** sanitize-html with the article allowlist (no scripts, styles, handlers, javascript: links). */
 export function sanitizeArticleHtml(html: string): string {
   return sanitizeHtml(html, SANITIZE_OPTIONS);
+}
+
+type MarkdownTableCell = { tokens?: MarkdownToken[] };
+type MarkdownToken = {
+  type: string;
+  raw: string;
+  text?: string;
+  href?: string;
+  tokens?: MarkdownToken[];
+  items?: MarkdownToken[];
+  header?: MarkdownTableCell[];
+  rows?: MarkdownTableCell[][];
+};
+
+/**
+ * Same verdict as the sanitizer for a Markdown link target (relative, http(s),
+ * mailto, tel). marked keeps HTML entities in `href` (a CommonMark renderer
+ * decodes them, so "&#106;avascript:" is javascript:), therefore the href is
+ * handed to sanitize-html as an attribute, entities and all: sanitize-html
+ * decodes them, strips control characters and applies the article scheme
+ * allowlist, exactly as for the rendered article.
+ */
+function isSafeMarkdownHref(href: string, tag: "a" | "img" = "a"): boolean {
+  const attr = href.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const probe = tag === "img" ? `<img src="${attr}" alt="">` : `<a href="${attr}">x</a>`;
+  return new RegExp(`\\b${tag === "img" ? "src" : "href"}="`).test(sanitizeArticleHtml(probe));
+}
+
+/** Children of a token, in source order (table cells included). */
+function markdownChildren(token: MarkdownToken): MarkdownToken[] {
+  const cells = [...(token.header ?? []), ...(token.rows ?? []).flat()];
+  return [...(token.tokens ?? []), ...(token.items ?? []), ...cells.flatMap((cell) => cell.tokens ?? [])];
+}
+
+/**
+ * The token's Markdown with unsafe parts neutralised, or null when a child
+ * that needs changing cannot be located exactly in the parent's raw text
+ * (blockquote and list children are lexed without their "> " / indent, table
+ * cells without escaped pipes…). The caller then falls back to sanitized HTML.
+ */
+function cleanMarkdownToken(token: MarkdownToken): string | null {
+  if (token.type === "html") {
+    // Keep the whitespace around a raw HTML block, sanitize the markup.
+    const leading = /^\s*/.exec(token.raw)?.[0] ?? "";
+    const trailing = /\s*$/.exec(token.raw)?.[0] ?? "";
+    const raw = token.raw.trim();
+    let clean = sanitizeArticleHtml(raw)
+      // Text inside an HTML block may still be read as Markdown by some CMSs.
+      .replace(/\]\(\s*(?:javascript|vbscript|data):.*?\)(?=\s|$)/gim, "](#)");
+    // An inline closing tag comes alone too: kept when the tag is allowed.
+    const closing = /^<\/([a-z][a-z0-9]*)\s*>$/i.exec(raw);
+    if (closing) {
+      return (SANITIZE_OPTIONS.allowedTags || []).includes(closing[1].toLowerCase()) ? token.raw : "";
+    }
+    // An inline opening tag comes alone: drop the closing tag the sanitizer added.
+    const opening = /^<([a-z][a-z0-9]*)\b[^>]*>$/i.exec(raw);
+    if (opening) clean = clean.replace(new RegExp(`</${opening[1]}>$`, "i"), "");
+    return clean ? `${leading}${clean}${trailing}` : trailing.includes("\n") ? trailing : "";
+  }
+  if ((token.type === "link" || token.type === "image") && token.href !== undefined) {
+    if (!isSafeMarkdownHref(token.href, token.type === "image" ? "img" : "a")) return token.text ?? "";
+  }
+  if (token.type === "def" && token.href !== undefined && !isSafeMarkdownHref(token.href)) {
+    return /\n\s*$/.test(token.raw) ? "\n" : "";
+  }
+  const children = markdownChildren(token);
+  if (children.length === 0) return token.raw;
+  // Children's raw text appears in order inside the parent's raw text.
+  let out = "";
+  let cursor = 0;
+  for (const child of children) {
+    const clean = cleanMarkdownToken(child);
+    if (clean === null) return null;
+    if (clean === child.raw) continue; // unchanged: the parent's raw text already holds it
+    const at = child.raw ? token.raw.indexOf(child.raw, cursor) : -1;
+    if (at === -1) return null;
+    out += token.raw.slice(cursor, at) + clean;
+    cursor = at + child.raw.length;
+  }
+  return out + token.raw.slice(cursor);
+}
+
+/**
+ * A top-level block whose Markdown cannot be rewritten exactly, exported as
+ * its sanitized HTML: what the client saw. Blank lines inside it would end the
+ * HTML block in a CommonMark renderer (and let the rest be read as Markdown
+ * again), so they are kept as "&#10;".
+ */
+function blockAsSanitizedHtml(token: MarkdownToken): string {
+  const html = sanitizeArticleHtml(marked.parser([token as never])).trim();
+  return html ? `${html.replace(/\n(?=[ \t]*\n)/g, "&#10;")}\n\n` : "";
+}
+
+/**
+ * The article Markdown with the same protection as the rendered HTML: raw
+ * HTML goes through the article allowlist (no scripts, handlers, iframes…)
+ * and links/images with a disallowed scheme (javascript:, data:…) keep only
+ * their text. Ordinary Markdown is returned unchanged; a block that cannot be
+ * rewritten in place (unsafe content in a table, a multi-line blockquote or an
+ * indented list block) is exported as its sanitized HTML. Used by the export,
+ * so a CMS that renders raw HTML gets nothing the client did not see.
+ */
+export function sanitizeMarkdown(markdown: string): string {
+  const tokens = marked.lexer(markdown ?? "") as unknown as MarkdownToken[];
+  return tokens.map((token) => cleanMarkdownToken(token) ?? blockAsSanitizedHtml(token)).join("");
 }
 
 /**
@@ -1102,7 +1210,7 @@ export function buildBlogMarkdownExport(content: BlogContent, meta: BlogExportMe
   lines.push(`approved: ${meta.approved ? "true" : "false"}`);
   lines.push(`version: ${Math.max(1, Math.floor(meta.versionNumber))}`);
   lines.push("---", "");
-  const body = content.bodyMarkdown.replace(/\r\n?/g, "\n").trim();
+  const body = sanitizeMarkdown(content.bodyMarkdown.replace(/\r\n?/g, "\n")).trim();
   return `${lines.join("\n")}\n${body}\n`;
 }
 

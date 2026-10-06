@@ -12,16 +12,26 @@
  * after a decision the page offers the next post to review.
  */
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import type { ContentKind } from "@/app/generated/prisma/client";
 import { approvePostAction, addCommentAction, requestChangesAction } from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
 import AssistantPanel from "@/components/review/assistant-panel";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
-import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath } from "./helpers";
+import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWording } from "./helpers";
+import KindLabel from "./kind-label";
+import {
+  AssistantToggle,
+  DecisionBar,
+  ReviewNav,
+  SheetButtons,
+  SheetError,
+  StaleBanner,
+  SuccessPanel,
+} from "./review-pieces";
 import type { PortalClient, PortalComment, PortalPost, PortalQueue } from "./types";
 
 type Outcome = "approved" | "changes";
@@ -40,6 +50,8 @@ export interface PostReviewProps {
   changesSlot?: ReactNode;
   /** Server-rendered history of earlier versions and their comments. */
   historySlot?: ReactNode;
+  /** Kinds in the client's list (wording of the navigation); social only by default. */
+  listKinds?: ContentKind[];
 }
 
 export default function PostReview({
@@ -51,6 +63,7 @@ export default function PostReview({
   publishInPast,
   changesSlot,
   historySlot,
+  listKinds = ["SOCIAL_POST"],
 }: PostReviewProps) {
   const router = useRouter();
   const previewRef = useRef<HTMLDivElement>(null);
@@ -77,6 +90,8 @@ export default function PostReview({
   const hasVideo = post.media.some((m) => m.type === "video");
   const nextHref = queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
   const homeHref = portalPath(token);
+  const wording = portalWording(listKinds);
+  const mixedList = new Set(listKinds).size > 1;
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved).length;
 
   // ─── Pins and markers (numbers match the comment list) ─────────────────────
@@ -264,7 +279,7 @@ export default function PostReview({
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  const draftIndex = draft && draft.kind !== "general" ? draft.mediaIndex : null;
+  const draftIndex = draft && (draft.kind === "pin" || draft.kind === "moment") ? draft.mediaIndex : null;
   const draftMedia = draftIndex !== null ? post.media[draftIndex] : undefined;
   const scheduleSentence = client.autoSchedule
     ? `Il post verrà programmato su Metricool per ${post.publishLabel}.`
@@ -272,46 +287,28 @@ export default function PostReview({
 
   return (
     <div className="space-y-6">
-      <nav className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <Link href={homeHref} className="inline-flex min-h-11 items-center text-muted hover:text-foreground">
-          ← Tutti i post
-        </Link>
-        {queue.position !== null && outcome === null && (
-          <span className="text-muted">
-            Post {queue.position} di {queue.toReviewCount} da approvare
-          </span>
-        )}
-        {nextHref && outcome === null && (
-          <Link href={nextHref} className="inline-flex min-h-11 items-center font-medium text-accent">
-            Prossimo post →
-          </Link>
-        )}
-      </nav>
+      <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning bg-surface p-3 text-sm" role="alert">
-          <span>L&apos;agenzia ha aggiornato questo post nel frattempo.</span>
-          <button
-            type="button"
-            onClick={reload}
-            className="min-h-11 rounded-md bg-foreground px-4 font-medium text-background"
-          >
-            Mostra la versione aggiornata
-          </button>
-        </div>
-      )}
+      {stale && <StaleBanner text="L'agenzia ha aggiornato questo post nel frattempo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
-          outcome={outcome}
-          scheduleSentence={scheduleSentence}
+          title={outcome === "approved" ? "Fatto! Post approvato." : "Richiesta inviata all'agenzia."}
           nextHref={nextHref}
           homeHref={homeHref}
           remaining={Math.max(0, queue.toReviewCount - (queue.position !== null ? 1 : 0))}
-        />
+          wording={wording}
+        >
+          <p className="text-sm">
+            {outcome === "approved"
+              ? scheduleSentence
+              : "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da rivedere."}
+          </p>
+        </SuccessPanel>
       )}
 
       <header className="space-y-2">
+        {mixedList && <KindLabel kind="SOCIAL_POST" />}
         <h1 className="text-xl font-semibold leading-snug sm:text-2xl">{post.title}</h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className={`font-medium ${post.canAct ? "text-accent" : post.status === "CHANGES_REQUESTED" ? "text-warning" : "text-success"}`}>
@@ -391,36 +388,16 @@ export default function PostReview({
       )}
 
       {canAct && assistantEnabled && (
-        <div ref={assistantRef} className="scroll-mt-4 space-y-3">
-          <button
-            type="button"
-            onClick={toggleAssistant}
-            aria-expanded={assistantOpen}
-            className="flex w-full items-center justify-between gap-3 rounded-lg border-2 border-accent bg-background p-4 text-left hover:bg-surface"
-          >
-            <span className="space-y-0.5">
-              <span className="block text-base font-semibold text-accent">
-                {assistantOpen ? "Chiudi l'assistente" : "Non sei sicuro? Parlane con l'assistente"}
-              </span>
-              <span className="block text-sm text-muted">
-                Ti aiuta a capire cosa cambiare, anche a voce. La decisione resta sempre tua.
-              </span>
-            </span>
-            <span aria-hidden="true" className="text-xl text-accent">
-              {assistantOpen ? "−" : "+"}
-            </span>
-          </button>
-          {assistantOpen && (
-            <AssistantPanel
-              token={token}
-              postId={post.id}
-              versionNumber={post.versionNumber}
-              onSubmitChanges={submitFromAssistant}
-              onApprove={approveFromAssistant}
-              getVideoTime={hasVideo ? getVideoTime : undefined}
-            />
-          )}
-        </div>
+        <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+          <AssistantPanel
+            token={token}
+            postId={post.id}
+            versionNumber={post.versionNumber}
+            onSubmitChanges={submitFromAssistant}
+            onApprove={approveFromAssistant}
+            getVideoTime={hasVideo ? getVideoTime : undefined}
+          />
+        </AssistantToggle>
       )}
 
       <section className="space-y-3" aria-labelledby="comments-title">
@@ -453,10 +430,7 @@ export default function PostReview({
       {historySlot}
 
       {canAct && (
-        <div
-          className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background px-4 pt-3"
-          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-        >
+        <DecisionBar>
           <div className="flex gap-3">
             <button
               type="button"
@@ -473,7 +447,7 @@ export default function PostReview({
               Approva
             </button>
           </div>
-        </div>
+        </DecisionBar>
       )}
 
       <BottomSheet open={sheet === "approve"} title="Approvi questo post?" onClose={closeSheet} busy={sheetBusy}>
@@ -552,102 +526,4 @@ function StatusNotice({ post }: { post: PortalPost }) {
     text = `${post.approvedLabel ? `Hai approvato questo post ${post.approvedLabel}. ` : "Questo post è approvato. "}Uscirà ${post.publishLabel}. Per cambiare qualcosa, contatta l'agenzia.`;
   }
   return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed">{text}</p>;
-}
-
-function SuccessPanel({
-  outcome,
-  scheduleSentence,
-  nextHref,
-  homeHref,
-  remaining,
-}: {
-  outcome: Outcome;
-  scheduleSentence: string;
-  nextHref: string | null;
-  homeHref: string;
-  remaining: number;
-}) {
-  return (
-    <section className="space-y-4 rounded-lg border-2 border-success bg-surface p-5" role="status" aria-live="polite">
-      <div className="space-y-1">
-        <p className="text-lg font-semibold text-success">
-          {outcome === "approved" ? "Fatto! Post approvato." : "Richiesta inviata all'agenzia."}
-        </p>
-        <p className="text-sm">
-          {outcome === "approved"
-            ? scheduleSentence
-            : "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da rivedere."}
-        </p>
-      </div>
-      {nextHref ? (
-        <div className="space-y-2">
-          <p className="text-sm text-muted">
-            {remaining === 1 ? "C'è ancora un post da rivedere." : `Ci sono ancora ${remaining} post da rivedere.`}
-          </p>
-          <Link
-            href={nextHref}
-            className="flex min-h-12 w-full items-center justify-center rounded-lg bg-accent px-5 text-base font-semibold text-white hover:bg-accent-hover"
-          >
-            Prossimo post →
-          </Link>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">Hai rivisto tutti i post in attesa. Grazie!</p>
-      )}
-      <Link href={homeHref} className="inline-flex min-h-11 items-center text-sm text-muted underline underline-offset-2">
-        Torna all&apos;elenco dei post
-      </Link>
-    </section>
-  );
-}
-
-function SheetError({ error, stale, onReload }: { error: string | null; stale: boolean; onReload: () => void }) {
-  if (!error) return null;
-  return (
-    <div className="space-y-2" role="alert">
-      <p className="text-sm text-error">{error}</p>
-      {stale && (
-        <button type="button" onClick={onReload} className="text-sm font-medium underline underline-offset-2">
-          Ricarica la pagina
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SheetButtons({
-  busy,
-  disabled = false,
-  onCancel,
-  onConfirm,
-  confirmLabel,
-  confirmClass,
-}: {
-  busy: boolean;
-  disabled?: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-  confirmLabel: string;
-  confirmClass: string;
-}) {
-  return (
-    <div className="flex flex-col gap-2 pt-1">
-      <button
-        type="button"
-        onClick={onConfirm}
-        disabled={busy || disabled}
-        className={`min-h-12 w-full rounded-lg px-4 text-base font-semibold disabled:opacity-50 ${confirmClass}`}
-      >
-        {confirmLabel}
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        disabled={busy}
-        className="min-h-12 w-full rounded-lg border border-border px-4 text-base hover:border-border-hover disabled:opacity-50"
-      >
-        Annulla
-      </button>
-    </div>
-  );
 }

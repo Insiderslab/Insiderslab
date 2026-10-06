@@ -7,17 +7,20 @@
  * - pin: a point tapped on an image;
  * - moment: "Commenta a 0:07" on a video (timecode editable, optional
  *   "fino a…" for a range, plus the point if the paused frame was tapped);
+ * - passage: a passage selected in an article (blog), quoted above the field;
  * - general: no location.
  */
 
 import { useEffect, useId, useRef, useState } from "react";
+import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
 import { checkMomentInput } from "./helpers";
 
 export type CommentDraft =
   | { kind: "general" }
   | { kind: "pin"; mediaIndex: number; x: number; y: number }
-  | { kind: "moment"; mediaIndex: number; timeSec: number; x?: number; y?: number };
+  | { kind: "moment"; mediaIndex: number; timeSec: number; x?: number; y?: number }
+  | { kind: "passage"; anchor: BlogAnchor };
 
 export interface CommentSubmission {
   body: string;
@@ -26,6 +29,7 @@ export interface CommentSubmission {
   pinY?: number;
   timeSec?: number;
   timeEndSec?: number;
+  anchor?: BlogAnchor;
 }
 
 const MAX_BODY = 5000;
@@ -36,14 +40,17 @@ export default function CommentComposer({
   durationSec,
   onSubmit,
   onCancel,
+  framed = true,
 }: {
   draft: CommentDraft;
-  /** "Immagine 2", "Video"… for the located drafts. */
+  /** "Immagine 2", "Video"… for the located drafts ("Variante B · Video" for ads). */
   mediaLabel: string | null;
   durationSec?: number;
   /** Resolves with an error message, or null when the comment was saved. */
   onSubmit: (input: CommentSubmission) => Promise<string | null>;
   onCancel: () => void;
+  /** False inside a sheet that already frames it (no border, no heading). */
+  framed?: boolean;
 }) {
   const fieldId = useId();
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -89,6 +96,8 @@ export default function CommentComposer({
         input.pinX = draft.x;
         input.pinY = draft.y;
       }
+    } else if (draft.kind === "passage") {
+      input.anchor = draft.anchor;
     }
 
     setBusy(true);
@@ -100,14 +109,26 @@ export default function CommentComposer({
 
   const heading =
     draft.kind === "general"
-      ? "Nuovo commento"
+      ? `Nuovo commento${mediaLabel ? ` · ${mediaLabel}` : ""}`
       : draft.kind === "pin"
         ? `Commento sul punto segnato con +${mediaLabel ? ` · ${mediaLabel}` : ""}`
-        : `Commento su un momento del video${mediaLabel ? ` · ${mediaLabel}` : ""}`;
+        : draft.kind === "passage"
+          ? "Commento sul passaggio selezionato"
+          : `Commento su un momento del video${mediaLabel ? ` · ${mediaLabel}` : ""}`;
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-lg border border-accent bg-surface p-4" aria-label={heading}>
-      <p className="text-sm font-semibold">{heading}</p>
+    <form
+      onSubmit={submit}
+      className={framed ? "space-y-3 rounded-lg border border-accent bg-surface p-4" : "space-y-3"}
+      aria-label={heading}
+    >
+      {framed && <p className="text-sm font-semibold">{heading}</p>}
+
+      {draft.kind === "passage" && (
+        <blockquote className="max-h-32 overflow-y-auto border-l-2 border-warning pl-3 text-sm italic text-muted">
+          «{draft.anchor.quote}»
+        </blockquote>
+      )}
 
       {draft.kind === "moment" && (
         <div className="space-y-2">
@@ -177,7 +198,9 @@ export default function CommentComposer({
             ? "Cosa vorresti cambiare in questo punto?"
             : draft.kind === "moment"
               ? "Cosa non ti convince in questo momento del video?"
-              : "Scrivi il tuo commento per l'agenzia"
+              : draft.kind === "passage"
+                ? "Cosa vorresti cambiare in questo passaggio?"
+                : "Scrivi il tuo commento per l'agenzia"
         }
         className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
       />

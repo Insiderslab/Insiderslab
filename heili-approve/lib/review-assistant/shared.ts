@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 import type { ContentKind } from "@/app/generated/prisma/client";
+import type { AdPlacement } from "@/lib/content/types";
 import { formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
@@ -405,9 +406,25 @@ export const ASSISTANT_KIND_COPY: Record<AssistantContentKind, AssistantKindCopy
       "Ciao! Dimmi pure cosa ne pensi di queste creatività: quale variante ti convince e cosa cambieresti. Se parli di una variante o di un momento del video, tocca «Usa la variante e il momento attuali». Puoi scrivere o dettare a voce.",
     placeholder: "Es. «Nella variante B la scritta finale passa troppo veloce»",
     approvedText: "Decisioni inviate all'agenzia. Grazie!",
-    approveLabel: "Approva le varianti",
+    approveLabel: "Invia le mie decisioni",
   },
 };
+
+/**
+ * Ads: what the client is looking at, for the chip "Usa la variante e il
+ * momento attuali" (the review page knows the variant, the placement tab and
+ * the video player's time).
+ */
+export interface AssistantAdsContext {
+  variantId: string;
+  placement: AdPlacement | null;
+  /** Current time of the variant's video player, null without a video. */
+  timeSec: number | null;
+  /** "Variante B — Prima/dopo", when the page knows it. */
+  variantName?: string | null;
+  /** "Storie e Reels", when the page knows it. */
+  placementLabel?: string | null;
+}
 
 // ─── Message to the agency ───────────────────────────────────────────────────
 

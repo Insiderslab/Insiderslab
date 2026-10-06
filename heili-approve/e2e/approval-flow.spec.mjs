@@ -12,69 +12,24 @@
 //    and the Metricool payload carries videoCoverMilliseconds.
 //
 // Screenshots of the key screens go to docs/screenshots/.
+// Blog and ads have their own specs (blog-flow, ads-flow, variant-gating).
 
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, "..");
-const require = createRequire(path.join(root, "package.json"));
-
-// The runner and the spec must share one Playwright instance (run.sh sets it).
-const { test, expect } = require(process.env.PLAYWRIGHT_TEST_MODULE ?? "playwright/test");
-const pg = require("pg");
-
-const SHOTS = path.join(root, "docs", "screenshots");
-const FIXTURES = path.join(here, "fixtures");
-const MOBILE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
-const DESKTOP = { viewport: { width: 1366, height: 900 } };
-
-function readDatabaseUrl() {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  const env = readFileSync(path.join(root, ".env"), "utf8");
-  const line = env.split("\n").find((l) => l.startsWith("DATABASE_URL="));
-  if (!line) throw new Error("DATABASE_URL non trovato");
-  return line.slice("DATABASE_URL=".length).trim().replace(/^"|"$/g, "");
-}
-
-/** Runs the (idempotent) seed and returns its SEED_JSON line. */
-function seed() {
-  const out = execFileSync("npm", ["run", "--silent", "db:seed"], { cwd: root, encoding: "utf8" });
-  const line = out.split("\n").find((l) => l.startsWith("SEED_JSON "));
-  if (!line) throw new Error(`Seed senza SEED_JSON:\n${out}`);
-  return JSON.parse(line.slice("SEED_JSON ".length));
-}
-
-/** Local date (Europe/Rome) `days` from now, as the editor's date input wants it. */
-function romeDate(days) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Rome",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(Date.now() + days * 86_400_000));
-}
-
-/**
- * Full-length screenshot. The agency shell scrolls inside <main>, so a plain
- * fullPage shot would stop at the viewport: the viewport is stretched to the
- * tallest scrolling element first, then restored.
- */
-async function shot(page, name, { maxHeight = 3200 } = {}) {
-  mkdirSync(SHOTS, { recursive: true });
-  const original = page.viewportSize();
-  const height = await page.evaluate(() =>
-    Math.max(document.documentElement.scrollHeight, ...[...document.querySelectorAll("main, main *")].map((el) => el.scrollHeight))
-  );
-  const stretch = original && height > original.height;
-  if (stretch) await page.setViewportSize({ width: original.width, height: Math.min(height, maxHeight) });
-  await page.waitForTimeout(150);
-  await page.screenshot({ path: path.join(SHOTS, name), fullPage: true });
-  if (stretch) await page.setViewportSize(original);
-}
+import {
+  FIXTURES,
+  MOBILE,
+  agencyContext as loggedInContext,
+  connectDb,
+  expect,
+  postRow as readPostRow,
+  romeDate,
+  saveAndSubmit,
+  seed,
+  shot,
+  test,
+  waitForStatus as waitForPostStatus,
+} from "./helpers.mjs";
 
 /** The fake Metricool client prints `[Metricool fake] payload {...}` per post. */
 function fakePayloadFor(metricoolPostId) {
@@ -92,39 +47,20 @@ function fakePayloadFor(metricoolPostId) {
   return null;
 }
 
+// "post" on a social instance, "contenuto" when it also handles blog/ads.
+const NOT_AVAILABLE = /^Questo (post|contenuto) non è disponibile$/;
+
 let db;
 let data;
 const state = {};
 
-async function postRow(id) {
-  const { rows } = await db.query(
-    'select status, "currentVersionNumber", "metricoolPostId", "lastError" from "Post" where id = $1',
-    [id]
-  );
-  return rows[0];
-}
-
-async function waitForStatus(id, status, timeoutMs = 60_000) {
-  const started = Date.now();
-  for (;;) {
-    const row = await postRow(id);
-    if (row?.status === status) return row;
-    if (Date.now() - started > timeoutMs) {
-      throw new Error(`Post ${id}: atteso ${status}, trovato ${row?.status} (${row?.lastError ?? "nessun errore"})`);
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-}
-
-async function agencyContext(browser) {
-  const context = await browser.newContext(DESKTOP);
-  await context.addCookies([{ name: "authjs.session-token", value: data.sessionToken, url: data.baseUrl }]);
-  return context;
-}
+const postRow = (id) => readPostRow(db, id);
+const waitForStatus = (id, status, timeoutMs) => waitForPostStatus(db, id, status, timeoutMs);
+const agencyContext = (browser) => loggedInContext(browser, data);
 
 /** Fills the common editor fields of a new post for Caffè Aurora. */
 async function fillNewPost(page, { title, text, format }) {
-  await page.goto(`/posts/new?clientId=${state.aurora.id}`);
+  await page.goto(`/posts/new?kind=social&clientId=${state.aurora.id}`);
   await expect(page.locator("#post-client")).toHaveValue(state.aurora.id);
   await page.locator("#post-title").fill(title);
   await page.getByLabel("Data di pubblicazione").fill(romeDate(6));
@@ -141,13 +77,6 @@ async function uploadAndWait(page, file) {
   await expect(page.getByText("Caricamento in corso")).toHaveCount(0, { timeout: 30_000 });
 }
 
-/** Submits the editor and returns the post id from the URL it lands on. */
-async function saveAndSubmit(page) {
-  await page.getByRole("button", { name: /Salva e invia in revisione|Invia in revisione/ }).click();
-  await page.waitForURL((url) => /^\/posts\/(?!new$)[a-z0-9]+$/.test(url.pathname), { timeout: 30_000 });
-  return new URL(page.url()).pathname.split("/").pop();
-}
-
 function reviewPostUrl(clientIndex, postId) {
   return `${data.clients[clientIndex].reviewUrl}/posts/${postId}`;
 }
@@ -158,8 +87,7 @@ test.beforeAll(async () => {
   data = seed();
   state.aurora = data.clients[0];
   state.verde = data.clients[1];
-  db = new pg.Client({ connectionString: readDatabaseUrl() });
-  await db.connect();
+  db = await connectDb();
 });
 
 test.afterAll(async () => {
@@ -287,12 +215,12 @@ test("accessi: link sbagliato, bozza e post di un altro cliente", async ({ brows
   const draft = data.posts.find((p) => p.client === state.aurora.name && p.status === "DRAFT");
   const response = await page.goto(reviewPostUrl(0, draft.id));
   expect(response.status()).toBe(404);
-  await expect(page.getByRole("heading", { name: "Questo post non è disponibile" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: NOT_AVAILABLE })).toBeVisible();
 
   const otherClientPost = data.posts.find((p) => p.client === state.verde.name && p.status === "IN_REVIEW");
   const other = await page.goto(reviewPostUrl(0, otherClientPost.id));
   expect(other.status()).toBe(404);
-  await expect(page.getByRole("heading", { name: "Questo post non è disponibile" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: NOT_AVAILABLE })).toBeVisible();
   await expect(page.getByText(otherClientPost.title)).toHaveCount(0);
   await context.close();
 });

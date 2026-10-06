@@ -37,9 +37,14 @@ import type {
 import type { Prisma } from "@/app/generated/prisma/client";
 import { actorColumns, type Actor } from "@/lib/actor";
 import { parseAdContent, validateAdsForReview } from "@/lib/content/ads";
-import { parseBlogContent, validateBlogForReview } from "@/lib/content/blog";
+import { blogAnchorSchema, parseBlogAnchor, parseBlogContent, validateBlogForReview } from "@/lib/content/blog";
 import type { AdContent, BlogAnchor, BlogContent } from "@/lib/content/types";
-import { approvalBlocker, evaluateCreativeDecisions, variantLabel } from "@/lib/creative-decisions";
+import {
+  approvalBlocker,
+  buildRejectionMessage,
+  evaluateCreativeDecisions,
+  variantLabel,
+} from "@/lib/creative-decisions";
 import { prisma } from "@/lib/db/client";
 import {
   CLIENT_VISIBLE_STATUSES,
@@ -64,7 +69,7 @@ import { recordEvent, type DbClient } from "@/lib/events";
 import { validateForNetworks } from "@/lib/metricool/payload";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
 import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
-import { assertKindEnabled, enabledKinds } from "@/lib/variant";
+import { assertKindEnabled, enabledKinds, isKindEnabled } from "@/lib/variant";
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
@@ -194,16 +199,8 @@ export const postUpdateSchema = z
   .partial()
   .extend({ changeNote: z.string().trim().max(1000).optional(), content: z.unknown().optional() });
 
-/** Blog comment anchor (text-quote selector, see BlogAnchor in lib/content/types.ts). */
-export const blogAnchorSchema = z.object({
-  quote: z
-    .string()
-    .max(2000, "Passaggio selezionato troppo lungo")
-    .refine((quote) => quote.trim().length > 0, "Seleziona il passaggio da commentare"),
-  prefix: z.string().max(200).default(""),
-  suffix: z.string().max(200).default(""),
-  blockIndex: z.number().int().min(0).max(100_000).nullable().default(null),
-});
+/** Blog comment anchor: one schema for services and UIs (lib/content/blog). */
+export { blogAnchorSchema };
 
 const videoTime = z
   .number({ error: "Momento del video non valido" })
@@ -1216,7 +1213,10 @@ export async function updatePost(
   const parsed = parseOrThrow(postUpdateSchema, input);
 
   return prisma.$transaction(async (tx) => {
-    const post = await tx.post.findFirst({ where: { id: postId, workspaceId }, include: { client: true } });
+    const post = await tx.post.findFirst({
+      where: { id: postId, workspaceId, kind: { in: enabledKinds() } },
+      include: { client: true },
+    });
     if (!post) throw new NotFoundError("Post non trovato");
 
     // The kind is fixed: blog/ads ignore the social fields, social posts
@@ -1422,7 +1422,7 @@ export async function submitForReview(
 
   const clientsWithoutReviewers = await prisma.$transaction(async (tx) => {
     const posts = await tx.post.findMany({
-      where: { id: { in: ids }, workspaceId },
+      where: { id: { in: ids }, workspaceId, kind: { in: enabledKinds() } },
       include: {
         client: {
           select: {
@@ -1479,6 +1479,14 @@ export async function submitForReview(
         { id: post.id, status: post.status, currentVersionNumber: post.currentVersionNumber },
         { status: next, submittedAt: now, reviewDueAt: opts.reviewDueAt ?? null }
       );
+      if (post.kind === "AD_CREATIVE") {
+        // Every submission opens a new review round: a set resent without a
+        // new version must not come back with the previous round's verdicts
+        // (they stay in the history as VARIANT_DECIDED events).
+        await tx.creativeDecision.deleteMany({
+          where: { postId: post.id, versionNumber: post.currentVersionNumber },
+        });
+      }
       await recordEvent(tx, {
         postId: post.id,
         type: "SUBMITTED_FOR_REVIEW",
@@ -1502,7 +1510,7 @@ export async function submitForReview(
 
 export async function cancelPost(postId: string, workspaceId: string, actor: Actor): Promise<Post> {
   return prisma.$transaction(async (tx) => {
-    const post = await tx.post.findFirst({ where: { id: postId, workspaceId } });
+    const post = await tx.post.findFirst({ where: { id: postId, workspaceId, kind: { in: enabledKinds() } } });
     if (!post) throw new NotFoundError("Post non trovato");
     const next = assertTransition(post.status, "cancel");
     await guardedPostUpdate(tx, { id: postId, status: post.status }, { status: next });
@@ -1523,7 +1531,7 @@ export async function cancelPost(postId: string, workspaceId: string, actor: Act
  */
 export async function deliverPost(postId: string, workspaceId: string, actor: Actor): Promise<Post> {
   return prisma.$transaction(async (tx) => {
-    const post = await tx.post.findFirst({ where: { id: postId, workspaceId } });
+    const post = await tx.post.findFirst({ where: { id: postId, workspaceId, kind: { in: enabledKinds() } } });
     if (!post) throw new NotFoundError("Post non trovato");
     if (!isInternalKind(post.kind)) {
       throw new ValidationError("I post social si programmano su Metricool: non si segnano come consegnati");
@@ -1549,7 +1557,7 @@ export async function deliverPost(postId: string, workspaceId: string, actor: Ac
 
 async function loadPostForReviewerAction(db: DbClient, postId: string, reviewer: ReviewerRef) {
   const post = await db.post.findUnique({ where: { id: postId }, include: { client: true } });
-  if (!post || post.clientId !== reviewer.clientId || !isClientVisible(post.status)) {
+  if (!post || post.clientId !== reviewer.clientId || !isClientVisible(post.status) || !isKindEnabled(post.kind)) {
     throw new NotFoundError("Post non trovato");
   }
   return post;
@@ -1636,10 +1644,19 @@ export async function requestChanges(
   reviewer: ReviewerRef,
   versionNumber: number,
   message: string,
-  opts: { reviewSessionId?: string; actionItems?: RequestChangesActionItem[] } = {}
+  opts: {
+    reviewSessionId?: string;
+    actionItems?: RequestChangesActionItem[];
+    /**
+     * Ads "Invia le mie decisioni" with every variant discarded: re-checked
+     * under the row lock (a variant approved in the meantime is a conflict)
+     * and the message rebuilt from the decisions as committed.
+     */
+    allVariantsRejected?: boolean;
+  } = {}
 ): Promise<{ post: Post; comment: PostComment; actionComments: PostComment[] }> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
-  const body = parseOrThrow(changesMessageSchema, message);
+  let body = parseOrThrow(changesMessageSchema, message);
   const actionItems = opts.actionItems ? parseOrThrow(actionItemsSchema, opts.actionItems) : [];
   const actor: Actor = { kind: "reviewer", reviewerId: reviewer.id };
 
@@ -1666,6 +1683,21 @@ export async function requestChanges(
       { id: postId, status: post.status, currentVersionNumber: versionNumber },
       { status: next }
     );
+    if (opts.allVariantsRejected) {
+      // The guarded write locks the row (decideVariant locks it too), so the
+      // decisions read here are the ones this request is based on.
+      if (post.kind !== "AD_CREATIVE") throw new ValidationError("Questo contenuto non ha varianti");
+      const content = parseKindContent("AD_CREATIVE", version.content);
+      const decisions = await tx.creativeDecision.findMany({ where: { postId, versionNumber } });
+      const evaluation = evaluateCreativeDecisions(
+        content.variants.map((v) => v.id),
+        decisions
+      );
+      if (evaluation.outcome !== "changes") {
+        throw new ConflictError("Le decisioni sulle varianti sono cambiate nel frattempo: ricarica la pagina e riprova");
+      }
+      body = parseOrThrow(changesMessageSchema, buildRejectionMessage(evaluation, content));
+    }
     const comment = await tx.postComment.create({
       data: {
         postId,
@@ -1802,7 +1834,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
 
   return prisma.$transaction(async (tx) => {
     const post = await tx.post.findUnique({ where: { id: data.postId } });
-    if (!post) throw new NotFoundError("Post non trovato");
+    // A kind this instance does not handle does not exist for it.
+    if (!post || !isKindEnabled(post.kind)) throw new NotFoundError("Post non trovato");
 
     let maxVersion = post.currentVersionNumber;
     if (actor.kind === "user") {
@@ -1903,7 +1936,7 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
 /** Marks a comment resolved (or reopens it with `resolved = false`). Agency only. */
 export async function resolveComment(commentId: string, workspaceId: string, resolved = true): Promise<PostComment> {
   const { count } = await prisma.postComment.updateMany({
-    where: { id: commentId, post: { workspaceId } },
+    where: { id: commentId, post: { workspaceId, kind: { in: enabledKinds() } } },
     data: { resolvedAt: resolved ? new Date() : null },
   });
   if (count !== 1) throw new NotFoundError("Commento non trovato");
@@ -1956,9 +1989,7 @@ export async function getPostForWorkspace(postId: string, workspaceId: string): 
 
 /** Comment anchor as stored (PostComment.anchor), or null when absent/malformed. */
 export function readBlogAnchor(value: unknown): BlogAnchor | null {
-  if (value === null || value === undefined) return null;
-  const parsed = blogAnchorSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
+  return parseBlogAnchor(value);
 }
 
 export interface ReviewerPostVersion {

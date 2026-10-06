@@ -1,19 +1,24 @@
 /**
  * Clients List Page
  *
- * Every client of the workspace with its Metricool brand, networks,
- * reviewers and how many posts sit in each status.
+ * Every client of the workspace with its Metricool brand and networks
+ * (social instances only), reviewers and how many items of the enabled
+ * kinds sit in each status.
  */
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { groupStatusCounts, statusCountEntries, totalPosts, clientInitials } from "@/components/clients/helpers";
+import { contentWords } from "@/components/posts/helpers";
 import { listClients } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
 import { NETWORK_LABELS, STATUS_TONES, isNetwork } from "@/lib/domain";
+import { enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
-export const metadata = { title: "Clienti - Approve by Heili" };
+export async function generateMetadata() {
+  return { title: `Clienti - ${productName()}` };
+}
 
 const toneClass = {
   neutral: "text-muted",
@@ -33,12 +38,16 @@ export default async function ClientsPage({
 
   const params = await searchParams;
   const showArchived = params.archiviati === "1";
+  const kinds = enabledKinds();
+  const singleKind = kinds.length === 1 ? kinds[0] : null;
+  const words = contentWords(kinds);
+  const metricoolEnabled = isMetricoolEnabled();
 
   const [clients, grouped, metricool] = await Promise.all([
     listClients(context.workspaceId, { includeArchived: showArchived }),
     prisma.post.groupBy({
       by: ["clientId", "status"],
-      where: { workspaceId: context.workspaceId, status: { not: "CANCELLED" } },
+      where: { workspaceId: context.workspaceId, kind: { in: kinds }, status: { not: "CANCELLED" } },
       _count: { _all: true },
     }),
     prisma.workspace.findUnique({
@@ -78,7 +87,7 @@ export default async function ClientsPage({
         </div>
       </div>
 
-      {!metricoolConnected && clients.length > 0 && (
+      {metricoolEnabled && !metricoolConnected && clients.length > 0 && (
         <div className="panel rounded p-4 text-sm">
           <span className="text-warning">Metricool non è collegato:</span>{" "}
           <span className="text-muted">i post approvati non possono essere programmati.</span>{" "}
@@ -94,7 +103,9 @@ export default async function ClientsPage({
             {showArchived ? "Nessun cliente" : "Ancora nessun cliente"}
           </h3>
           <p className="mx-auto mb-6 max-w-sm text-sm text-muted">
-            Aggiungi un cliente, collegalo al suo brand su Metricool e invita chi deve approvare i post.
+            {metricoolEnabled
+              ? "Aggiungi un cliente, collegalo al suo brand su Metricool e invita chi deve approvare i post."
+              : `Aggiungi un cliente e invita chi deve approvare ${words.the}.`}
           </p>
           <Link
             href="/clients/new"
@@ -107,9 +118,9 @@ export default async function ClientsPage({
 
       <div className="space-y-3">
         {clients.map((client) => {
-          const entries = statusCountEntries(counts[client.id]);
+          const entries = statusCountEntries(counts[client.id], singleKind);
           const total = totalPosts(counts[client.id]);
-          const networks = client.networks.filter(isNetwork);
+          const networks = metricoolEnabled ? client.networks.filter(isNetwork) : [];
           return (
             <div
               key={client.id}
@@ -143,12 +154,16 @@ export default async function ClientsPage({
                   </div>
 
                   <p className="mt-1 text-xs text-muted">
-                    {client.metricoolBlogId ? (
-                      "Brand Metricool collegato"
-                    ) : (
-                      <span className="text-warning">Brand Metricool non collegato</span>
+                    {metricoolEnabled && (
+                      <>
+                        {client.metricoolBlogId ? (
+                          "Brand Metricool collegato"
+                        ) : (
+                          <span className="text-warning">Brand Metricool non collegato</span>
+                        )}
+                        {" · "}
+                      </>
                     )}
-                    {" · "}
                     {client._count.reviewers === 0 ? (
                       <span className="text-warning">nessun referente</span>
                     ) : client._count.reviewers === 1 ? (
@@ -158,7 +173,7 @@ export default async function ClientsPage({
                     )}
                     {" · "}
                     {client.timezone}
-                    {!client.autoSchedule && " · programmazione manuale"}
+                    {metricoolEnabled && !client.autoSchedule && " · programmazione manuale"}
                   </p>
 
                   {networks.length > 0 && (
@@ -169,7 +184,7 @@ export default async function ClientsPage({
 
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                     {entries.length === 0 ? (
-                      <span className="text-muted">Nessun post</span>
+                      <span className="text-muted">Nessun contenuto</span>
                     ) : (
                       entries.map((entry) => (
                         <Link
@@ -190,7 +205,7 @@ export default async function ClientsPage({
                       href={`/posts?clientId=${client.id}`}
                       className="flex-1 rounded border border-border px-3 py-1.5 text-center text-xs font-medium text-muted hover:text-foreground sm:flex-none"
                     >
-                      Post ({total})
+                      {words.Plural} ({total})
                     </Link>
                   )}
                   <Link

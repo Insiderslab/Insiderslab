@@ -1,11 +1,13 @@
 /**
  * Calendar Page
  *
- * Posts by publication day, coloured by status: a month grid on desktop and
- * a week list on phones. Filter by client; days are in the client's time
- * zone when one is selected, otherwise in the agency's (Europe/Rome).
- * Cancelled posts are left out. A click opens the post; "+" on a day starts
- * a new post on that date.
+ * Items by planned day (publication, campaign start), coloured by status: a
+ * month grid on desktop and a week list on phones. Filter by client and,
+ * when the instance handles several kinds, by kind (each item shows its
+ * kind's icon); days are in the client's time zone when one is selected,
+ * otherwise in the agency's (Europe/Rome). Cancelled items and kinds not
+ * enabled are left out. A click opens the item; "+" on a day starts a new
+ * one on that date (asking the kind when several are enabled).
  */
 
 import Link from "next/link";
@@ -13,7 +15,6 @@ import { redirect } from "next/navigation";
 import CalendarFilter from "@/components/posts/calendar-filter";
 import {
   DEFAULT_TIME_ZONE,
-  POST_STATUSES,
   TONE_BORDER,
   TONE_DOT,
   WEEKDAY_SHORT,
@@ -28,23 +29,30 @@ import {
   monthKey,
   monthLabel,
   monthOfDay,
+  newContentHref,
   parseMonthParam,
   startOfDayUtc,
   startOfWeek,
   statusTone,
+  statusesForKinds,
   timeZoneAbbr,
   weekDays,
 } from "@/components/posts/helpers";
+import { KindBadge, KindIcon } from "@/components/posts/kind-badge";
 import { prisma } from "@/lib/db/client";
-import { NETWORK_LABELS, STATUS_LABELS, isNetwork } from "@/lib/domain";
+import { KIND_CONFIG, NETWORK_LABELS, STATUS_LABELS, isNetwork, statusLabelFor } from "@/lib/domain";
+import { KIND_UI, enabledKinds, kindParam, productName, resolveKindFilter } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
-export const metadata = { title: "Calendario - Approve by Heili" };
+export async function generateMetadata() {
+  return { title: `Calendario - ${productName()}` };
+}
 
 type SearchParams = {
   mese?: string | string[];
   settimana?: string | string[];
   clientId?: string | string[];
+  kind?: string | string[];
 };
 
 function first(value: string | string[] | undefined): string {
@@ -67,6 +75,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const client = clients.find((c) => c.id === first(params.clientId)) ?? null;
   const timezone = client?.timezone ?? DEFAULT_TIME_ZONE;
 
+  const kinds = enabledKinds();
+  const multiKind = kinds.length > 1;
+  // The only kind on single-kind instances; the requested enabled one, or null (all), otherwise.
+  const kindFilter = resolveKindFilter(params.kind);
+  const kindValue = multiKind && kindFilter ? kindParam(kindFilter) : "";
+  const newKind = kindFilter ?? (multiKind ? null : kinds[0]);
+
   const now = new Date();
   const today = dayKeyIn(now, timezone);
   const month = parseMonthParam(params.mese) ?? monthOfDay(today);
@@ -85,6 +100,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const posts = await prisma.post.findMany({
     where: {
       workspaceId: context.workspaceId,
+      kind: kindFilter ? kindFilter : { in: kinds },
       status: { not: "CANCELLED" },
       ...(client ? { clientId: client.id } : {}),
       publishAt: { gte: startOfDayUtc(rangeStart, timezone), lt: startOfDayUtc(rangeEnd, timezone) },
@@ -94,6 +110,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     select: {
       id: true,
       title: true,
+      kind: true,
       status: true,
       publishAt: true,
       networks: true,
@@ -107,12 +124,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       mese: monthKey(month),
       settimana: weekStart,
       ...(client ? { clientId: client.id } : {}),
+      ...(kindValue ? { kind: kindValue } : {}),
       ...extra,
     });
     return `/calendar?${query.toString()}`;
   };
-  const newPostHref = (day: string) => `/posts/new?data=${day}${client ? `&clientId=${client.id}` : ""}`;
-  const usedStatuses = POST_STATUSES.filter((s) => s !== "CANCELLED");
+  const newPostHref = (day: string) => newContentHref(newKind, { clientId: client?.id ?? null, day });
+  const newLabel = newKind ? KIND_UI[newKind].newTitle : "Nuovo contenuto";
+  const legendKinds = kindFilter ? [kindFilter] : kinds;
+  const usedStatuses = statusesForKinds(legendKinds).filter((s) => s !== "CANCELLED");
+  // A single kind words the statuses its own way ("Pubblicato" for articles).
+  const statusLabel = (status: (typeof posts)[number]["status"], kind: (typeof posts)[number]["kind"]) =>
+    statusLabelFor(kind, status);
 
   return (
     <div className="space-y-5">
@@ -120,6 +143,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <CalendarFilter
           clients={clients.map((c) => ({ id: c.id, name: c.archivedAt ? `${c.name} (archiviato)` : c.name }))}
           clientId={client?.id ?? ""}
+          kinds={multiKind ? kinds.map((k) => ({ value: kindParam(k), label: KIND_CONFIG[k].plural })) : []}
+          kind={kindValue}
           keep={{ mese: monthKey(month), settimana: weekStart }}
         />
         <p className="text-xs text-muted">
@@ -177,7 +202,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                       <Link
                         href={newPostHref(day)}
                         className="rounded px-1.5 text-sm text-muted opacity-0 hover:bg-surface-hover hover:text-foreground focus:opacity-100 group-hover:opacity-100"
-                        aria-label={`Nuovo post il ${dayLabel(day, true)}`}
+                        aria-label={`${newLabel} il ${dayLabel(day, true)}`}
                       >
                         +
                       </Link>
@@ -187,12 +212,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                         <li key={post.id}>
                           <Link
                             href={`/posts/${post.id}`}
-                            title={`${post.title} · ${post.client.name} · ${STATUS_LABELS[post.status]}`}
-                            className={`block truncate rounded border-l-2 bg-surface px-1.5 py-0.5 text-xs hover:bg-surface-hover ${
+                            title={`${post.title} · ${post.client.name} · ${KIND_CONFIG[post.kind].label} · ${statusLabel(post.status, post.kind)}`}
+                            className={`flex min-w-0 items-center gap-1 rounded border-l-2 bg-surface px-1.5 py-0.5 text-xs hover:bg-surface-hover ${
                               TONE_BORDER[statusTone(post.status)]
                             }`}
                           >
-                            <span className="text-muted">{formatTime(post.publishAt, timezone)}</span> {post.title}
+                            {multiKind && <KindIcon kind={post.kind} className="h-3 w-3 text-muted" />}
+                            <span className="shrink-0 text-muted">{formatTime(post.publishAt, timezone)}</span>
+                            <span className="truncate">{post.title}</span>
                           </Link>
                         </li>
                       ))}
@@ -250,11 +277,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                     {day === today ? " · oggi" : ""}
                   </h3>
                   <Link href={newPostHref(day)} className="text-xs text-muted hover:text-foreground">
-                    + Nuovo post
+                    + {newLabel}
                   </Link>
                 </div>
                 {items.length === 0 ? (
-                  <p className="mt-1 text-xs text-muted">Nessun post</p>
+                  <p className="mt-1 text-xs text-muted">Niente in programma</p>
                 ) : (
                   <ul className="mt-2 space-y-1.5">
                     {items.map((post) => (
@@ -266,14 +293,19 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           }`}
                         >
                           <span className="flex items-baseline justify-between gap-2 text-sm">
-                            <span className="min-w-0 truncate font-medium">{post.title}</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              {multiKind && <KindBadge kind={post.kind} iconOnly className="self-center" />}
+                              <span className="min-w-0 truncate font-medium">{post.title}</span>
+                            </span>
                             <span className="shrink-0 text-xs text-muted">{formatTime(post.publishAt, timezone)}</span>
                           </span>
                           <span className="block truncate text-xs text-muted">
-                            {post.client.name} · {STATUS_LABELS[post.status]}
-                            {post.networks.length > 0
+                            {post.client.name} · {statusLabel(post.status, post.kind)}
+                            {post.kind === "SOCIAL_POST" && post.networks.length > 0
                               ? ` · ${post.networks.filter(isNetwork).map((n) => NETWORK_LABELS[n]).join(", ")}`
-                              : ""}
+                              : post.kind !== "SOCIAL_POST"
+                                ? ` · ${KIND_CONFIG[post.kind].dateLabel}`
+                                : ""}
                           </span>
                         </Link>
                       </li>
@@ -290,9 +322,16 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         {usedStatuses.map((status) => (
           <li key={status} className="flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-full ${TONE_DOT[statusTone(status)]}`} aria-hidden />
-            {STATUS_LABELS[status]}
+            {legendKinds.length === 1 ? statusLabelFor(legendKinds[0], status) : STATUS_LABELS[status]}
           </li>
         ))}
+        {multiKind &&
+          legendKinds.map((kind) => (
+            <li key={kind} className="flex items-center gap-1.5">
+              <KindIcon kind={kind} className="h-3.5 w-3.5" />
+              {KIND_CONFIG[kind].plural}
+            </li>
+          ))}
       </ul>
     </div>
   );

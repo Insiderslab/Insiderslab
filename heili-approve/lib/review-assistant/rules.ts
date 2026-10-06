@@ -5,8 +5,7 @@
  */
 
 import type { ReviewMessage, ReviewSession } from "@/app/generated/prisma/client";
-import type { MediaItem } from "@/lib/domain";
-import { resolveArticleQuote, type AssistantItemTarget } from "./content";
+import { resolveArticleQuote, type AssistantItemTarget, type AssistantMediaRef } from "./content";
 import type { HistoryMessage } from "./prompt";
 import {
   MAX_CLIENT_MESSAGES_PER_DAY,
@@ -87,7 +86,7 @@ function cleanRequest(request: string): string {
   return request.trim().replace(/\s+/g, " ").slice(0, MAX_ACTION_REQUEST_LENGTH);
 }
 
-type MediaRef = Pick<MediaItem, "type" | "durationSec">;
+type MediaRef = AssistantMediaRef;
 
 /**
  * Media index and video times of one item against a media list: out-of-range

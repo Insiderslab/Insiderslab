@@ -5,8 +5,11 @@
  * client has been sent it, the agency's note, a summary of what changed and
  * the word-level diff of the caption and first comment against the previous
  * version. Diffs are computed on the server (lib/posts diffVersions).
+ * Articles and ad sets pass their own diff as `detail` (BlogVersionDiff,
+ * the list of variant changes) and a summary line instead of the media count.
  */
 
+import type { ReactNode } from "react";
 import type { DiffSegment } from "@/lib/posts";
 import { formatDateTime } from "./helpers";
 
@@ -26,6 +29,12 @@ export interface VersionHistoryEntry {
   /** Full caption, shown for the first version. */
   text: string;
   mediaCount: number;
+  /** Replaces "N media" in the header line (e.g. "3 varianti", "1.240 parole"). */
+  summaryLabel?: string;
+  /** Kind-specific diff against the previous version, server-rendered. */
+  detail?: ReactNode;
+  /** Title of the `detail` fold. */
+  detailLabel?: string;
 }
 
 function DiffText({ segments }: { segments: DiffSegment[] }) {
@@ -72,8 +81,8 @@ export default function VersionHistory({ versions, timezone }: { versions: Versi
           </div>
           <p className="mt-1 text-xs text-muted">
             {formatDateTime(version.createdAt, timezone)}
-            {version.authorName ? ` · ${version.authorName}` : ""} · {version.mediaCount}{" "}
-            media
+            {version.authorName ? ` · ${version.authorName}` : ""} ·{" "}
+            {version.summaryLabel ?? `${version.mediaCount} media`}
           </p>
 
           {version.changeNote && (
@@ -89,6 +98,15 @@ export default function VersionHistory({ versions, timezone }: { versions: Versi
                 <li key={change}>• {change}</li>
               ))}
             </ul>
+          )}
+
+          {version.detail && (
+            <details className="mt-3" open={version.isCurrent}>
+              <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground">
+                {version.detailLabel ?? "Cosa è cambiato"}
+              </summary>
+              <div className="mt-3">{version.detail}</div>
+            </details>
           )}
 
           {version.textDiff.length > 0 ? (

@@ -17,6 +17,9 @@ su Metricool**.
 - Facoltativo: un **assistente AI** aiuta il cliente indeciso ("mmh, non mi
   convince") a trasformare l'impressione in richieste precise per l'agenzia.
 
+La stessa base serve anche **articoli di blog** e **creatività ads**, gestiti
+internamente (senza Metricool): vedi [Varianti](#varianti).
+
 Usa la stessa tecnologia di **DM by Heili**: Next.js 16, Prisma 7 e Postgres 16,
 NextAuth con link via email, BullMQ e Redis, Tailwind 4, Docker.
 
@@ -65,6 +68,136 @@ il post: si corregge e si usa "Riprova") e `Annullato`.
   inviata a Metricool come `videoCoverMilliseconds`. Cambiare la copertina crea
   una nuova versione.
 
+## Varianti
+
+Un solo codice e una sola immagine Docker, tre prodotti. La variante si sceglie
+con la variabile **`APP_VARIANT`**, letta all'avvio (un valore sbagliato ferma
+il server con un messaggio chiaro):
+
+| `APP_VARIANT` | Prodotto | Cosa si approva | Dopo l'approvazione |
+|---|---|---|---|
+| `social` (default, anche se vuota) | Approve by Heili | post social (testo, foto, video, Reel) | il worker programma su **Metricool** |
+| `blog` | Approve by Heili — Blog | **articoli** in Markdown, con immagine in evidenza e campi SEO | export **Markdown** o **HTML per WordPress**, poi «Segna come pubblicato» |
+| `ads` | Approve by Heili — Ads | **set di creatività** con varianti A/B/C (foto o video, testi, CTA, URL, posizionamenti) | **pacchetto ZIP** delle varianti approvate, poi «Segna come consegnato» |
+| `all` | Approve by Heili | tutti e tre | come sopra, per tipo (comodo in sviluppo) |
+
+La variante decide il menu (Post / Articoli / Creatività), il nome del prodotto,
+le email e cosa si può creare: un'istanza `blog` non mostra né accetta post
+social o creatività ads (i servizi rifiutano di crearli, i link rispondono 404) e
+**non mostra nulla di Metricool** (impostazioni, «Metricool collegato», brand del
+cliente). Le regole di versione e di approvazione sono le stesse del social.
+
+### Blog
+
+- **Agenzia:** editor Markdown con barra (titoli, grassetto, elenchi, link,
+  citazioni, immagini caricate), anteprima «come sul sito», contatori, slug,
+  meta title e meta description, parola chiave, categorie e tag, e un pannello
+  di **controlli SEO** (parola chiave nel titolo e nel primo paragrafo,
+  lunghezze, alt dell'immagine, link, H2, frasi lunghe, leggibilità).
+- **Cliente (dal telefono):** legge l'articolo, **seleziona una frase** e tocca
+  «Commenta questa frase»; i passaggi commentati restano evidenziati e numerati,
+  anche se il testo cambia leggermente nella versione successiva. Alla nuova
+  versione vede **le parole aggiunte e tolte** e approva o chiede modifiche.
+- **Export:** `GET /api/export/blog/<id>?format=md|html` (pulsanti nella scheda).
+  Markdown con front matter (titolo, slug, data, meta, tag, immagine) oppure HTML
+  pulito da incollare in WordPress. Entrambi sono **sanificati** come la pagina
+  vista dal cliente (niente script, attributi `on…`, link `javascript:`; link
+  esterni con `rel="noopener noreferrer"`). Prima dell'approvazione il file è
+  segnato «non approvato».
+
+### Ads
+
+- **Agenzia:** dati della campagna (piattaforma Meta, Google, TikTok, LinkedIn,
+  obiettivo, budget, pubblico) e varianti con media, testi, CTA e posizionamenti.
+  Anteprime sobrie per posizionamento (feed, Storie/Reels 9:16 con **zone di
+  sicurezza**, TikTok, Google display, LinkedIn) e **controlli delle specifiche**
+  in tempo reale (rapporto d'aspetto, risoluzione, durata, limiti di testo, CTA,
+  URL https).
+- **Cliente:** una scheda per variante: **«Approva variante» o «Scarta»** (la nota
+  è obbligatoria), commenti con pin sull'immagine o al **momento del video**,
+  confronto affiancato, poi **«Invia le mie decisioni»**. Il set diventa
+  *Approvato* se almeno una variante è approvata; se sono tutte scartate torna
+  all'agenzia come *Modifiche richieste* con le note.
+- **Pacchetto:** `GET /api/export/ads/<id>` → ZIP con **solo i file delle varianti
+  approvate**, rinominati `<cliente>_<campagna>_<variante>_<posizionamenti>.<ext>`,
+  `copy.csv` (separatore `;` per Excel in italiano) e `README.txt` con tutte le
+  decisioni e le note del cliente, anche delle varianti scartate.
+
+### Una istanza per variante sul VPS Heili
+
+Ogni variante gira come **stack Docker separato** con lo stesso
+`docker-compose.prod.yml`: database, Redis, volume dei media e porta propri. Il
+file d'ambiente di ogni istanza sceglie nome dello stack, variante e porta:
+
+| Istanza | File d'ambiente | `COMPOSE_PROJECT_NAME` | `APP_VARIANT` | `APP_PORT` | Dominio |
+|---|---|---|---|---|---|
+| Social | `.env` | `heili-approve` | `social` | `3200` | `approve.heili.cloud` |
+| Blog | `.env.blog` | `approve-blog` | `blog` | `3201` | `blog.heili.cloud` |
+| Ads | `.env.ads` | `approve-ads` | `ads` | `3202` | `ads.heili.cloud` |
+
+1. **DNS:** record A per `blog.heili.cloud` e `ads.heili.cloud` verso l'IP del VPS.
+2. **File d'ambiente** (accanto al compose, mai nel repository):
+
+   ```bash
+   cd /opt/heili-approve/heili-approve
+   cp .env.example .env.blog && nano .env.blog
+   ```
+
+   Oltre ai valori della sezione [Deploy](#deploy-sul-vps-hostinger-accanto-a-dm-by-heili),
+   in `.env.blog` metti:
+
+   ```
+   COMPOSE_PROJECT_NAME=approve-blog
+   APP_VARIANT=blog
+   APP_PORT=3201
+   ENV_FILE=.env.blog
+   NEXTAUTH_URL=https://blog.heili.cloud
+   PUBLIC_BASE_URL=https://blog.heili.cloud
+   POSTGRES_PASSWORD=<nuova password>
+   DATABASE_URL=postgresql://postgres:<nuova password>@postgres:5432/approve
+   ```
+
+   Segreti **nuovi** per ogni istanza (`NEXTAUTH_SECRET`, `CRON_SECRET`,
+   `ENCRYPTION_KEY`). `METRICOOL_FAKE` non serve. Per gli ads, lo stesso con
+   `approve-ads`, `ads`, `3202`, `.env.ads` e `ads.heili.cloud`.
+3. **Avvio** (l'immagine è la stessa, si costruisce una volta):
+
+   ```bash
+   docker compose --env-file .env.blog -f docker-compose.prod.yml up -d --build
+   docker compose --env-file .env.ads  -f docker-compose.prod.yml up -d
+   curl -s http://127.0.0.1:3201/api/health && curl -s http://127.0.0.1:3202/api/health
+   ```
+
+   Ogni comando su un'istanza va lanciato con il suo `--env-file` (anche `ps`,
+   `logs`, `exec`, `down`). L'istanza social resta com'è: senza `--env-file` il
+   compose usa `.env`, il progetto `heili-approve` e la porta 3200.
+4. **Caddy** (accanto al blocco di `approve.heili.cloud`), poi `caddy reload`:
+
+   ```caddy
+   blog.heili.cloud {
+   	encode zstd gzip
+   	request_body {
+   		max_size 320MB
+   	}
+   	reverse_proxy localhost:3201
+   }
+
+   ads.heili.cloud {
+   	encode zstd gzip
+   	# Video delle creatività fino a 300 MB
+   	request_body {
+   		max_size 320MB
+   	}
+   	reverse_proxy localhost:3202
+   }
+   ```
+
+5. **Backup** per istanza: `docker compose --env-file .env.blog -f docker-compose.prod.yml exec postgres pg_dump -U postgres approve > blog.sql`;
+   i media sono nel volume `approve-blog_uploads` (e `approve-ads_uploads`).
+
+Il worker gira in tutte le istanze per uniformità (`/api/health`); su blog e ads
+non ha job da eseguire. Il cron serve a tutte: invia i **solleciti** ai clienti.
+
 ---
 
 ## Avvio in locale
@@ -90,6 +223,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/approve
 REDIS_URL=redis://localhost:6379
 METRICOOL_FAKE=1
 UPLOAD_DIR=          # vuoto = ./uploads
+APP_VARIANT=all      # social (default) | blog | ads | all
 ```
 
 **Entrare senza email (solo sviluppo).**
@@ -98,8 +232,13 @@ UPLOAD_DIR=          # vuoto = ./uploads
   `localhost:3000`, apri DevTools → Application → Cookies e aggiungi
   `authjs.session-token` = `dev-session-stefano-insiderslab-0000000001`. Poi apri
   `/dashboard`.
-- Il seed stampa anche i link di revisione dei due clienti demo (Caffè Aurora,
-  collegato al brand Metricool `123456`, e Studio Verde Architetti).
+- Il seed stampa anche i link di revisione dei clienti demo: Caffè Aurora
+  (collegato al brand Metricool `123456`) e Studio Verde Architetti per il
+  social, **Cantina Valdobbia** per il blog (un articolo in revisione e uno con
+  un commento su una frase e la versione 2 pronta da reinviare) e **Palestra
+  Kinetik** per gli ads (un set Meta con tre varianti: foto 1:1, foto 4:5 e un
+  video 9:16 generato con `ffmpeg`). Per vederli tutti avvia l'app con
+  `APP_VARIANT=all`.
 - Il seed si può rilanciare senza problemi: non duplica nulla. Si rifiuta di
   girare con `NODE_ENV=production`.
 
@@ -120,13 +259,31 @@ del server.
 npx prisma generate
 npx tsc --noEmit --incremental false
 npm run lint
-npx vitest run            # 238 test unitari
+npx vitest run            # 418 test unitari
 npm run build
 ```
 
 ### Test end-to-end (Playwright)
 
-Il test copre tutto il flusso con l'app vera, in quest'ordine:
+I test usano l'app vera, avviata con `APP_VARIANT=all`. Quattro file in `e2e/`:
+
+- `approval-flow.spec.mjs` — social (sotto);
+- `blog-flow.spec.mjs` — l'agenzia scrive un articolo (Markdown, immagine in
+  evidenza, SEO) e lo invia; il cliente a 390 px seleziona una frase, la commenta
+  e chiede modifiche; l'agenzia prepara la versione 2; il cliente vede le parole
+  cambiate e approva; l'agenzia scarica Markdown e HTML (contenuto e
+  sanificazione controllati) e lo segna come pubblicato;
+- `ads-flow.spec.mjs` — set con tre varianti (una video); il cliente approva A,
+  scarta B con una nota e un commento al secondo 0:03 del video, approva C e
+  invia: *Approvato*; l'agenzia vede decisioni e note, scarica lo ZIP (solo i file
+  di A e C, `copy.csv`, `README.txt`) e lo segna come consegnato. Un secondo set
+  con tutte le varianti scartate torna a *Modifiche richieste*;
+- `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
+  (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
+  «Articoli», che non ci sia Metricool e che una creatività ads non si possa
+  aprire né creare, poi lo ferma.
+
+Il test social copre tutto il flusso, in quest'ordine:
 
 1. L'agenzia crea un post con un'immagine caricata.
 2. Il cliente, su uno schermo da 390 px, mette un pin e chiede modifiche.
@@ -138,14 +295,19 @@ Il test copre tutto il flusso con l'app vera, in quest'ordine:
 
 ```bash
 npm run build
-PORT=3000 METRICOOL_FAKE=1 npm run start &
-METRICOOL_FAKE=1 npm run worker > /tmp/worker.log 2>&1 &
-E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e
+PORT=3000 METRICOOL_FAKE=1 APP_VARIANT=all npm run start &
+METRICOOL_FAKE=1 APP_VARIANT=all npm run worker > /tmp/worker.log 2>&1 &
+E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e              # tutti
+E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e -- blog-flow # uno solo
 ```
 
 - Playwright non è una dipendenza del progetto. `e2e/run.sh` usa l'installazione
   globale (`npm i -g playwright && npx playwright install chromium`).
-- Gli screenshot finiscono in `docs/screenshots/`.
+- Gli screenshot finiscono in `docs/screenshots/` (`blog-*.png` e `ads-*.png`
+  per le nuove varianti).
+- Le immagini di prova `ad-square.png` (1:1) e `blog-featured.png` (16:9) sono
+  generate con `ffmpeg -f lavfi -i testsrc2=s=1080x1080 -frames:v 1 ad-square.png`
+  e `ffmpeg -f lavfi -i smptebars=s=1600x900 -frames:v 1 blog-featured.png`.
 - Il video di prova `e2e/fixtures/reel-test.mp4` è codificato in VP9 dentro MP4.
   Il Chromium di Playwright non ha il codec H.264, mentre i telefoni veri sì.
   Per rigenerarlo:
@@ -343,3 +505,10 @@ rimandato a ogni turno, per un totale di circa **30–60 mila token in ingresso 
   ma il pannello mostra i messaggi tradotti.
 - **Metricool reale non provato.** I test usano solo il Metricool finto. Prima di
   andare in produzione, prova un post vero su un brand di test.
+- **Blog e ads: messaggi d'errore generici.** Alcuni errori dei servizi dicono
+  ancora «post» per ogni tipo (per esempio «Post non trovato»).
+- **Selezione del testo su un telefono vero** (blog) e riproduzione dei video
+  nelle schede ads sono provate solo nel Chromium di Playwright (selezione
+  simulata, video VP9), non su iOS/Android reali.
+- **Pacchetto ads oltre 1 GB:** la route risponde 413 in JSON; il pulsante del
+  pannello è un semplice link, quindi il messaggio compare come testo grezzo.

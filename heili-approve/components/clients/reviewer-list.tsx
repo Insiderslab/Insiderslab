@@ -36,6 +36,8 @@ interface ReviewerListProps {
   reviewers: ReviewerRow[];
   /** Archived clients: links don't work, nothing can be changed. */
   archived: boolean;
+  /** What the reviewers approve, with the article: "i post" (default), "gli articoli", "le creatività". */
+  contentsThe?: string;
 }
 
 type Feedback = { tone: "success" | "error"; text: string; link?: string } | null;
@@ -46,7 +48,13 @@ const inputClass =
 const smallButton =
   "rounded border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground disabled:opacity-50";
 
-export default function ReviewerList({ clientId, clientName, reviewers, archived }: ReviewerListProps) {
+export default function ReviewerList({
+  clientId,
+  clientName,
+  reviewers,
+  archived,
+  contentsThe = "i post",
+}: ReviewerListProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [sendInvite, setSendInvite] = useState(true);
@@ -168,7 +176,7 @@ export default function ReviewerList({ clientId, clientName, reviewers, archived
 
       {active.length === 0 && (
         <p className="text-sm text-muted">
-          Nessun referente attivo: aggiungi almeno una persona di {clientName} per poter inviare i post in
+          Nessun referente attivo: aggiungi almeno una persona di {clientName} per poter inviare {contentsThe} in
           revisione.
         </p>
       )}
@@ -341,7 +349,7 @@ export default function ReviewerList({ clientId, clientName, reviewers, archived
             {busy === "add" ? "Aggiunta…" : "Aggiungi referente"}
           </button>
           <p className="text-xs text-muted">
-            Il referente apre i post da un link personale, senza password. Il link è come una chiave:
+            Il referente apre {contentsThe} da un link personale, senza password. Il link è come una chiave:
             se finisce nelle mani sbagliate, crea un nuovo link.
           </p>
         </form>

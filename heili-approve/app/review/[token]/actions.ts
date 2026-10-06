@@ -1,7 +1,8 @@
 "use server";
 
 /**
- * Server actions of the client portal: approve, request changes, comment.
+ * Server actions of the client portal: approve, request changes, comment,
+ * and for ads sets the per-variant decisions and "Invia le mie decisioni".
  *
  * Actions are public POST endpoints, so each one trusts nothing from the
  * browser: it validates the input with zod, resolves the link token on the
@@ -12,6 +13,7 @@
 
 import { refresh } from "next/cache";
 import { z } from "zod";
+import type { ContentKind } from "@/app/generated/prisma/client";
 import type { PortalActionResult } from "@/components/portal/types";
 import { prisma } from "@/lib/db/client";
 import {
@@ -22,13 +24,16 @@ import {
   parseOrThrow,
   publicErrorMessage,
 } from "@/lib/errors";
+import { decideVariant, finalizeCreativeReview, type DecisionEvaluation } from "@/lib/creative-decisions";
 import {
   addComment,
   approvePost,
   getPostForReviewer,
   requestChanges,
+  type RequestChangesActionItem,
   type ReviewerRef,
 } from "@/lib/posts";
+import { toRequestChangesItems } from "@/lib/review-assistant/content";
 import { parseActionItems } from "@/lib/review-assistant/shared";
 import { resolveReviewerToken } from "@/lib/reviewers";
 
@@ -49,6 +54,15 @@ const changesSchema = z.object({
   reviewSessionId: idSchema.optional(),
 });
 
+// Shape only: lib/posts validates the passage (blogAnchorSchema) and checks
+// that it is used on an article.
+const anchorSchema = z.object({
+  quote: z.string().max(2000),
+  prefix: z.string().max(200),
+  suffix: z.string().max(200),
+  blockIndex: z.number().int().min(0).max(100_000).nullable(),
+});
+
 const commentSchema = z.object({
   postId: idSchema,
   versionNumber: versionSchema,
@@ -58,11 +72,42 @@ const commentSchema = z.object({
   pinY: z.number().min(0).max(1).optional(),
   timeSec: z.number().min(0).optional(),
   timeEndSec: z.number().min(0).optional(),
+  /** Blog: the selected passage. */
+  anchor: anchorSchema.optional(),
+  /** Ads: the variant (mediaIndex then refers to its media). */
+  variantId: idSchema.optional(),
+});
+
+const decideSchema = z.object({
+  postId: idSchema,
+  versionNumber: versionSchema,
+  variantId: idSchema,
+  verdict: z.enum(["APPROVED", "REJECTED"]),
+  note: z.string().max(10_000).nullish(),
 });
 
 export type ApproveInput = z.input<typeof approveSchema>;
 export type RequestChangesInput = z.input<typeof changesSchema>;
 export type PortalCommentInput = z.input<typeof commentSchema>;
+export type DecideVariantInput = z.input<typeof decideSchema>;
+export type FinalizeDecisionsInput = z.input<typeof approveSchema>;
+
+/** Where an ads set stands after a decision (variant ids in content order). */
+export interface DecisionProgress {
+  outcome: DecisionEvaluation["outcome"];
+  missing: string[];
+  approved: string[];
+  rejected: string[];
+}
+
+function progressOf(evaluation: DecisionEvaluation): DecisionProgress {
+  return {
+    outcome: evaluation.outcome,
+    missing: evaluation.missing,
+    approved: evaluation.approved,
+    rejected: evaluation.rejected.map((r) => r.variantId),
+  };
+}
 
 class InvalidLinkError extends Error {}
 
@@ -101,7 +146,9 @@ export async function approvePostAction(token: string, input: ApproveInput): Pro
 /**
  * Sends the change request. With `reviewSessionId` (assistant panel) the
  * session's structured action items travel along, read from the DB — never
- * from the browser — so each timed item lands as a marker on the video.
+ * from the browser — so each timed item lands as a marker on the video, each
+ * ads item on its variant and each article item on its passage (re-anchored
+ * on the version's text here, on the server).
  */
 export async function requestChangesAction(
   token: string,
@@ -110,14 +157,18 @@ export async function requestChangesAction(
   const result = await asReviewer(token, async (reviewer) => {
     const { postId, versionNumber, message, reviewSessionId } = parseOrThrow(changesSchema, input);
 
-    let actionItems: ReturnType<typeof parseActionItems> | undefined;
+    let actionItems: RequestChangesActionItem[] | undefined;
     if (reviewSessionId) {
       const session = await prisma.reviewSession.findFirst({
         where: { id: reviewSessionId, postId, reviewerId: reviewer.id, versionNumber },
         select: { actionItems: true },
       });
       if (!session) throw new NotFoundError("Conversazione con l'assistente non trovata");
-      actionItems = parseActionItems(session.actionItems);
+      // Ownership + visibility (throws NotFoundError); requestChanges re-checks the version.
+      const post = await getPostForReviewer(postId, reviewer);
+      const version = post.versions.find((v) => v.number === versionNumber);
+      if (!version) throw new ConflictError(STALE_VERSION);
+      actionItems = toRequestChangesItems(post.kind, version, parseActionItems(session.actionItems));
     }
 
     await requestChanges(postId, reviewer, versionNumber, message, { reviewSessionId, actionItems });
@@ -128,10 +179,18 @@ export async function requestChangesAction(
 }
 
 /**
- * General, pinned (image point) or video-moment comment on the version the
- * client is looking at. A comment on a version that is no longer current is
- * refused: its pins and moments would point at media that changed.
+ * General, pinned (image point), video-moment, article-passage (anchor) or
+ * ads-variant comment on the version the client is looking at. A comment on
+ * a version that is no longer current is refused: its pins, moments and
+ * passages would point at content that changed. lib/posts checks that the
+ * anchor / variant fit the post's kind and version.
  */
+const ALREADY_APPROVED: Record<ContentKind, string> = {
+  SOCIAL_POST: "Questo post è già stato approvato",
+  BLOG_ARTICLE: "Questo articolo è già stato approvato",
+  AD_CREATIVE: "Questo set di creatività è già stato approvato",
+};
+
 export async function addCommentAction(token: string, input: PortalCommentInput): Promise<PortalActionResult> {
   const result = await asReviewer(token, async (reviewer) => {
     const data = parseOrThrow(commentSchema, input);
@@ -139,7 +198,7 @@ export async function addCommentAction(token: string, input: PortalCommentInput)
     const post = await getPostForReviewer(data.postId, reviewer);
     if (post.currentVersionNumber !== data.versionNumber) throw new ConflictError(STALE_VERSION);
     if (!post.canAct && post.status !== "CHANGES_REQUESTED") {
-      throw new ConflictError("Questo post è già stato approvato: per altre modifiche contatta l'agenzia.");
+      throw new ConflictError(`${ALREADY_APPROVED[post.kind]}: per altre modifiche contatta l'agenzia.`);
     }
     const version = post.versions.find((v) => v.number === data.versionNumber);
     if (!version) throw new NotFoundError("Versione non trovata");
@@ -154,8 +213,47 @@ export async function addCommentAction(token: string, input: PortalCommentInput)
       pinY: data.pinY,
       timeSec: data.timeSec,
       timeEndSec: data.timeEndSec,
+      anchor: data.anchor ?? null,
+      variantId: data.variantId ?? null,
     });
     return undefined;
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/**
+ * Ads: approves or discards one variant of the version the client sees (a
+ * note is required to discard). Changing one's mind is allowed until the
+ * decisions are sent. Returns where the set stands.
+ */
+export async function decideVariantAction(
+  token: string,
+  input: DecideVariantInput
+): Promise<PortalActionResult<DecisionProgress>> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { postId, versionNumber, variantId, verdict, note } = parseOrThrow(decideSchema, input);
+    // decideVariant checks client, kind, visibility, IN_REVIEW and the version.
+    const { evaluation } = await decideVariant(postId, reviewer, versionNumber, { variantId, verdict, note });
+    return progressOf(evaluation);
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/**
+ * Ads: "Invia le mie decisioni". Every variant must be decided; the set is
+ * approved when at least one variant is, otherwise it goes back to the
+ * agency with the notes (lib/creative-decisions, rule 5).
+ */
+export async function finalizeDecisionsAction(
+  token: string,
+  input: FinalizeDecisionsInput
+): Promise<PortalActionResult<DecisionProgress & { result: "APPROVED" | "CHANGES_REQUESTED" }>> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { postId, versionNumber } = parseOrThrow(approveSchema, input);
+    const { outcome, evaluation } = await finalizeCreativeReview(postId, reviewer, versionNumber);
+    return { ...progressOf(evaluation), result: outcome };
   });
   if (result.ok) refresh();
   return result;

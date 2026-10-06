@@ -1,27 +1,42 @@
 /**
  * Posts List Page
  *
- * Every post of the workspace with filters in the URL: status
- * (`?status=attention` = changes requested + scheduling errors, as linked
- * from the top bar), client, period and title search. Drafts can be sent to
- * the clients in bulk.
+ * Every item of the workspace with filters in the URL: kind (`?kind=social|
+ * blog|ads`, only the kinds this instance handles, offered when it handles
+ * more than one), status (`?status=attention` = changes requested +
+ * scheduling errors, as linked from the top bar), client, period and title
+ * search. Drafts can be sent to the clients in bulk.
  */
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@/app/generated/prisma/client";
-import { buildPostsHref, parseStatusFilter, statusesForFilter } from "@/components/posts/helpers";
+import type { ContentKind, Prisma } from "@/app/generated/prisma/client";
+import {
+  buildPostsHref,
+  contentWords,
+  newContentHref,
+  parseStatusFilter,
+  statusesForFilter,
+  statusesForKinds,
+} from "@/components/posts/helpers";
 import PostFilters from "@/components/posts/post-filters";
 import PostList, { type PostListRow } from "@/components/posts/post-list";
+import { AD_PLATFORM_LABELS } from "@/lib/content/ads";
 import { prisma } from "@/lib/db/client";
-import { NETWORK_LABELS, isNetwork, parseMediaItems } from "@/lib/domain";
+import { KIND_CONFIG, NETWORK_LABELS, isNetwork, statusLabelFor, STATUS_LABELS } from "@/lib/domain";
+import { readKindContent, summarizeVersionForList } from "@/lib/posts";
+import { KIND_UI, enabledKinds, isMetricoolEnabled, kindParam, productName, resolveKindFilter } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
-export const metadata = { title: "Post - Approve by Heili" };
+export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const kind = resolveKindFilter((await searchParams).kind);
+  return { title: `${kind ? KIND_UI[kind].navLabel : "Contenuti"} - ${productName()}` };
+}
 
 const PAGE_SIZE = 50;
 
 type SearchParams = {
+  kind?: string | string[];
   status?: string | string[];
   clientId?: string | string[];
   periodo?: string | string[];
@@ -33,11 +48,42 @@ function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
 }
 
+/** Second line of a row: networks (social), "Articolo · /slug" (blog), platform and variants (ads). */
+function rowDetail(
+  kind: ContentKind,
+  networks: string[],
+  version: { text: string; media: unknown; content: unknown } | undefined
+): { detail: string; variantCount: number | null } {
+  if (kind === "SOCIAL_POST") {
+    return { detail: networks.filter(isNetwork).map((n) => NETWORK_LABELS[n]).join(", "), variantCount: null };
+  }
+  const summary = summarizeVersionForList(kind, version);
+  const content = version ? readKindContent(kind, version.content) : null;
+  if (content && "variants" in content) {
+    const variants = summary.variantCount ?? content.variants.length;
+    return {
+      detail: `${AD_PLATFORM_LABELS[content.campaign.platform]} · ${variants === 1 ? "1 variante" : `${variants} varianti`}`,
+      variantCount: variants,
+    };
+  }
+  if (content && "slug" in content && content.slug) return { detail: `/${content.slug}`, variantCount: null };
+  return { detail: KIND_CONFIG[kind].label, variantCount: summary.variantCount };
+}
+
 export default async function PostsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const context = await getCurrentWorkspaceContext();
   if (!context) redirect("/login");
 
   const params = await searchParams;
+  const kinds = enabledKinds();
+  const multiKind = kinds.length > 1;
+  // The only kind on single-kind instances; the requested enabled one, or null (all), otherwise.
+  const kindFilter = resolveKindFilter(params.kind);
+  const kindValue = multiKind && kindFilter ? kindParam(kindFilter) : "";
+  const shownKinds = kindFilter ? [kindFilter] : kinds;
+  const words = contentWords(shownKinds);
+  const social = shownKinds.includes("SOCIAL_POST");
+
   const filter = parseStatusFilter(params.status);
   const statusValue = filter.kind === "attention" ? "attention" : filter.kind === "status" ? filter.status : "";
   const periodo = ["prossimi", "passati"].includes(first(params.periodo)) ? first(params.periodo) : "";
@@ -56,6 +102,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
   const now = new Date();
   const where: Prisma.PostWhereInput = {
     workspaceId: context.workspaceId,
+    kind: kindFilter ? kindFilter : { in: kinds },
     status: { in: statusesForFilter(filter) },
     ...(clientId ? { clientId } : {}),
     ...(periodo === "prossimi" ? { publishAt: { gte: now } } : periodo === "passati" ? { publishAt: { lt: now } } : {}),
@@ -72,22 +119,24 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
       take: PAGE_SIZE,
       include: {
         client: { select: { name: true, timezone: true } },
-        versions: { orderBy: { number: "desc" }, take: 1, select: { media: true } },
+        versions: { orderBy: { number: "desc" }, take: 1, select: { text: true, media: true, content: true } },
         _count: { select: { comments: { where: { authorType: "CLIENT", resolvedAt: null } } } },
       },
     }),
   ]);
 
   const rows: PostListRow[] = posts.map((post) => {
-    const media = parseMediaItems(post.versions[0]?.media);
-    const cover = media[0];
+    const version = post.versions[0];
+    const { cover } = summarizeVersionForList(post.kind, version);
+    const { detail } = rowDetail(post.kind, post.networks, version);
     return {
       id: post.id,
+      kind: post.kind,
       title: post.title,
       clientId: post.clientId,
       clientName: post.client.name,
       timezone: post.client.timezone,
-      networkLabels: post.networks.filter(isNetwork).map((n) => NETWORK_LABELS[n]),
+      detail,
       publishAt: post.publishAt,
       status: post.status,
       versionNumber: post.currentVersionNumber,
@@ -97,54 +146,82 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
     };
   });
 
-  const filterValues = { status: statusValue, clientId, periodo, q };
+  const filterValues = { kind: kindValue, status: statusValue, clientId, periodo, q };
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = Boolean(statusValue || clientId || periodo || q);
+  const newKind = kindFilter ?? (multiKind ? null : kinds[0]);
+  const newLabel = newKind ? KIND_UI[newKind].newTitle : "Nuovo contenuto";
+  const newHref = newContentHref(newKind, { clientId: clientId || null });
+  const singleShown = shownKinds.length === 1 ? shownKinds[0] : null;
+
+  const emptyHint = (() => {
+    if (clients.length === 0) return `Aggiungi prima un cliente, poi prepara il primo contenuto da fargli approvare.`;
+    if (singleShown === "SOCIAL_POST" && isMetricoolEnabled()) {
+      return "Prepara il primo post: lo invii al cliente, lui lo approva dal telefono e parte su Metricool.";
+    }
+    if (singleShown === "BLOG_ARTICLE") {
+      return "Prepara il primo articolo: il cliente lo legge dal telefono, commenta le frasi e lo approva; poi lo esporti per il sito.";
+    }
+    if (singleShown === "AD_CREATIVE") {
+      return "Prepara il primo set di creatività: il cliente approva o scarta ogni variante e tu scarichi il pacchetto per la campagna.";
+    }
+    return "Prepara il primo contenuto: il cliente lo rivede dal telefono e lo approva.";
+  })();
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <p className="text-sm text-muted">
           {filter.kind === "attention"
-            ? `${total} da gestire: il cliente ha chiesto modifiche o la programmazione non è riuscita`
-            : `${total} post`}
+            ? social
+              ? `${total} da gestire: il cliente ha chiesto modifiche o la programmazione non è riuscita`
+              : `${total} da gestire: il cliente ha chiesto modifiche`
+            : `${total} ${total === 1 && singleShown ? KIND_CONFIG[singleShown].label.toLowerCase() : words.plural}`}
         </p>
         <Link
-          href={clientId ? `/posts/new?clientId=${clientId}` : "/posts/new"}
+          href={newHref}
           className="rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"
         >
-          Nuovo post
+          {newLabel}
         </Link>
       </div>
 
       <PostFilters
         values={filterValues}
+        kinds={multiKind ? kinds.map((k) => ({ value: kindParam(k), label: KIND_CONFIG[k].plural })) : []}
+        statuses={statusesForKinds(shownKinds).map((status) => ({
+          value: status,
+          label: singleShown ? statusLabelFor(singleShown, status) : STATUS_LABELS[status],
+        }))}
+        attentionLabel={social ? "Da gestire (modifiche richieste ed errori)" : "Da gestire (modifiche richieste)"}
         clients={clients.map((c) => ({ id: c.id, name: c.archivedAt ? `${c.name} (archiviato)` : c.name }))}
       />
 
       {rows.length === 0 ? (
         <div className="panel rounded p-8 text-center sm:p-12">
-          <h3 className="mb-2 text-lg font-semibold">{filtered ? "Nessun post trovato" : "Ancora nessun post"}</h3>
+          <h3 className="mb-2 text-lg font-semibold">
+            {filtered ? "Nessun risultato" : `Ancora nessun ${singleShown ? KIND_CONFIG[singleShown].label.toLowerCase() : "contenuto"}`}
+          </h3>
           <p className="mx-auto mb-6 max-w-sm text-sm text-muted">
             {filtered
               ? filter.kind === "attention"
-                ? "Niente da gestire: nessuna richiesta di modifica e nessun errore di programmazione."
+                ? social
+                  ? "Niente da gestire: nessuna richiesta di modifica e nessun errore di programmazione."
+                  : "Niente da gestire: nessuna richiesta di modifica."
                 : "Prova a cambiare o azzerare i filtri."
-              : clients.length === 0
-                ? "Aggiungi prima un cliente, poi prepara il primo post da fargli approvare."
-                : "Prepara il primo post: lo invii al cliente, lui lo approva dal telefono e parte su Metricool."}
+              : emptyHint}
           </p>
           {!filtered && (
             <Link
-              href={clients.length === 0 ? "/clients/new" : "/posts/new"}
+              href={clients.length === 0 ? "/clients/new" : newHref}
               className="inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
             >
-              {clients.length === 0 ? "Aggiungi cliente" : "Nuovo post"}
+              {clients.length === 0 ? "Aggiungi cliente" : newLabel}
             </Link>
           )}
         </div>
       ) : (
-        <PostList rows={rows} />
+        <PostList rows={rows} showKind={multiKind && !kindFilter} detailLabel={social && !multiKind ? "Reti" : "Dettagli"} />
       )}
 
       {pages > 1 && (

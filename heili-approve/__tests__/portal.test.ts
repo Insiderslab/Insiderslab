@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   checkMomentInput,
+  countDecisions,
+  dateLabelFor,
+  decisionProgressLabel,
   diffBaseline,
   formatMoment,
   formatPortalDate,
@@ -8,10 +11,15 @@ import {
   groupPortalPosts,
   mediaName,
   nextPostToReview,
+  numberPassageComments,
   orderComments,
   parseMomentInput,
+  portalNoun,
   portalPath,
+  portalStatusLabel,
+  portalTitle,
   portalTone,
+  portalWording,
 } from "@/components/portal/helpers";
 
 const NOW = new Date("2026-10-05T10:00:00Z");
@@ -188,5 +196,81 @@ describe("misc", () => {
   it("builds portal paths", () => {
     expect(portalPath("abc_DEF-123")).toBe("/review/abc_DEF-123");
     expect(portalPath("abc", "post1")).toBe("/review/abc/posts/post1");
+  });
+});
+
+describe("wording per kind", () => {
+  it("keeps the original social wording", () => {
+    const wording = portalWording(["SOCIAL_POST", "SOCIAL_POST"]);
+    expect(wording.backLabel).toBe("← Tutti i post");
+    expect(wording.position(1, 3)).toBe("Post 1 di 3 da approvare");
+    expect(wording.nextLabel).toBe("Prossimo post →");
+    expect(wording.remaining(1)).toBe("C'è ancora un post da rivedere.");
+    expect(wording.remaining(2)).toBe("Ci sono ancora 2 post da rivedere.");
+    expect(wording.allDone).toBe("Hai rivisto tutti i post in attesa. Grazie!");
+    expect(wording.homeLabel).toBe("Torna all'elenco dei post");
+    expect(portalTitle(["SOCIAL_POST"])).toBe("Post da approvare");
+    expect(portalNoun([]).one).toBe("post");
+  });
+
+  it("speaks of articles for blog and of contents for ads or mixed lists", () => {
+    expect(portalWording(["BLOG_ARTICLE"]).backLabel).toBe("← Tutti gli articoli");
+    expect(portalWording(["BLOG_ARTICLE"]).homeLabel).toBe("Torna all'elenco degli articoli");
+    expect(portalNoun(["BLOG_ARTICLE"]).theOne).toBe("l'articolo");
+    expect(portalWording(["AD_CREATIVE"]).nextLabel).toBe("Prossimo contenuto →");
+    expect(portalWording(["SOCIAL_POST", "BLOG_ARTICLE"]).position(2, 4)).toBe("Contenuto 2 di 4 da approvare");
+    expect(portalTitle(["BLOG_ARTICLE"])).toBe("Articoli da approvare");
+    expect(portalTitle(["SOCIAL_POST", "AD_CREATIVE"])).toBe("Da approvare");
+  });
+
+  it("labels dates and statuses per kind", () => {
+    expect(dateLabelFor("SOCIAL_POST")).toBe("Pubblicazione");
+    expect(dateLabelFor("BLOG_ARTICLE")).toBe("Pubblicazione prevista");
+    expect(dateLabelFor("AD_CREATIVE")).toBe("Inizio campagna");
+    expect(portalStatusLabel("SOCIAL_POST", "SCHEDULED")).toBe("Programmato");
+    expect(portalStatusLabel("BLOG_ARTICLE", "DELIVERED")).toBe("Pubblicato");
+    expect(portalStatusLabel("AD_CREATIVE", "APPROVED")).toBe("Approvate");
+    expect(portalStatusLabel("AD_CREATIVE", "DELIVERED")).toBe("Consegnate");
+    expect(portalStatusLabel("AD_CREATIVE", "IN_REVIEW")).toBe("Da approvare");
+  });
+});
+
+describe("numberPassageComments", () => {
+  const at = (iso: string) => new Date(iso);
+  it("numbers passages in reading order, then the rewritten ones by date, skipping general comments", () => {
+    const comments = [
+      { id: "late-in-text", createdAt: at("2026-10-01T10:00:00Z") },
+      { id: "early-in-text", createdAt: at("2026-10-02T10:00:00Z") },
+      { id: "missing", createdAt: at("2026-09-30T10:00:00Z") },
+      { id: "general", createdAt: at("2026-09-29T10:00:00Z") },
+    ];
+    const numbers = numberPassageComments(
+      comments,
+      new Map([
+        ["late-in-text", { status: "exact" as const, start: 120 }],
+        ["early-in-text", { status: "moved" as const, start: 10 }],
+        ["missing", { status: "missing" as const, start: null }],
+      ])
+    );
+    expect([...numbers]).toEqual([
+      ["early-in-text", 1],
+      ["late-in-text", 2],
+      ["missing", 3],
+    ]);
+    expect(numbers.has("general")).toBe(false);
+  });
+});
+
+describe("countDecisions", () => {
+  it("counts the decisions on the variants that exist, in content order", () => {
+    const count = countDecisions(["A", "B", "C"], {
+      A: { verdict: "APPROVED" },
+      C: { verdict: "REJECTED" },
+      Z: { verdict: "APPROVED" },
+    });
+    expect(count).toEqual({ decided: 2, total: 3, approved: ["A"], rejected: ["C"], missing: ["B"] });
+    expect(decisionProgressLabel(count)).toBe("2 di 3 varianti decise");
+    expect(decisionProgressLabel({ decided: 0, total: 1 })).toBe("Variante da decidere");
+    expect(decisionProgressLabel({ decided: 1, total: 1 })).toBe("Variante decisa");
   });
 });

@@ -411,3 +411,34 @@ function findSimilar(
   return best && best.score >= FUZZY_THRESHOLD ? best : null;
 }
 
+// ─── Passage comment numbering ───────────────────────────────────────────────
+
+/** Where a passage comment sits in the version shown (from locateAnchors). */
+export interface PassagePlacement {
+  status: "exact" | "moved" | "missing";
+  /** Offset of the passage in the article text, null when missing. */
+  start: number | null;
+}
+
+/**
+ * Numbers of the passage comments of an article: in reading order (where the
+ * passage is in the text), then the ones whose passage was rewritten, by
+ * date. The same numbers BlogReader draws on the highlights.
+ */
+export function numberPassageComments<T extends { id: string; createdAt: Date }>(
+  comments: readonly T[],
+  placements: ReadonlyMap<string, PassagePlacement>
+): Map<string, number> {
+  const anchored = comments.filter((c) => placements.has(c.id));
+  const found = anchored
+    .filter((c) => placements.get(c.id)?.start !== null && placements.get(c.id)?.status !== "missing")
+    .sort(
+      (a, b) =>
+        (placements.get(a.id)?.start ?? 0) - (placements.get(b.id)?.start ?? 0) ||
+        a.createdAt.getTime() - b.createdAt.getTime()
+    );
+  const missing = anchored
+    .filter((c) => !found.includes(c))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  return new Map([...found, ...missing].map((c, index) => [c.id, index + 1]));
+}

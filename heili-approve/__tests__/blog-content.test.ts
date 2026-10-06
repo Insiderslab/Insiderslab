@@ -1,8 +1,10 @@
+import { Marked } from "marked";
 import { describe, expect, it } from "vitest";
 import {
   buildAnchor,
   buildBlogHtmlExport,
   buildBlogMarkdownExport,
+  sanitizeMarkdown,
   coerceBlogContent,
   diffBlogContent,
   diffWords,
@@ -483,5 +485,75 @@ describe("markdown toolbar actions", () => {
     const edit = applyMarkdownAction("vedi sito", 5, 9, "link");
     expect(edit.text).toBe("[sito](https://)");
     expect(edit.text.slice(edit.selectionStart - edit.start, edit.selectionEnd - edit.start)).toBe("https://");
+  });
+});
+
+describe("sanitizeMarkdown (export)", () => {
+  it("leaves ordinary Markdown unchanged", () => {
+    const md = "# Titolo\n\nUn paragrafo con **grassetto** e un [link](https://esempio.it).\n\n- uno\n- due\n\n```\n<script>codice</script>\n```";
+    expect(sanitizeMarkdown(md)).toBe(md);
+  });
+
+  it("removes scripts, event handlers and unsafe link schemes", () => {
+    const md =
+      "Testo con [buono](/servizi) e [cattivo](javascript:alert(1)).\n\n" +
+      '<script>alert("xss")</script>\n<img src="https://esempio.it/a.png" onerror="alert(1)">\n\n' +
+      'Riga <span onclick="x()">ok</span> fine. ![img](data:image/png;base64,AAA)';
+    const out = sanitizeMarkdown(md);
+    expect(out).not.toMatch(/<script|onerror|onclick|javascript:|data:/i);
+    expect(out).toContain("[buono](/servizi)");
+    expect(out).toContain("e cattivo.");
+    expect(out).toContain('<img src="https://esempio.it/a.png"');
+    expect(out).toContain("<span>ok</span>");
+  });
+
+  // What a CMS that renders raw HTML would publish from the exported Markdown.
+  const rawRender = (md: string) => new Marked({ gfm: true }).parse(md) as string;
+  const UNSAFE = /<script|<iframe|onerror|onclick|javascript:|href="&#|href="[^"]*&colon;/i;
+
+  it("cleans unsafe content inside tables", () => {
+    const md = "| a |\n|---|\n| [x](javascript:alert(1)) <script>alert(2)</script> |";
+    const out = sanitizeMarkdown(md);
+    expect(rawRender(out)).not.toMatch(UNSAFE);
+    expect(out).toContain("| a |");
+    const safe = "| a | b |\n|---|---|\n| 1 | [l](https://esempio.it) |";
+    expect(sanitizeMarkdown(safe)).toBe(safe);
+  });
+
+  it("cleans multi-line blockquotes and indented list blocks", () => {
+    for (const md of [
+      "> <img src=x\n> onerror=alert(1)>",
+      "> <script>\n> alert(1)\n> </script>",
+      "> [x](javascript:alert(1)) and\n> [y](javascript:alert(2))",
+      "- item\n\n  <iframe src=https://evil.example>\n  </iframe>",
+      "Prima\n\n> - uno\n>   [z](javascript:alert(1))\n\nDopo",
+    ]) {
+      const out = sanitizeMarkdown(md);
+      expect(rawRender(out), md).not.toMatch(UNSAFE);
+    }
+    const quote = "> citazione\n> su due righe con [link](https://esempio.it)\n\n- a\n- b";
+    expect(sanitizeMarkdown(quote)).toBe(quote);
+  });
+
+  it("rejects entity-encoded and escaped javascript: links", () => {
+    for (const md of [
+      "[x](&#106;avascript:alert(1))",
+      "[x](JaVaScRiPt&colon;alert(1))",
+      "[x](javascript\\:alert(1))",
+      "[x](<java\tscript:alert(1)>)",
+      "[x][r]\n\n[r]: &#106;avascript:alert(1)\n",
+    ]) {
+      const out = sanitizeMarkdown(md);
+      expect(out, md).not.toMatch(/javascript|&#106;|&colon;/i);
+      expect(rawRender(out), md).not.toMatch(UNSAFE);
+    }
+    expect(sanitizeMarkdown("[ok](/pagina?a=1&amp;b=2)")).toBe("[ok](/pagina?a=1&amp;b=2)");
+  });
+
+  it("is applied to the Markdown export body", () => {
+    const meta = { publishAt: null, versionNumber: 1, approved: true, postTitle: "Articolo" };
+    const md = buildBlogMarkdownExport(article({ bodyMarkdown: "Ciao <script>alert(1)</script> mondo" }), meta);
+    expect(md).not.toContain("<script");
+    expect(md).toContain("Ciao");
   });
 });

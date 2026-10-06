@@ -361,13 +361,11 @@ export default function ContentEditor({
       {/* ── Save ── */}
       {!readOnly && (
         <div className="space-y-3">
-          {issues.length > 0 ? (
+          {/* The kind's editor already says when it is ready for the client. */}
+          {issues.length > 0 && (
             <p className="text-sm text-warning">
-              {issues.length === 1 ? "1 punto da sistemare" : `${issues.length} punti da sistemare`} prima
-              dell&apos;invio al cliente (vedi sopra). La bozza si può salvare comunque.
+              {`${issues.length === 1 ? "1 punto da sistemare" : `${issues.length} punti da sistemare`} prima dell'invio al cliente (vedi sopra). La bozza si può salvare comunque.`}
             </p>
-          ) : (
-            <p className="text-sm text-success">Pronto per essere inviato al cliente.</p>
           )}
           {error && <p className="text-sm text-error">{error}</p>}
           {notice && <p className="text-sm text-success">{notice}</p>}

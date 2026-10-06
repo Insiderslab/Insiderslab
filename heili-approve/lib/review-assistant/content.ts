@@ -101,11 +101,14 @@ export function anchorForQuote(model: ArticleTextModel, quote: string | null): B
 
 // ─── Targets ─────────────────────────────────────────────────────────────────
 
+/** What the action-item rules need to know about a media. */
+export type AssistantMediaRef = Pick<MediaItem, "type" | "durationSec">;
+
 /** What a kind's action items may point at (see rules.sanitizeActionItemsFor). */
 export type AssistantItemTarget =
-  | { kind: "SOCIAL_POST"; media: MediaItem[] }
+  | { kind: "SOCIAL_POST"; media: AssistantMediaRef[] }
   | { kind: "BLOG_ARTICLE"; articleText: string }
-  | { kind: "AD_CREATIVE"; variants: Array<{ id: string; name: string; media: MediaItem[] }> };
+  | { kind: "AD_CREATIVE"; variants: Array<{ id: string; name: string; media: AssistantMediaRef[] }> };
 
 /** The version as the assistant needs it, whatever its kind. */
 export interface AssistantVersionInput {

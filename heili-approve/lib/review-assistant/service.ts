@@ -25,12 +25,13 @@
 import type { Prisma, ReviewInputMode } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
 import { getPostForReviewer, type ReviewerPost } from "@/lib/posts";
+import { itemLabelsFor, itemTargetFor } from "./content";
 import { AssistantError, getAssistantProvider, runAssistantFinalize, runAssistantTurn } from "./provider";
 import { buildPostContext } from "./prompt";
 import {
   checkMessageLimits,
   pickSessionForVersion,
-  sanitizeActionItems,
+  sanitizeActionItemsFor,
   sessionsLeft,
   sortMessages,
   toHistory,
@@ -39,6 +40,7 @@ import {
 } from "./rules";
 import {
   formatChangesMessage,
+  type ActionItemLabels,
   type AssistantFinalizeResponse,
   type AssistantStateResponse,
   type AssistantTurnResponse,
@@ -73,6 +75,12 @@ async function loadPost(reviewer: AssistantReviewer, postId: string): Promise<Re
 function assertActionable(post: ReviewerPost, versionNumber: number): void {
   if (post.status !== "IN_REVIEW" || !post.canAct) throw new AssistantError(NOT_ACTIONABLE_MESSAGE, 409);
   if (versionNumber !== post.currentVersionNumber) throw new AssistantError(STALE_VERSION_MESSAGE, 409);
+}
+
+/** Names of the ads variants of a version, for the ready-made message (empty for other kinds). */
+function labelsFor(post: ReviewerPost, versionNumber: number): ActionItemLabels {
+  const version = post.versions.find((v) => v.number === versionNumber);
+  return version ? itemLabelsFor(post.kind, version.content) : {};
 }
 
 function requireEnabledProvider() {
@@ -139,7 +147,7 @@ export async function getAssistantState(
   const session = pickSessionForVersion(post.reviewSessions, versionNumber);
   const canChat = post.status === "IN_REVIEW" && post.canAct && versionNumber === post.currentVersionNumber;
   return {
-    session: session ? toSessionView(session) : null,
+    session: session ? toSessionView(session, labelsFor(post, versionNumber)) : null,
     sessionsLeft: sessionsLeft(post.reviewSessions.length),
     canChat,
   };
@@ -247,7 +255,7 @@ export async function sendAssistantMessage(
     ]);
 
     return {
-      session: toSessionView(await releaseAndLoad(sessionId, claim.claimedAt)),
+      session: toSessionView(await releaseAndLoad(sessionId, claim.claimedAt), labelsFor(post, input.versionNumber)),
       readiness: result.readiness,
       sessionsLeft: sessionsLeft(claim.sessionsOnPost),
     };
@@ -270,8 +278,9 @@ export interface FinalizeInput {
 
 /**
  * Closes the conversation with a structured summary for the agency
- * (verdict, summary, action items with media and video times). Idempotent: a
- * session already summarised is returned as is, without a model call.
+ * (verdict, summary, action items with media and video times, ads variants
+ * or article passages). Idempotent: a session already summarised is
+ * returned as is, without a model call.
  * It never approves nor sends anything: the client clicks for that.
  */
 export async function finalizeSession(
@@ -285,7 +294,8 @@ export async function finalizeSession(
   const session = pickSessionForVersion(post.reviewSessions, input.versionNumber);
   if (!session) throw new AssistantError("Non c'è ancora nessuna conversazione da riassumere.", 400);
 
-  if (session.status === "COMPLETED" && session.summary) return finalizeResponse(session);
+  const labels = labelsFor(post, input.versionNumber);
+  if (session.status === "COMPLETED" && session.summary) return finalizeResponse(session, labels);
 
   // Claim the turn (same lock as the chat): a double click or a parallel
   // request gets 409 instead of a second, expensive summary call.
@@ -308,13 +318,18 @@ export async function finalizeSession(
     return { claimedAt: now, messages };
   });
   // Summarised by a concurrent request in the meantime.
-  if (!claim) return finalizeResponse(await loadSession(session.id));
+  if (!claim) return finalizeResponse(await loadSession(session.id), labels);
 
   try {
     const version = post.versions.find((v) => v.number === input.versionNumber);
     const ctx = buildPostContext(post, reviewer.name, input.versionNumber);
     const result = await runAssistantFinalize(ctx, toHistory(claim.messages), provider);
-    const actionItems = sanitizeActionItems(result.actionItems, version?.media ?? []);
+    // Kind-aware clean-up: social media/moments, blog passages that really
+    // are in the article, ads variants (and their media/moments).
+    const actionItems = sanitizeActionItemsFor(
+      result.actionItems,
+      itemTargetFor(post.kind, { media: version?.media ?? [], content: version?.content ?? null })
+    );
     const summary = result.summary.trim() || "Riepilogo non disponibile.";
 
     // Guarded on OPEN so a double click cannot overwrite a newer summary.
@@ -330,16 +345,16 @@ export async function finalizeSession(
       },
     });
 
-    return finalizeResponse(await releaseAndLoad(session.id, claim.claimedAt));
+    return finalizeResponse(await releaseAndLoad(session.id, claim.claimedAt), labels);
   } finally {
     await releaseTurn(session.id, claim.claimedAt);
   }
 }
 
-function finalizeResponse(session: SessionWithMessages): AssistantFinalizeResponse {
-  const view = toSessionView(session);
+function finalizeResponse(session: SessionWithMessages, labels: ActionItemLabels): AssistantFinalizeResponse {
+  const view = toSessionView(session, labels);
   return {
     session: view,
-    changesMessage: view.changesMessage ?? formatChangesMessage(view.summary ?? "", view.actionItems),
+    changesMessage: view.changesMessage ?? formatChangesMessage(view.summary ?? "", view.actionItems, undefined, labels),
   };
 }

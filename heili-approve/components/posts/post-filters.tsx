@@ -3,9 +3,11 @@
 /**
  * Post Filters
  *
- * Status (including "Da gestire"), client, period and title search for the
- * posts list. Everything lives in the URL, so a filtered list can be shared
- * and the server renders it; selects apply immediately, the search on Invio.
+ * Kind (when the instance handles several), status (including "Da
+ * gestire"), client, period and title search for the posts list. Everything
+ * lives in the URL, so a filtered list can be shared and the server renders
+ * it; selects apply immediately, the search on Invio. "Azzera filtri" keeps
+ * the kind: it is the section of the menu the list was opened from.
  */
 
 import { useRouter } from "next/navigation";
@@ -13,15 +15,34 @@ import { useState, useTransition } from "react";
 import { STATUS_LABELS } from "@/lib/domain";
 import { POST_STATUSES, buildPostsHref, type PostFilterValues } from "./helpers";
 
+interface Option {
+  value: string;
+  label: string;
+}
+
 interface PostFiltersProps {
   values: PostFilterValues;
   clients: Array<{ id: string; name: string }>;
+  /** Kind options (slug + label); fewer than two = no kind select. */
+  kinds?: Option[];
+  /** Status options worded for the kinds shown (default: every status). */
+  statuses?: Option[];
+  /** Label of the "attention" option. */
+  attentionLabel?: string;
 }
 
 const selectClass =
   "w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent/40 sm:w-auto";
 
-export default function PostFilters({ values, clients }: PostFiltersProps) {
+const DEFAULT_STATUSES: Option[] = POST_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] }));
+
+export default function PostFilters({
+  values,
+  clients,
+  kinds = [],
+  statuses = DEFAULT_STATUSES,
+  attentionLabel = "Da gestire (modifiche richieste ed errori)",
+}: PostFiltersProps) {
   const router = useRouter();
   const [q, setQ] = useState(values.q);
   const [pending, startTransition] = useTransition();
@@ -43,6 +64,21 @@ export default function PostFilters({ values, clients }: PostFiltersProps) {
       className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center ${pending ? "opacity-70" : ""}`}
       role="search"
     >
+      {kinds.length > 1 && (
+        <select
+          aria-label="Tipo di contenuto"
+          value={values.kind ?? ""}
+          onChange={(event) => apply({ kind: event.target.value })}
+          className={selectClass}
+        >
+          <option value="">Tutti i tipi</option>
+          {kinds.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
       <select
         aria-label="Stato"
         value={values.status}
@@ -50,10 +86,10 @@ export default function PostFilters({ values, clients }: PostFiltersProps) {
         className={selectClass}
       >
         <option value="">Tutti gli stati (esclusi annullati)</option>
-        <option value="attention">Da gestire (modifiche richieste ed errori)</option>
-        {POST_STATUSES.map((status) => (
-          <option key={status} value={status}>
-            {STATUS_LABELS[status]}
+        <option value="attention">{attentionLabel}</option>
+        {statuses.map((status) => (
+          <option key={status.value} value={status.value}>
+            {status.label}
           </option>
         ))}
       </select>
@@ -93,7 +129,7 @@ export default function PostFilters({ values, clients }: PostFiltersProps) {
           type="button"
           onClick={() => {
             setQ("");
-            startTransition(() => router.replace("/posts"));
+            startTransition(() => router.replace(buildPostsHref({ kind: values.kind })));
           }}
           className="px-2 py-2 text-left text-sm text-muted hover:text-foreground"
         >

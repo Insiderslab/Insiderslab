@@ -1,15 +1,33 @@
 # Approve by Heili — produzione (VPS Hostinger, accanto a DM by Heili)
 #
-#   docker compose -f docker-compose.prod.yml up -d --build
+# Un solo file per le tre varianti: ogni istanza è uno "stack" Compose
+# separato, con il suo progetto, il suo database, il suo Redis, il suo volume
+# dei media e la sua porta. Cambia solo il file d'ambiente:
 #
-# Caddy (già presente sul VPS) inoltra approve.heili.cloud → localhost:3200.
-# Le variabili vengono da .env (vedi .env.example); POSTGRES_PASSWORD deve
-# coincidere con la password dentro DATABASE_URL.
+#   docker compose --env-file .env        -f docker-compose.prod.yml up -d --build   # social  → :3200
+#   docker compose --env-file .env.blog   -f docker-compose.prod.yml up -d --build   # blog    → :3201
+#   docker compose --env-file .env.ads    -f docker-compose.prod.yml up -d --build   # ads     → :3202
+#
+# Ogni file d'ambiente imposta (vedi .env.example):
+#   COMPOSE_PROJECT_NAME  nome dello stack: heili-approve | approve-blog | approve-ads.
+#                         I volumi prendono questo prefisso (approve-blog_pgdata…),
+#                         quindi gli stack non condividono dati.
+#   APP_VARIANT           social | blog | ads (| all)
+#   APP_PORT              porta su 127.0.0.1 a cui Caddy inoltra: 3200 | 3201 | 3202
+#   ENV_FILE              lo stesso file, passato anche ai container (.env.blog…)
+# più le variabili dell'app (NEXTAUTH_URL, segreti, DATABASE_URL…). Senza
+# queste variabili il file si comporta come prima: stack "heili-approve",
+# variante social, porta 3200, file .env (l'istanza approve.heili.cloud).
+#
+# POSTGRES_PASSWORD deve coincidere con la password dentro DATABASE_URL.
+
+name: ${COMPOSE_PROJECT_NAME:-heili-approve}
 
 x-app-env: &app-env
-  env_file: .env
+  env_file: ${ENV_FILE:-.env}
   environment:
     UPLOAD_DIR: /data/uploads
+    APP_VARIANT: ${APP_VARIANT:-social}
 
 services:
   postgres:
@@ -18,7 +36,7 @@ services:
     environment:
       POSTGRES_DB: approve
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?imposta POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?imposta POSTGRES_PASSWORD nel file d'ambiente}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -41,6 +59,7 @@ services:
 
   web:
     build: .
+    # Same image for every variant: APP_VARIANT is read at runtime.
     image: heili-approve:latest
     restart: unless-stopped
     <<: *app-env
@@ -48,7 +67,7 @@ services:
     command: sh -c "npx prisma migrate deploy && npm run start"
     ports:
       # Only on localhost: Caddy is the public entry point.
-      - "127.0.0.1:3200:3000"
+      - "127.0.0.1:${APP_PORT:-3200}:3000"
     volumes:
       - uploads:/data/uploads
     depends_on:
@@ -68,6 +87,8 @@ services:
     image: heili-approve:latest
     restart: unless-stopped
     <<: *app-env
+    # Social: sends approved posts to Metricool. Blog/ads never queue jobs, so
+    # there it only reports its heartbeat (kept for a uniform /api/health).
     command: ["npm", "run", "worker"]
     volumes:
       - uploads:/data/uploads
@@ -80,10 +101,12 @@ services:
     build: .
     image: heili-approve:latest
     restart: unless-stopped
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}
     command: ["sh", "scripts/cron.sh"]
     environment:
+      # The web service of THIS stack (each project has its own network).
       CRON_BASE_URL: http://web:3000
+      APP_VARIANT: ${APP_VARIANT:-social}
     depends_on:
       web:
         condition: service_healthy

@@ -38,6 +38,7 @@ import {
 } from "@/lib/content/blog";
 import type { BlogContent } from "@/lib/content/types";
 import type { MediaItem } from "@/lib/domain";
+import { formatCount } from "@/components/posts/helpers";
 import { uploadMedia } from "@/components/posts/upload";
 import BlogArticlePreview from "./blog-article-preview";
 import LabelInput from "./label-input";
@@ -333,9 +334,9 @@ export default function BlogEditor({
       )}
 
       <p className="text-xs text-muted" aria-live="polite">
-        {words.toLocaleString("it-IT")} {words === 1 ? "parola" : "parole"}
+        {formatCount(words)} {words === 1 ? "parola" : "parole"}
         {words > 0 ? ` · ${formatReadingTime(readingMinutesForWords(words))}` : ""} ·{" "}
-        {charCount(value.bodyMarkdown).toLocaleString("it-IT")} caratteri
+        {formatCount(charCount(value.bodyMarkdown))} caratteri
       </p>
     </div>
   );

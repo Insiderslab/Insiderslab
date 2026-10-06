@@ -15,6 +15,7 @@ import {
 import { listDecisions } from "@/lib/creative-decisions";
 import { prisma } from "@/lib/db/client";
 import { resolveStoragePath, storageKeyFromMediaUrl } from "@/lib/storage";
+import { isKindEnabled } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 /**
@@ -70,7 +71,8 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
       client: { select: { name: true, timezone: true } },
     },
   });
-  if (!post) return errorResponse("Creatività non trovate", 404);
+  // A kind this instance does not enable (APP_VARIANT) does not exist for it.
+  if (!post || !isKindEnabled(post.kind)) return errorResponse("Creatività non trovate", 404);
   if (post.kind !== "AD_CREATIVE") return errorResponse("Questo contenuto non è un set di creatività ads", 400);
   if (!APPROVED_STATUSES.has(post.status)) {
     return errorResponse("Il cliente non ha ancora approvato questo set: il pacchetto si scarica dopo l'approvazione", 409);

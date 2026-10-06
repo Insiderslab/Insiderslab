@@ -11,19 +11,33 @@
  *
  * For videos the parent passes getVideoTime(): the chip "Usa il momento
  * attuale (0:07)" inserts the player's current time into the message.
+ *
+ * The panel follows the content kind (docs/VARIANTI.md, rule 7): for an
+ * article, getSelection() gives the passage selected in the text and the chip
+ * "Usa il passaggio selezionato" quotes it; for an ads set, getContext() gives
+ * the variant, placement and video moment on screen and the chip "Usa la
+ * variante e il momento attuali" inserts them. The markers become chips in
+ * the chat and tell the model exactly what the client means.
  */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
 import {
   ACTION_AREA_LABELS,
   ACTION_PRIORITY_LABELS,
+  ASSISTANT_KIND_COPY,
   MAX_CLIENT_MESSAGE_LENGTH,
   VERDICT_LABELS,
-  formatActionItemTime,
-  mediaLabel,
-  splitVideoMoments,
+  actionItemPlaceTags,
+  passageMarker,
+  shortQuote,
+  splitMessageMarkers,
+  variantMarker,
   videoMomentMarker,
+  type ActionItemLabels,
+  type AssistantAdsContext,
+  type AssistantContentKind,
   type AssistantFinalizeResponse,
   type AssistantMessageView,
   type AssistantSessionView,
@@ -41,10 +55,57 @@ export interface AssistantPanelProps {
   onApprove(): Promise<void>;
   /** Current time of the post's video player, null when nothing is loaded. */
   getVideoTime?: () => number | null;
+  /** Content kind: picks the wording and the chips. Default: social post. */
+  kind?: AssistantContentKind;
+  /** Blog: the passage currently selected in the article, if any. */
+  getSelection?: () => BlogAnchor | null;
+  /** Ads: the variant (and placement, video moment) on screen, if any. */
+  getContext?: () => AssistantAdsContext | null;
+  /** Ads: variant names by id, for the summary's tags. */
+  variantNames?: Record<string, string>;
 }
 
-const INTRO_MESSAGE =
-  "Ciao! Dimmi pure cosa ne pensi di questo post: cosa ti piace e cosa cambieresti. Puoi scrivere o dettare a voce.";
+/** How often the chips re-read the player / selection / variant on screen. */
+const POLL_MS = 500;
+
+/** Polls a reader while mounted; re-renders only when its key changes. */
+function usePolled<T>(read: (() => T | null) | undefined, key: (value: T) => string): T | null {
+  const [state, setState] = useState<{ key: string; value: T } | null>(null);
+  const keyRef = useRef(key);
+  useEffect(() => {
+    keyRef.current = key;
+  });
+  useEffect(() => {
+    if (!read) return;
+    const tick = () => {
+      let value: T | null = null;
+      try {
+        value = read();
+      } catch {
+        value = null;
+      }
+      setState((current) => {
+        if (value === null) return current === null ? current : null;
+        const next = keyRef.current(value);
+        return current?.key === next ? current : { key: next, value };
+      });
+    };
+    const timer = window.setInterval(tick, POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [read]);
+  return read ? (state?.value ?? null) : null;
+}
+
+/** "Variante B · Storie e Reels · 0:07" for the ads chip. */
+function adsContextLabel(context: AssistantAdsContext): string {
+  return [
+    context.variantName?.trim() || `Variante ${context.variantId}`,
+    context.placementLabel?.trim() || null,
+    context.timeSec !== null && Number.isFinite(context.timeSec) ? formatTimecode(context.timeSec) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 // ─── Speech recognition (not in every browser, not in TS's DOM lib) ──────────
 
@@ -129,7 +190,13 @@ export function AssistantPanel({
   onSubmitChanges,
   onApprove,
   getVideoTime,
+  kind = "SOCIAL_POST",
+  getSelection,
+  getContext,
+  variantNames,
 }: AssistantPanelProps) {
+  const copy = ASSISTANT_KIND_COPY[kind];
+  const labels: ActionItemLabels = { variantNames };
   const baseUrl = `/api/review/${encodeURIComponent(token)}/assistant`;
 
   const [loading, setLoading] = useState(true);
@@ -153,6 +220,11 @@ export function AssistantPanel({
   const draftBeforeVoiceRef = useRef("");
 
   const [videoTime, setVideoTime] = useState<number | null>(null);
+  const selection = usePolled(getSelection, (anchor) => `${anchor.blockIndex}|${anchor.prefix}|${anchor.quote}`);
+  const adsContext = usePolled(
+    getContext,
+    (c) => `${c.variantId}|${c.placement}|${c.timeSec === null ? "" : Math.floor(c.timeSec)}|${c.variantName}`
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -262,11 +334,33 @@ export function AssistantPanel({
 
   // ─── Actions ───────────────────────────────────────────────────────────────
 
+  function insertMarker(marker: string) {
+    setDraft((current) =>
+      `${current.trimEnd() ? `${current.trimEnd()} ` : ""}${marker} `.slice(0, MAX_CLIENT_MESSAGE_LENGTH)
+    );
+    textareaRef.current?.focus();
+  }
+
   function insertVideoMoment() {
     if (videoTime === null) return;
-    const marker = videoMomentMarker(videoTime);
-    setDraft((current) => `${current.trimEnd() ? `${current.trimEnd()} ` : ""}${marker} `);
-    textareaRef.current?.focus();
+    insertMarker(videoMomentMarker(videoTime));
+  }
+
+  function insertPassage() {
+    if (!selection) return;
+    insertMarker(passageMarker(selection.quote));
+  }
+
+  function insertAdsContext() {
+    if (!adsContext) return;
+    insertMarker(
+      variantMarker({
+        variantId: adsContext.variantId,
+        variantName: adsContext.variantName,
+        placementLabel: adsContext.placementLabel,
+        timeSec: adsContext.timeSec,
+      })
+    );
   }
 
   async function sendMessage(retry = false) {
@@ -398,7 +492,7 @@ export function AssistantPanel({
           <p className="text-sm text-muted">Caricamento…</p>
         ) : (
           <>
-            <Bubble role="ASSISTANT" content={INTRO_MESSAGE} />
+            <Bubble role="ASSISTANT" content={copy.intro} />
             {messages.map((m) => (
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
             ))}
@@ -423,7 +517,7 @@ export function AssistantPanel({
       {done === "changes" && (
         <p className="text-sm text-success">Modifiche inviate all&apos;agenzia. Grazie!</p>
       )}
-      {done === "approved" && <p className="text-sm text-success">Post approvato. Grazie!</p>}
+      {done === "approved" && <p className="text-sm text-success">{copy.approvedText}</p>}
 
       {completed && session && done === null && (
         <SummaryCard
@@ -431,6 +525,7 @@ export function AssistantPanel({
           changesDraft={changesDraft ?? session.changesMessage ?? ""}
           onChangesDraft={setChangesDraft}
           disabled={busy !== null || !canChat}
+          labels={labels}
         />
       )}
 
@@ -449,15 +544,26 @@ export function AssistantPanel({
           )}
 
           <div className="space-y-2">
-            {videoTime !== null && (
-              <button
-                type="button"
-                onClick={insertVideoMoment}
-                disabled={composerDisabled}
-                className="rounded-full border border-border px-3 py-1 text-xs hover:border-border-hover disabled:opacity-50"
-              >
-                Usa il momento attuale ({formatTimecode(videoTime)})
-              </button>
+            {(videoTime !== null || selection || adsContext) && (
+              <div className="flex flex-wrap gap-2">
+                {videoTime !== null && (
+                  <Chip onClick={insertVideoMoment} disabled={composerDisabled}>
+                    Usa il momento attuale ({formatTimecode(videoTime)})
+                  </Chip>
+                )}
+                {selection && (
+                  <Chip onClick={insertPassage} disabled={composerDisabled}>
+                    Usa il passaggio selezionato{" "}
+                    <span className="text-muted">{shortQuote(selection.quote, 40)}</span>
+                  </Chip>
+                )}
+                {adsContext && (
+                  <Chip onClick={insertAdsContext} disabled={composerDisabled}>
+                    Usa la variante e il momento attuali{" "}
+                    <span className="text-muted">({adsContextLabel(adsContext)})</span>
+                  </Chip>
+                )}
+              </div>
             )}
             <textarea
               ref={textareaRef}
@@ -472,9 +578,7 @@ export function AssistantPanel({
               maxLength={MAX_CLIENT_MESSAGE_LENGTH}
               rows={3}
               disabled={composerDisabled}
-              placeholder={
-                completed ? "Vuoi aggiungere qualcosa? Scrivilo qui…" : "Es. «Il testo mi convince, la seconda foto meno»"
-              }
+              placeholder={completed ? "Vuoi aggiungere qualcosa? Scrivilo qui…" : copy.placeholder}
               aria-label="Messaggio per l'assistente"
               className="w-full resize-y rounded border border-border bg-background p-3 text-sm outline-none focus:border-accent disabled:opacity-60"
             />
@@ -524,7 +628,7 @@ export function AssistantPanel({
                 </ActionButton>
               )}
               <ActionButton onClick={approve} disabled={busy !== null} primary={approveHighlighted} success>
-                {busy === "approve" ? "Approvazione…" : "Approva"}
+                {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
               </ActionButton>
             </div>
           )}
@@ -536,18 +640,46 @@ export function AssistantPanel({
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
 
+function Chip({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="max-w-full truncate rounded-full border border-border px-3 py-1 text-left text-xs hover:border-border-hover disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Message text with the inserted markers (moments, passages, variants) as chips. */
 function MessageText({ content }: { content: string }) {
+  const chip = "mx-0.5 inline-block max-w-full rounded-full border border-border px-2 text-xs";
   return (
     <>
-      {splitVideoMoments(content).map((segment, i) =>
-        segment.type === "text" ? (
-          <span key={i}>{segment.value}</span>
-        ) : (
-          <span key={i} className="mx-0.5 inline-block rounded-full border border-border px-2 text-xs">
-            Momento {segment.label}
+      {splitMessageMarkers(content).map((segment, i) => {
+        if (segment.type === "text") return <span key={i}>{segment.value}</span>;
+        if (segment.type === "moment") {
+          return (
+            <span key={i} className={chip}>
+              Momento {segment.label}
+            </span>
+          );
+        }
+        if (segment.type === "passage") {
+          return (
+            <span key={i} className={`${chip} italic`} title={segment.quote}>
+              Passaggio {shortQuote(segment.quote, 60)}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className={chip}>
+            {segment.label}
           </span>
-        )
-      )}
+        );
+      })}
     </>
   );
 }
@@ -583,11 +715,13 @@ function SummaryCard({
   changesDraft,
   onChangesDraft,
   disabled,
+  labels,
 }: {
   session: AssistantSessionView;
   changesDraft: string;
   onChangesDraft: (value: string) => void;
   disabled: boolean;
+  labels: ActionItemLabels;
 }) {
   return (
     <div className="space-y-3 rounded border border-border bg-background p-3">
@@ -600,20 +734,14 @@ function SummaryCard({
       {session.actionItems.length > 0 && (
         <ul className="space-y-1 text-sm">
           {session.actionItems.map((item, i) => {
-            const time = formatActionItemTime(item);
             return (
               <li key={i} className="flex gap-2">
                 <span className="text-muted">•</span>
-                <span>
+                <span className="min-w-0 break-words">
                   <span className="text-xs text-muted">
-                    {[
-                      ACTION_AREA_LABELS[item.area],
-                      item.mediaIndex !== null ? mediaLabel(item.mediaIndex) : null,
-                      time,
-                      ACTION_PRIORITY_LABELS[item.priority],
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {[ACTION_AREA_LABELS[item.area], ...actionItemPlaceTags(item, labels), ACTION_PRIORITY_LABELS[item.priority]].join(
+                      " · "
+                    )}
                   </span>
                   <br />
                   {item.request}

@@ -54,6 +54,8 @@ export interface ThreadCardProps {
   /** Blog: "Vai al passaggio" scrolls the article to the highlight. */
   onGoToPassage?: () => void;
   passageStatus?: PassageStatus;
+  /** Blog: open note of an earlier version shown on a later one. */
+  fromVersionNumber?: number;
   /** Ads: name of the variant, shown when the list mixes variants. */
   variantLabel?: string | null;
   /** Outline the card (the highlight / pin of this thread was tapped). */
@@ -72,6 +74,7 @@ export default function ThreadCard({
   onSeek,
   onGoToPassage,
   passageStatus,
+  fromVersionNumber,
   variantLabel,
   active = false,
   domId,
@@ -139,6 +142,9 @@ export default function ThreadCard({
             «{root.anchor.quote.length > 280 ? `${root.anchor.quote.slice(0, 280)}…` : root.anchor.quote}»
           </blockquote>
           <div className="flex shrink-0 flex-col items-end gap-1">
+            {fromVersionNumber !== undefined && (
+              <span className="text-xs text-muted">Dalla versione {fromVersionNumber}</span>
+            )}
             {onGoToPassage && passageStatus !== "missing" && (
               <button type="button" onClick={onGoToPassage} className="text-xs font-medium text-accent hover:underline">
                 Vai al passaggio

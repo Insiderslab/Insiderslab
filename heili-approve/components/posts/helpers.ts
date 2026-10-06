@@ -192,6 +192,29 @@ export const KIND_NOUNS: Record<
   },
 };
 
+/**
+ * How a page names the items of an instance: the kind's words when it has
+ * one kind ("i post", "gli articoli", "le creatività"), "i contenuti" when
+ * it mixes several.
+ */
+export function contentWords(kinds: readonly ContentKind[]): {
+  plural: string;
+  the: string;
+  Plural: string;
+  /** "Tutti i post", "Tutte le creatività"… */
+  all: string;
+} {
+  if (kinds.length !== 1) return { plural: "contenuti", the: "i contenuti", Plural: "Contenuti", all: "Tutti i contenuti" };
+  switch (kinds[0]) {
+    case "BLOG_ARTICLE":
+      return { plural: "articoli", the: "gli articoli", Plural: "Articoli", all: "Tutti gli articoli" };
+    case "AD_CREATIVE":
+      return { plural: "creatività", the: "le creatività", Plural: "Creatività", all: "Tutte le creatività" };
+    default:
+      return { plural: "post", the: "i post", Plural: "Post", all: "Tutti i post" };
+  }
+}
+
 /** What saving does to the status, said before the agency saves. */
 export function editWarning(status: PostStatus, kind: ContentKind = "SOCIAL_POST"): string | null {
   if (kind !== "SOCIAL_POST") {
@@ -244,6 +267,16 @@ function safeZone(timeZone: string | null | undefined): string {
   } catch {
     return DEFAULT_TIME_ZONE;
   }
+}
+
+/**
+ * "3.894": an integer with "." thousands groups. Not toLocaleString: Node's
+ * ICU leaves four-digit numbers ungrouped for it-IT while browsers group
+ * them, so a server-rendered counter would not match on hydration.
+ */
+export function formatCount(value: number): string {
+  const sign = value < 0 ? "-" : "";
+  return sign + String(Math.trunc(Math.abs(value))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 function toDate(value: Date | string): Date {

@@ -39,6 +39,7 @@ import { getNetworkFormat, supportsVideoCover, validateForNetworks } from "@/lib
 import {
   FORMAT_LABELS,
   captionCounters,
+  formatCount,
   editWarning,
   localPartsToUtc,
   pruneNetworkOptions,
@@ -497,8 +498,8 @@ export default function PostEditor({
                       {c.noCaption
                         ? "le Storie non mostrano il testo"
                         : c.limit !== null
-                          ? `${c.count.toLocaleString("it-IT")} / ${c.limit.toLocaleString("it-IT")}`
-                          : c.count.toLocaleString("it-IT")}
+                          ? `${formatCount(c.count)} / ${formatCount(c.limit)}`
+                          : formatCount(c.count)}
                     </li>
                   ))}
                 </ul>

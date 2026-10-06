@@ -10,6 +10,8 @@
  *
  * Video moments — action item times and "[al momento 0:07 del video]" markers
  * in client messages — become chips; with onSeek the agency's player jumps there.
+ * Blog passages ("[passaggio «…»]") and ads variants ("[variante B · …]") the
+ * client pointed at, and those of the action items, are shown as tags.
  */
 
 import { formatTimecode } from "@/lib/domain";
@@ -22,7 +24,9 @@ import {
   isVerdict,
   mediaLabel,
   parseActionItems,
-  splitVideoMoments,
+  shortQuote,
+  splitMessageMarkers,
+  variantNameFor,
   type ReviewInputModeValue,
   type ReviewMessageRoleValue,
   type ReviewSessionStatusValue,
@@ -54,8 +58,13 @@ export interface AssistantTranscriptProps {
   reviewerName?: string | null;
   /** IANA zone for the times (the client's); defaults to Europe/Rome. */
   timezone?: string;
-  /** Jump the agency's video player to a moment (mediaIndex null = the post's video). */
-  onSeek?: (target: { mediaIndex: number | null; timeSec: number }) => void;
+  /**
+   * Jump the agency's video player to a moment (mediaIndex null = the post's
+   * video). Ads: variantId names the variant whose media mediaIndex refers to.
+   */
+  onSeek?: (target: { mediaIndex: number | null; timeSec: number; variantId?: string | null }) => void;
+  /** Ads: variant names by id ("Variante B — Prima/dopo"). */
+  variantNames?: Record<string, string>;
   /** Open the full transcript by default (the summary is always visible). */
   defaultExpanded?: boolean;
 }
@@ -89,7 +98,9 @@ export function AssistantTranscript({
   timezone = "Europe/Rome",
   onSeek,
   defaultExpanded = false,
+  variantNames,
 }: AssistantTranscriptProps) {
+  const labels = { variantNames };
   const actionItems = parseActionItems(session.actionItems);
   const verdict = isVerdict(session.verdict) ? session.verdict : null;
   const messages = sortByTime(session.messages);
@@ -128,14 +139,18 @@ export function AssistantTranscript({
           <ul className="space-y-2">
             {actionItems.map((item, i) => {
               const time = formatActionItemTime(item);
-              const { mediaIndex, timeSec } = item;
+              const { mediaIndex, timeSec, variantId } = item;
               return (
                 <li key={i} className="rounded border border-border bg-background p-2 text-sm">
                   <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span>{ACTION_AREA_LABELS[item.area]}</span>
+                    {variantId && <span>· {variantNameFor(variantId, labels)}</span>}
                     {item.mediaIndex !== null && <span>· {mediaLabel(item.mediaIndex)}</span>}
                     {time && timeSec !== null && (
-                      <TimeChip label={time} onClick={onSeek ? () => onSeek({ mediaIndex, timeSec }) : undefined} />
+                      <TimeChip
+                        label={time}
+                        onClick={onSeek ? () => onSeek({ mediaIndex, timeSec, variantId }) : undefined}
+                      />
                     )}
                     <span
                       className={
@@ -145,6 +160,11 @@ export function AssistantTranscript({
                       · {ACTION_PRIORITY_LABELS[item.priority]}
                     </span>
                   </div>
+                  {item.anchorQuote && (
+                    <blockquote className="mb-1 border-l-2 border-warning pl-2 text-xs italic text-muted">
+                      {shortQuote(item.anchorQuote, 200)}
+                    </blockquote>
+                  )}
                   <p>{item.request}</p>
                 </li>
               );
@@ -166,17 +186,40 @@ export function AssistantTranscript({
                 {m.role === "CLIENT" && m.inputMode === "VOICE" && <span>· dettato a voce</span>}
               </div>
               <p className={`mt-0.5 whitespace-pre-wrap break-words ${m.role === "CLIENT" ? "" : "text-muted"}`}>
-                {splitVideoMoments(m.content).map((segment, i) =>
-                  segment.type === "text" ? (
-                    <span key={i}>{segment.value}</span>
-                  ) : (
-                    <TimeChip
-                      key={i}
-                      label={formatTimecode(segment.timeSec)}
-                      onClick={onSeek ? () => onSeek({ mediaIndex: null, timeSec: segment.timeSec }) : undefined}
-                    />
-                  )
-                )}
+                {splitMessageMarkers(m.content).map((segment, i) => {
+                  if (segment.type === "text") return <span key={i}>{segment.value}</span>;
+                  if (segment.type === "moment") {
+                    return (
+                      <TimeChip
+                        key={i}
+                        label={formatTimecode(segment.timeSec)}
+                        onClick={onSeek ? () => onSeek({ mediaIndex: null, timeSec: segment.timeSec }) : undefined}
+                      />
+                    );
+                  }
+                  if (segment.type === "passage") {
+                    return (
+                      <span key={i} className="mx-0.5 inline-block rounded-full border border-border px-2 text-xs italic">
+                        Passaggio {shortQuote(segment.quote, 80)}
+                      </span>
+                    );
+                  }
+                  const { timeSec, variantId } = segment;
+                  const name = variantNames?.[variantId] ?? segment.variantName ?? `Variante ${variantId}`;
+                  return (
+                    <span key={i} className="mx-0.5 inline-flex flex-wrap items-center gap-1">
+                      <span className="inline-block rounded-full border border-border px-2 text-xs">
+                        {[name, segment.placementLabel].filter(Boolean).join(" · ")}
+                      </span>
+                      {timeSec !== null && (
+                        <TimeChip
+                          label={formatTimecode(timeSec)}
+                          onClick={onSeek ? () => onSeek({ mediaIndex: null, timeSec, variantId }) : undefined}
+                        />
+                      )}
+                    </span>
+                  );
+                })}
               </p>
             </li>
           ))}

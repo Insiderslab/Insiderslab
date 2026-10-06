@@ -131,6 +131,8 @@ const item = (overrides: Partial<ActionItem> = {}): ActionItem => ({
   timeEndSec: null,
   request: "Accorciare la prima frase",
   priority: "media",
+  variantId: null,
+  anchorQuote: null,
   ...overrides,
 });
 
@@ -392,14 +394,25 @@ describe("action items", () => {
     expect(sanitizeActionItems(many, media)).toHaveLength(MAX_ACTION_ITEMS);
   });
 
-  it("reads stored items written before video times existed", () => {
+  it("reads stored items written before video times, variants and passages existed", () => {
     expect(
       parseActionItems([
         { area: "testo", mediaIndex: null, request: "Accorciare", priority: "alta" },
         { area: "boh", request: "x", priority: "alta" },
         "junk",
       ])
-    ).toEqual([{ area: "testo", mediaIndex: null, timeSec: null, timeEndSec: null, request: "Accorciare", priority: "alta" }]);
+    ).toEqual([
+      {
+        area: "testo",
+        mediaIndex: null,
+        timeSec: null,
+        timeEndSec: null,
+        request: "Accorciare",
+        priority: "alta",
+        variantId: null,
+        anchorQuote: null,
+      },
+    ]);
     expect(parseActionItems(null)).toEqual([]);
   });
 
@@ -527,7 +540,18 @@ describe("anthropic engine", () => {
     const summary = {
       verdict: "changes",
       summary: "Giulia vuole un testo più corto.",
-      actionItems: [{ area: "testo", mediaIndex: null, timeSec: null, timeEndSec: null, request: "Accorciare", priority: "alta" }],
+      actionItems: [
+        {
+          area: "testo",
+          mediaIndex: null,
+          timeSec: null,
+          timeEndSec: null,
+          request: "Accorciare",
+          priority: "alta",
+          variantId: null,
+          anchorQuote: null,
+        },
+      ],
     };
     mocks.anthropicCreate.mockResolvedValue(claudeResponse({ content: [{ type: "text", text: JSON.stringify(summary) }] }));
     const result = await runAssistantFinalize(makeCtx(), [client("troppo lungo")]);
