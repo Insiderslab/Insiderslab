@@ -51,7 +51,12 @@ export type DomainError =
   | NotFoundError
   | ForbiddenError
   | ValidationError
-  | ConflictError;
+  | ConflictError
+  | RateLimitError;
+
+export class RateLimitError extends Error {
+  constructor(message: string) { super(message); this.name = "RateLimitError"; }
+}
 
 export function isDomainError(error: unknown): error is DomainError {
   return (
@@ -59,11 +64,12 @@ export function isDomainError(error: unknown): error is DomainError {
     error instanceof NotFoundError ||
     error instanceof ForbiddenError ||
     error instanceof ValidationError ||
-    error instanceof ConflictError
+    error instanceof ConflictError || error instanceof RateLimitError
   );
 }
 
 export function httpStatusForError(error: unknown): number {
+  if (error instanceof RateLimitError) return 429;
   if (error instanceof NotFoundError) return 404;
   if (error instanceof ForbiddenError) return 403;
   if (error instanceof ValidationError) return 400;

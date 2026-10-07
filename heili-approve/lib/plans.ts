@@ -36,6 +36,7 @@ import {
   notifyPlanSent,
 } from "@/lib/notifications";
 import {
+  APPROVED_LIKE,
   defaultPlanTitle,
   derivePlanStatus,
   isPlanDecided,
@@ -53,6 +54,10 @@ export const PLAN_KIND: ContentKind = "SOCIAL_POST";
 const MAX_TITLE = 200;
 const MAX_INTRO = 5000;
 export const MAX_PLAN_COMMENT = 5000;
+/** A stopped process cannot keep a completion notification forever. */
+export const PLAN_NOTIFICATION_LEASE_MS = 5 * 60 * 1000;
+/** Back off a known email failure until a later cron sweep. */
+export const PLAN_NOTIFICATION_RETRY_MS = 5 * 60 * 1000;
 
 function assertPlansEnabled(): void {
   if (!isKindEnabled(PLAN_KIND)) throw new NotFoundError("Piano non trovato");
@@ -84,27 +89,130 @@ export async function syncPlanStatus(planId: string): Promise<PlanStatus | null>
  * them, tells the agency — once per send. Returns true when that email went
  * out. Never throws.
  */
-export async function afterPlanPostDecided(planId: string): Promise<boolean> {
+export async function afterPlanPostDecided(planId: string, now: Date = new Date()): Promise<boolean> {
   try {
     await syncPlanStatus(planId);
     const plan = await prisma.contentPlan.findUnique({
       where: { id: planId },
-      select: { sentAt: true, completedNotifiedAt: true, posts: { select: { status: true } } },
+      select: {
+        sentAt: true,
+        completedNotifiedAt: true,
+        completedNotificationClaimedAt: true,
+        completedNotificationRetryAt: true,
+        posts: { select: { status: true } },
+      },
     });
     if (!plan?.sentAt || plan.completedNotifiedAt) return false;
     if (!isPlanDecided(plan.posts.map((p) => p.status))) return false;
-    // Claim the notification: two decisions landing together send it once.
+
+    const leaseExpiredBefore = new Date(now.getTime() - PLAN_NOTIFICATION_LEASE_MS);
+    if (plan.completedNotificationRetryAt && plan.completedNotificationRetryAt > now) return false;
+    if (plan.completedNotificationClaimedAt && plan.completedNotificationClaimedAt > leaseExpiredBefore) return false;
+
+    // Compare the submission timestamp too: a notification belongs to the
+    // exact send that was complete when it was claimed.
     const { count } = await prisma.contentPlan.updateMany({
-      where: { id: planId, completedNotifiedAt: null },
-      data: { completedNotifiedAt: new Date() },
+      where: {
+        id: planId,
+        sentAt: plan.sentAt,
+        completedNotifiedAt: null,
+        AND: [
+          {
+            OR: [
+              { completedNotificationClaimedAt: null },
+              { completedNotificationClaimedAt: { lte: leaseExpiredBefore } },
+            ],
+          },
+          {
+            OR: [
+              { completedNotificationRetryAt: null },
+              { completedNotificationRetryAt: { lte: now } },
+            ],
+          },
+        ],
+      },
+      data: { completedNotificationClaimedAt: now },
     });
     if (count !== 1) return false;
-    await notifyPlanDecided(planId);
-    return true;
+
+    // Never hold a database transaction while the email provider is called.
+    // An unexpected throw leaves the lease in place; its expiry is the crash
+    // recovery path. A confirmed failure is released with a short backoff.
+    const sent = await notifyPlanDecided(planId);
+    if (!sent) {
+      await prisma.contentPlan.updateMany({
+        where: {
+          id: planId,
+          sentAt: plan.sentAt,
+          completedNotifiedAt: null,
+          completedNotificationClaimedAt: now,
+        },
+        data: {
+          completedNotificationClaimedAt: null,
+          completedNotificationRetryAt: new Date(now.getTime() + PLAN_NOTIFICATION_RETRY_MS),
+        },
+      });
+      return false;
+    }
+
+    // If the agency re-sent the plan while the email was in flight, this CAS
+    // deliberately fails: the new submission still needs its own follow-up.
+    const marked = await prisma.contentPlan.updateMany({
+      where: {
+        id: planId,
+        sentAt: plan.sentAt,
+        completedNotifiedAt: null,
+        completedNotificationClaimedAt: now,
+      },
+      data: {
+        completedNotifiedAt: now,
+        completedNotificationClaimedAt: null,
+        completedNotificationRetryAt: null,
+      },
+    });
+    return marked.count === 1;
   } catch (error) {
     console.error(`[plans] Follow-up of plan ${planId} failed:`, error);
     return false;
   }
+}
+
+/** Retry recoverable completion notifications, including already completed plans. */
+export async function sweepPlanCompletionNotifications(now: Date = new Date()): Promise<number> {
+  const leaseExpiredBefore = new Date(now.getTime() - PLAN_NOTIFICATION_LEASE_MS);
+  const plans = await prisma.contentPlan.findMany({
+    where: {
+      sentAt: { not: null },
+      completedNotifiedAt: null,
+      // Keep this predicate equivalent to isPlanDecided: no post is still
+      // with the client, and at least one post has received a decision. The
+      // denormalized plan status can be DRAFT when decided posts coexist with
+      // newly added drafts.
+      posts: {
+        none: { status: "IN_REVIEW" },
+        some: { status: { in: [...APPROVED_LIKE, "CHANGES_REQUESTED"] } },
+      },
+      AND: [
+        {
+          OR: [
+            { completedNotificationClaimedAt: null },
+            { completedNotificationClaimedAt: { lte: leaseExpiredBefore } },
+          ],
+        },
+        {
+          OR: [
+            { completedNotificationRetryAt: null },
+            { completedNotificationRetryAt: { lte: now } },
+          ],
+        },
+      ],
+    },
+    select: { id: true },
+    take: 100,
+  });
+
+  const results = await Promise.all(plans.map((plan) => afterPlanPostDecided(plan.id, now)));
+  return results.filter(Boolean).length;
 }
 
 // ─── Agency ──────────────────────────────────────────────────────────────────
@@ -295,7 +403,13 @@ export async function sendPlan(
   });
   await prisma.contentPlan.update({
     where: { id: plan.id },
-    data: { sentAt: new Date(), reviewDueAt: reviewDueAt ?? null, completedNotifiedAt: null },
+    data: {
+      sentAt: new Date(),
+      reviewDueAt: reviewDueAt ?? null,
+      completedNotifiedAt: null,
+      completedNotificationClaimedAt: null,
+      completedNotificationRetryAt: null,
+    },
   });
   await syncPlanStatus(plan.id);
   const emailed = await notifyPlanSent(plan.id);

@@ -7,7 +7,7 @@
 #             client, the source tree under lib/ and worker/, and tsconfig.json
 #             for the `@/*` path alias tsx resolves at runtime)
 #   - cron:   `sh scripts/cron.sh` → calls /api/cron/sweep every 5 minutes and
-#             /api/cron/reminders hourly. Needs wget, which node:20-slim lacks.
+#             /api/cron/reminders hourly. Needs wget, which node:24-slim lacks.
 #
 # Uploaded media live on disk under UPLOAD_DIR (/data/uploads): mount the SAME
 # volume in web (serves /media/... and receives uploads) and worker.
@@ -15,7 +15,7 @@
 # next.config.ts does not set `output: "standalone"`, so `next start` needs the
 # full node_modules tree at runtime; this Dockerfile does not try to slim it.
 
-FROM node:20-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -26,7 +26,7 @@ COPY . .
 # generates app/generated/prisma AND compiles .next/ in one step.
 RUN npm run build
 
-FROM node:20-slim AS runner
+FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV UPLOAD_DIR=/data/uploads

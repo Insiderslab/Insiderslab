@@ -86,19 +86,24 @@ export default function PlanReview({
     if (busy) return;
     setBusy(true);
     setSheetError(null);
-    const result = await approvePlanAction(token, {
-      planId: plan.id,
-      posts: plan.posts.map((p) => ({ postId: p.id, versionNumber: p.versionNumber })),
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setSheetError(result.error);
-      return;
+    try {
+      const result = await approvePlanAction(token, {
+        planId: plan.id,
+        posts: plan.posts.map((p) => ({ postId: p.id, versionNumber: p.versionNumber })),
+      });
+      if (!result.ok) {
+        setSheetError(result.error);
+        return;
+      }
+      setSheetOpen(false);
+      setOutcome({ approved: result.data.approved.length, skipped: result.data.skipped });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      router.refresh();
+    } catch {
+      setSheetError("La connessione si è interrotta. Controlla lo stato del piano e riprova.");
+    } finally {
+      setBusy(false);
     }
-    setSheetOpen(false);
-    setOutcome({ approved: result.data.approved.length, skipped: result.data.skipped });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    router.refresh();
   }
 
   function sendComment() {

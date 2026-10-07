@@ -29,6 +29,10 @@ export interface ReviewVersionView {
   text: string;
   firstCommentText: string | null;
   media: MediaItem[];
+  /** Schedule snapshot approved with this version (legacy rows may omit it). */
+  networks?: Network[];
+  networkOptions?: unknown;
+  publishAt?: Date | string;
   /** Sent to the client at least once. */
   sent: boolean;
   createdAt: Date | string;
@@ -260,14 +264,14 @@ export default function PostReview({
           </label>
         )}
         <NetworkPreviewTabs
-          networks={networks}
-          networkOptions={networkOptions}
+          networks={version.networks ?? networks}
+          networkOptions={version.networkOptions ?? networkOptions}
           text={version.text}
           firstCommentText={version.firstCommentText}
           media={media}
           accountName={accountName}
           accountAvatarUrl={accountAvatarUrl}
-          publishAt={publishAt}
+          publishAt={version.publishAt ?? publishAt}
           timeZone={timezone}
           pins={pins}
           markers={markers}

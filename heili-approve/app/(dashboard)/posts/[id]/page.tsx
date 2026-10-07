@@ -238,6 +238,9 @@ export default async function PostDetailPage({
         : first(query.salvato) === "1"
           ? "Bozza salvata."
           : null;
+  const showSharePanel =
+    !client.archivedAt &&
+    (post.status === "DRAFT" || post.status === "IN_REVIEW" || post.status === "CHANGES_REQUESTED");
 
   return (
     <div className="space-y-5">
@@ -404,10 +407,19 @@ export default async function PostDetailPage({
         />
         {notice && <p className="text-sm text-success">{notice}</p>}
 
-        <PostSharePanel
-          post={{ id: post.id, title: post.title, kind, status: post.status }}
-          client={{ id: client.id, name: client.name, archivedAt: client.archivedAt }}
-        />
+        {showSharePanel && (
+          <details className="rounded-lg border border-border bg-surface" data-testid="post-share-disclosure">
+            <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+              Link per il cliente
+            </summary>
+            <div className="border-t border-border p-2 sm:p-3">
+              <PostSharePanel
+                post={{ id: post.id, title: post.title, kind, status: post.status }}
+                client={{ id: client.id, name: client.name, archivedAt: client.archivedAt }}
+              />
+            </div>
+          </details>
+        )}
 
         {internal && post.status !== "CANCELLED" && (blogContent ? hasBeenSubmitted || isApproved : true) && (
           <section className="panel space-y-2 rounded p-4" aria-label="Esporta">
@@ -611,15 +623,21 @@ export default async function PostDetailPage({
         accountAvatarUrl={client.logoUrl}
         publishAt={post.publishAt}
         timezone={timezone}
-        versions={versions.map((v) => ({
-          id: v.id,
-          number: v.number,
-          text: v.text,
-          firstCommentText: v.firstCommentText,
-          media: parseMediaItems(v.media),
-          sent: sent(v.number),
-          createdAt: v.createdAt,
-        }))}
+        versions={versions.map((v) => {
+          const schedule = v.number === post.currentVersionNumber ? null : parseVersionSchedule(v.schedule);
+          return {
+            id: v.id,
+            number: v.number,
+            text: v.text,
+            firstCommentText: v.firstCommentText,
+            media: parseMediaItems(v.media),
+            networks: schedule ? schedule.networks.filter(isNetwork) : networks,
+            networkOptions: schedule?.networkOptions ?? post.networkOptions,
+            publishAt: schedule?.publishAt ?? post.publishAt,
+            sent: sent(v.number),
+            createdAt: v.createdAt,
+          };
+        })}
         initialVersionNumber={initialVersion}
         comments={comments}
         assistantItems={assistantItems}

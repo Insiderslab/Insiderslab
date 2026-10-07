@@ -64,6 +64,7 @@ import {
   ForbiddenError,
   NotFoundError,
   ValidationError,
+  RateLimitError,
   parseOrThrow,
 } from "@/lib/errors";
 import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
@@ -1162,29 +1163,63 @@ function userIdOf(actor: Actor): string | null {
 
 // ─── Agency: create / edit / submit / cancel ─────────────────────────────────
 
-export async function createPost(workspaceId: string, input: PostInput, actor: Actor): Promise<Post> {
+async function preparePostCreation(db: DbClient, workspaceId: string, input: PostInput) {
   const data = parseOrThrow(postInputSchema, input);
   const kind: ContentKind = data.kind ?? "SOCIAL_POST";
   assertKindEnabled(kind);
   const internal = isInternalKind(kind);
+  const client = await findClientForPost(db, data.clientId, workspaceId);
+  if (!clientHasService(client, kind)) throw new ValidationError(serviceNotActiveMessage(kind));
+  const networks = internal ? [] : (data.networks ?? []);
+  const networkOptions = internal ? {} : (data.networkOptions ?? {});
+  if (!internal) assertNetworksAllowed(networks, client.networks);
+  const media = internal ? [] : await normalizeMedia(db, workspaceId, data.media ?? []);
+  const videoCoverMs = internal ? null : resolveVideoCover(media, data.videoCoverMs);
+  const content = internal ? await prepareKindContent(db, workspaceId, kind, data.content) : {};
+  return { data, kind, internal, client, networks, networkOptions, media, videoCoverMs, content };
+}
+
+/** Read-only preview using exactly the same domain validation as creation. */
+export async function validatePostDraft(workspaceId: string, input: PostInput) {
+  const prepared = await preparePostCreation(prisma, workspaceId, input);
+  return {
+    ...prepared.data,
+    kind: prepared.kind,
+    networks: prepared.networks,
+    networkOptions: prepared.networkOptions,
+    media: prepared.media,
+    videoCoverMs: prepared.videoCoverMs,
+    ...(prepared.internal ? { content: prepared.content } : {}),
+  };
+}
+
+export async function createPost(
+  workspaceId: string,
+  input: PostInput,
+  actor: Actor,
+  imported?: { key: string; hash: string; tokenId: string }
+): Promise<Post> {
+  // Reject invalid input / disabled products before opening a DB transaction.
+  assertKindEnabled(parseOrThrow(postInputSchema, input).kind ?? "SOCIAL_POST");
 
   return prisma.$transaction(async (tx) => {
-    const client = await findClientForPost(tx, data.clientId, workspaceId);
-    // Only the client's active services; existing content of a service
-    // removed later stays editable (updatePost does not check this).
-    if (!clientHasService(client, kind)) throw new ValidationError(serviceNotActiveMessage(kind));
-    // Blog/ads have no networks, caption or media of their own: everything
-    // the client approves is in `content`.
-    const networks = internal ? [] : (data.networks ?? []);
-    const networkOptions = internal ? {} : (data.networkOptions ?? {});
-    if (!internal) assertNetworksAllowed(networks, client.networks);
-    const media = internal ? [] : await normalizeMedia(tx, workspaceId, data.media ?? []);
-    const videoCoverMs = internal ? null : resolveVideoCover(media, data.videoCoverMs);
-    const content = internal ? await prepareKindContent(tx, workspaceId, kind, data.content) : {};
+    const { data, kind, internal, client, networks, networkOptions, media, videoCoverMs, content } =
+      await preparePostCreation(tx, workspaceId, input);
+    if (imported) {
+      // Imported drafts share a durable budget across keys and parallel requests.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`automation-drafts:${workspaceId}`}, 0))`;
+      const configured = Number(process.env.AUTOMATION_DAILY_DRAFT_LIMIT);
+      const limit = Number.isInteger(configured) && configured > 0 ? Math.min(configured, 10_000) : 1000;
+      const count = await tx.post.count({ where: {
+        workspaceId, importKey: { not: null }, createdAt: { gte: new Date(Date.now() - 86400000) },
+      } });
+      if (count >= limit) throw new RateLimitError("Limite giornaliero delle bozze importate raggiunto: riprova più tardi");
+    }
 
     const post = await tx.post.create({
       data: {
         workspaceId,
+        ...(imported ? { importKey: imported.key, importHash: imported.hash } : {}),
         clientId: client.id,
         title: data.title,
         kind,
@@ -1208,7 +1243,10 @@ export async function createPost(workspaceId: string, input: PostInput, actor: A
       },
     });
 
-    await recordEvent(tx, { postId: post.id, type: "CREATED", actor, versionNumber: 1, metadata: { kind } });
+    await recordEvent(tx, {
+      postId: post.id, type: "CREATED", actor, versionNumber: 1,
+      metadata: { kind, ...(imported ? { source: "automation", externalId: imported.key, tokenId: imported.tokenId } : {}) },
+    });
     return post;
   });
 }

@@ -27,17 +27,35 @@ export function ReviewNav({
   /** False once the client decided (the success panel takes over). */
   showProgress: boolean;
 }) {
+  const progressLabel =
+    queue.position !== null ? wording.position(queue.position, queue.toReviewCount) : null;
+
   return (
-    <nav className="flex flex-wrap items-center justify-between gap-2 text-sm">
-      <Link href={homeHref} className="inline-flex min-h-11 items-center text-muted hover:text-foreground">
-        {wording.backLabel}
+    <nav className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm" aria-label="Navigazione della revisione">
+      <Link
+        href={homeHref}
+        aria-label={wording.backLabel}
+        className="inline-flex min-h-11 min-w-0 items-center justify-start text-muted hover:text-foreground"
+      >
+        <span className="sm:hidden" aria-hidden="true">← Elenco</span>
+        <span className="hidden sm:inline">{wording.backLabel}</span>
       </Link>
-      {queue.position !== null && showProgress && (
-        <span className="text-muted">{wording.position(queue.position, queue.toReviewCount)}</span>
+      {progressLabel && showProgress && (
+        <span className="text-center text-muted" aria-label={progressLabel}>
+          <span className="tabular-nums sm:hidden" aria-hidden="true">
+            {queue.position}/{queue.toReviewCount}
+          </span>
+          <span className="hidden sm:inline">{progressLabel}</span>
+        </span>
       )}
       {nextHref && showProgress && (
-        <Link href={nextHref} className="inline-flex min-h-11 items-center font-medium text-accent">
-          {wording.nextLabel}
+        <Link
+          href={nextHref}
+          aria-label={wording.nextLabel}
+          className="inline-flex min-h-11 min-w-0 items-center justify-end text-right font-medium text-accent"
+        >
+          <span className="sm:hidden" aria-hidden="true">Successivo →</span>
+          <span className="hidden sm:inline">{wording.nextLabel}</span>
         </Link>
       )}
     </nav>

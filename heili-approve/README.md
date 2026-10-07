@@ -4,6 +4,10 @@ Piattaforma per far **rivedere e approvare ai clienti i post social** preparati
 dall'agenzia. Quando il cliente approva, il post viene **programmato in automatico
 su Metricool**.
 
+**Importazione con Codex o Claude:** [guida Excel/CSV/JSON](docs/AGENT-IMPORT.md),
+[contratto API](docs/AUTOMATION-API.md) e [modello CSV apribile in Excel](docs/templates/approve-posts.csv).
+Le chiavi personali si creano in Impostazioni; l'importatore crea bozze con controllo preventivo e protezione dai duplicati.
+
 - L'agenzia (InsidersLab) prepara i post nel pannello: testo, immagini, video e
   Reel, reti, data e ora.
 - Il cliente riceve un **link personale** (niente password) e apre il post dal
@@ -265,7 +269,7 @@ condivisi con `approve.heili.cloud`.
 
 ## Avvio in locale
 
-Prerequisiti: Node 20 o più recente, Postgres 16 e Redis 7. Per Postgres e Redis
+Prerequisiti: Node 24 (come l'immagine Docker), Postgres 16 e Redis 7. Per Postgres e Redis
 basta `docker compose up -d` con il `docker-compose.yml` incluso.
 
 ```bash

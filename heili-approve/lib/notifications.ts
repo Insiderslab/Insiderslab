@@ -264,11 +264,15 @@ async function loadPost(postId: string) {
   });
 }
 
-async function sendToAgency(workspaceId: string, subject: string, content: Parameters<typeof renderEmail>[0]) {
+async function sendToAgency(
+  workspaceId: string,
+  subject: string,
+  content: Parameters<typeof renderEmail>[0]
+): Promise<boolean> {
   const to = await getAgencyRecipients(workspaceId);
-  if (to.length === 0) return;
+  if (to.length === 0) return false;
   const { html, text } = renderEmail(content);
-  await sendEmail({ to, subject, html, text });
+  return (await sendEmail({ to, subject, html, text })).ok;
 }
 
 function logFailure(name: string, error: unknown) {
@@ -820,12 +824,13 @@ export async function notifyPlanApproved(planId: string, reviewerId: string, app
 /**
  * The client has decided every post of the plan that was sent to them:
  * "Piano di ottobre: 10 approvati, 2 con modifiche". The caller makes sure
- * it goes out once per send (ContentPlan.completedNotifiedAt). Never throws.
+ * it goes out once per send (ContentPlan.completedNotifiedAt). Returns true
+ * only after the email transport confirms the send. Never throws.
  */
-export async function notifyPlanDecided(planId: string): Promise<void> {
+export async function notifyPlanDecided(planId: string): Promise<boolean> {
   try {
     const plan = await loadPlan(planId);
-    if (!plan) return;
+    if (!plan) return false;
     const summary = planOutcomeSummary(plan.posts.map((p) => p.status));
     const name = planShortName(plan.month);
     const changes = byPublishAsc(plan.posts.filter((p) => p.status === "CHANGES_REQUESTED"));
@@ -834,7 +839,7 @@ export async function notifyPlanDecided(planId: string): Promise<void> {
       const item = postListItem(p, plan.client.timezone);
       return { title: `${item.title} — ${verdict}`, ...(item.detail ? { detail: item.detail } : {}) };
     };
-    await sendToAgency(plan.workspaceId, `${name} di ${plan.client.name}: ${summary}`, {
+    return await sendToAgency(plan.workspaceId, `${name} di ${plan.client.name}: ${summary}`, {
       heading: "Il cliente ha rivisto il piano",
       paragraphs: [
         `${plan.client.name} ha dato una risposta su tutti i post del ${name.charAt(0).toLowerCase()}${name.slice(1)}: ${summary}.`,
@@ -847,6 +852,7 @@ export async function notifyPlanDecided(planId: string): Promise<void> {
     });
   } catch (error) {
     logFailure("notifyPlanDecided", error);
+    return false;
   }
 }
 

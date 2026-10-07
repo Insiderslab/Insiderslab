@@ -348,8 +348,6 @@ export default function PostReview({
 
       {outcome === null && !post.canAct && <StatusNotice post={post} />}
 
-      {changesSlot}
-
       <section ref={previewRef} className="scroll-mt-4 space-y-3" aria-label="Anteprima del post">
         {canComment && (
           <p className="text-sm text-muted">
@@ -382,6 +380,37 @@ export default function PostReview({
           seekTo={seek}
         />
       </section>
+
+      {(post.text || post.firstCommentText) && (
+        <details className="rounded-lg border border-border bg-surface">
+          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+            Leggi il testo completo
+          </summary>
+          <div className="space-y-4 border-t border-border p-4">
+            {post.text && (
+              <div className="space-y-1">
+                <h2 className="text-sm font-semibold">Testo del post</h2>
+                <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+              </div>
+            )}
+            {post.firstCommentText && (
+              <div className="space-y-1">
+                <h2 className="text-sm font-semibold">Primo commento</h2>
+                <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.firstCommentText}</p>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
+
+      {changesSlot && (
+        <details className="rounded-lg border border-accent/40 bg-surface">
+          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+            Modifiche dalla versione precedente
+          </summary>
+          <div className="border-t border-border p-2 sm:p-3">{changesSlot}</div>
+        </details>
+      )}
 
       {draft && canComment && (
         <CommentComposer

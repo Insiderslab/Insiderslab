@@ -226,6 +226,47 @@ describe("PostReview (social) keeps its wording", () => {
     expect(html).toContain("Pubblicazione: </span>");
     expect(html).not.toContain("Post social");
   });
+
+  it("puts the preview before collapsed details and keeps the complete copy accessible", () => {
+    const post: PortalPost = {
+      ...base,
+      networks: ["instagram"],
+      networkOptions: {},
+      text: "Prima riga\nSeconda riga completa",
+      firstCommentText: "Link e dettagli nel primo commento",
+      media: [],
+      publishAt: now,
+      comments: [],
+    };
+    const html = renderToStaticMarkup(
+      createElement(PostReview, {
+        token: "tok",
+        post,
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        queue,
+        assistantEnabled: false,
+        publishInPast: false,
+        changesSlot: createElement("div", { "data-testid": "changes-content" }, "Differenze complete"),
+      })
+    );
+
+    const previewAt = html.indexOf('aria-label="Anteprima del post"');
+    const fullTextAt = html.indexOf("Leggi il testo completo");
+    const changesAt = html.indexOf("Modifiche dalla versione precedente");
+    const changesContentAt = html.indexOf('data-testid="changes-content"');
+
+    expect(previewAt).toBeGreaterThan(-1);
+    expect(fullTextAt).toBeGreaterThan(previewAt);
+    expect(changesAt).toBeGreaterThan(fullTextAt);
+    expect(changesContentAt).toBeGreaterThan(changesAt);
+    expect(html).toContain("Prima riga\nSeconda riga completa");
+    expect(html).toContain("Primo commento");
+    expect(html).toContain("Link e dettagli nel primo commento");
+    expect(html).not.toMatch(/<details[^>]*\sopen(?:=|\s|>)/);
+    expect(html).toContain('aria-label="Navigazione della revisione"');
+    expect(html).toContain('aria-label="← Tutti i post"');
+    expect(html).toContain('aria-label="Prossimo post →"');
+  });
 });
 
 describe("PostCard", () => {

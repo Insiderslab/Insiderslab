@@ -13,6 +13,15 @@ const { db, mockPrisma, mockPosts, mockNotify, NOT_FOUND } = vi.hoisted(() => {
 
   function matches(row: Row, where: Row = {}): boolean {
     return Object.entries(where).every(([key, cond]) => {
+      if (key === "AND") return (cond as Row[]).every((part) => matches(row, part));
+      if (key === "OR") return (cond as Row[]).some((part) => matches(row, part));
+      if (key === "posts") {
+        const related = db.posts.filter((post) => post.planId === row.id);
+        const relation = cond as Row;
+        if ("none" in relation && related.some((post) => matches(post, relation.none as Row))) return false;
+        if ("some" in relation && !related.some((post) => matches(post, relation.some as Row))) return false;
+        return true;
+      }
       const value = row[key];
       if (cond && typeof cond === "object" && !(cond instanceof Date) && !Array.isArray(cond)) {
         const c = cond as Row;
@@ -21,8 +30,10 @@ const { db, mockPrisma, mockPosts, mockNotify, NOT_FOUND } = vi.hoisted(() => {
         if ("not" in c && (c.not === null ? value === null || value === undefined : value === c.not)) return false;
         if ("gte" in c && !((value as Date) >= (c.gte as Date))) return false;
         if ("lt" in c && !((value as Date) < (c.lt as Date))) return false;
+        if ("lte" in c && !((value as Date) <= (c.lte as Date))) return false;
         return true;
       }
+      if (value instanceof Date && cond instanceof Date) return value.getTime() === cond.getTime();
       return value === cond;
     });
   }
@@ -48,6 +59,9 @@ const { db, mockPrisma, mockPosts, mockNotify, NOT_FOUND } = vi.hoisted(() => {
         if (!plan) throw new Error("not found");
         return withPosts(plan);
       }),
+      findMany: vi.fn(async ({ where = {}, take }: { where?: Row; take?: number }) =>
+        db.plans.filter((p) => matches(p, where)).slice(0, take)
+      ),
       update: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
         const plan = db.plans.find((p) => p.id === where.id)!;
         Object.assign(plan, data);
@@ -92,7 +106,7 @@ const { db, mockPrisma, mockPosts, mockNotify, NOT_FOUND } = vi.hoisted(() => {
   const mockNotify = {
     notifyPlanSent: vi.fn(async () => 1),
     notifyPlanApproved: vi.fn(async () => {}),
-    notifyPlanDecided: vi.fn(async () => {}),
+    notifyPlanDecided: vi.fn(async () => true),
     notifyPlanComment: vi.fn(async () => {}),
   };
   const NOT_FOUND = new Error("NEXT_NOT_FOUND");
@@ -122,7 +136,16 @@ vi.mock("@/app/review/[token]/reviewer", () => ({
 }));
 
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { addPlanComment, afterPlanPostDecided, approvePlan, getPlanForReviewer, sendPlan } from "@/lib/plans";
+import {
+  PLAN_NOTIFICATION_LEASE_MS,
+  PLAN_NOTIFICATION_RETRY_MS,
+  addPlanComment,
+  afterPlanPostDecided,
+  approvePlan,
+  getPlanForReviewer,
+  sendPlan,
+  sweepPlanCompletionNotifications,
+} from "@/lib/plans";
 
 const reviewer = { id: "r1", clientId: "c1" };
 const SENT = new Date("2026-10-01T10:00:00Z");
@@ -137,6 +160,8 @@ function plan(overrides: Row): Row {
     sentAt: SENT,
     reviewDueAt: null,
     completedNotifiedAt: null,
+    completedNotificationClaimedAt: null,
+    completedNotificationRetryAt: null,
     client: { id: "c1", name: "Caffè Aurora", timezone: "Europe/Rome", archivedAt: null },
     ...overrides,
   };
@@ -171,6 +196,7 @@ beforeEach(() => {
     plan({ id: "p3", clientId: "c1", month: "2026-12", sentAt: null, status: "DRAFT" })
   );
   vi.clearAllMocks();
+  mockNotify.notifyPlanDecided.mockResolvedValue(true);
   mockPosts.approvePost.mockImplementation(async (id: string) => {
     const row = db.posts.find((p) => p.id === id)!;
     row.status = "APPROVED";
@@ -312,6 +338,115 @@ describe("plan follow-up", () => {
     expect(await afterPlanPostDecided("p1")).toBe(true);
     expect(await afterPlanPostDecided("p1")).toBe(false);
     expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(1);
+    expect(db.plans.find((p) => p.id === "p1")).toMatchObject({
+      completedNotificationClaimedAt: null,
+      completedNotificationRetryAt: null,
+    });
+  });
+
+  it("releases a failed email claim and retries it after the backoff", async () => {
+    const now = new Date("2026-10-08T12:00:00Z");
+    db.posts.push(post("a", { status: "APPROVED" }));
+    mockNotify.notifyPlanDecided.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    expect(await afterPlanPostDecided("p1", now)).toBe(false);
+    expect(db.plans.find((p) => p.id === "p1")).toMatchObject({
+      completedNotifiedAt: null,
+      completedNotificationClaimedAt: null,
+      completedNotificationRetryAt: new Date(now.getTime() + PLAN_NOTIFICATION_RETRY_MS),
+    });
+
+    expect(await afterPlanPostDecided("p1", new Date(now.getTime() + PLAN_NOTIFICATION_RETRY_MS - 1))).toBe(false);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(1);
+
+    const retryAt = new Date(now.getTime() + PLAN_NOTIFICATION_RETRY_MS);
+    expect(await afterPlanPostDecided("p1", retryAt)).toBe(true);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(2);
+    expect(db.plans.find((p) => p.id === "p1")!.completedNotifiedAt).toEqual(retryAt);
+  });
+
+  it("keeps the lease after an unexpected crash and recovers after it expires", async () => {
+    const now = new Date("2026-10-08T12:00:00Z");
+    db.posts.push(post("a", { status: "APPROVED" }));
+    mockNotify.notifyPlanDecided.mockRejectedValueOnce(new Error("process stopped")).mockResolvedValueOnce(true);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await afterPlanPostDecided("p1", now)).toBe(false);
+    expect(db.plans.find((p) => p.id === "p1")!.completedNotificationClaimedAt).toEqual(now);
+    expect(await afterPlanPostDecided("p1", new Date(now.getTime() + PLAN_NOTIFICATION_LEASE_MS - 1))).toBe(false);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(1);
+
+    const leaseExpired = new Date(now.getTime() + PLAN_NOTIFICATION_LEASE_MS);
+    expect(await afterPlanPostDecided("p1", leaseExpired)).toBe(true);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(2);
+    errors.mockRestore();
+  });
+
+  it("allows only one overlapping claim", async () => {
+    db.posts.push(post("a", { status: "APPROVED" }));
+    let finish!: (sent: boolean) => void;
+    mockNotify.notifyPlanDecided.mockReturnValueOnce(new Promise<boolean>((resolve) => (finish = resolve)));
+
+    const first = afterPlanPostDecided("p1", new Date("2026-10-08T12:00:00Z"));
+    await vi.waitFor(() => expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(1));
+    const second = afterPlanPostDecided("p1", new Date("2026-10-08T12:00:01Z"));
+    await expect(second).resolves.toBe(false);
+    finish(true);
+    await expect(first).resolves.toBe(true);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mark a new submission notified when the old email finishes in flight", async () => {
+    db.posts.push(post("a", { status: "CHANGES_REQUESTED" }));
+    let finish!: (sent: boolean) => void;
+    mockNotify.notifyPlanDecided.mockReturnValueOnce(new Promise<boolean>((resolve) => (finish = resolve)));
+    mockPosts.submitForReview.mockImplementation(async (ids: string[]) => {
+      for (const id of ids) db.posts.find((p) => p.id === id)!.status = "IN_REVIEW";
+      return { submitted: ids, clientsWithoutReviewers: [], clientsWithoutEmail: [] };
+    });
+
+    const oldFollowUp = afterPlanPostDecided("p1", new Date("2026-10-08T12:00:00Z"));
+    await vi.waitFor(() => expect(mockNotify.notifyPlanDecided).toHaveBeenCalledTimes(1));
+    const oldSentAt = db.plans.find((p) => p.id === "p1")!.sentAt;
+    await sendPlan("p1", "w1", { kind: "user", userId: "u1" });
+    expect(db.plans.find((p) => p.id === "p1")!.sentAt).not.toEqual(oldSentAt);
+
+    finish(true);
+    await expect(oldFollowUp).resolves.toBe(false);
+    expect(db.plans.find((p) => p.id === "p1")).toMatchObject({
+      completedNotifiedAt: null,
+      completedNotificationClaimedAt: null,
+      completedNotificationRetryAt: null,
+    });
+  });
+
+  it("sweeps eligible completed plans, including a retry after email failure", async () => {
+    const now = new Date("2026-10-08T12:00:00Z");
+    db.posts.push(post("a", { status: "APPROVED" }));
+    Object.assign(db.plans.find((p) => p.id === "p1")!, {
+      status: "APPROVED",
+      completedNotificationRetryAt: now,
+    });
+    Object.assign(db.plans.find((p) => p.id === "p2")!, {
+      status: "APPROVED",
+      completedNotificationRetryAt: new Date(now.getTime() + 1),
+    });
+
+    await expect(sweepPlanCompletionNotifications(now)).resolves.toBe(1);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledWith("p1");
+    expect(mockNotify.notifyPlanDecided).not.toHaveBeenCalledWith("p2");
+  });
+
+  it("retries a decided plan stored as draft when a new draft post coexists", async () => {
+    const now = new Date("2026-10-08T12:00:00Z");
+    db.posts.push(post("a", { status: "APPROVED" }), post("b", { status: "DRAFT" }));
+    Object.assign(db.plans.find((p) => p.id === "p1")!, {
+      status: "DRAFT",
+      completedNotificationRetryAt: now,
+    });
+
+    await expect(sweepPlanCompletionNotifications(now)).resolves.toBe(1);
+    expect(mockNotify.notifyPlanDecided).toHaveBeenCalledWith("p1");
   });
 
   it("waits while posts are still in review, and never for an unsent plan", async () => {

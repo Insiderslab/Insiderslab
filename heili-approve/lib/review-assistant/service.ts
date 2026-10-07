@@ -15,11 +15,13 @@
  * marked ABANDONED.
  *
  * Cost control: every model call is preceded by a short transaction that
- * holds a per-reviewer advisory lock, re-reads the reviewer's sessions,
- * checks the limits, stores the client message and claims the session's turn
- * (ReviewSession.turnStartedAt). A second request while a turn is in flight is
- * refused with 409, so parallel retries, parallel first messages and parallel
- * finalize calls cannot multiply model calls or bypass the caps.
+ * holds workspace then reviewer advisory locks, re-reads the reviewer's
+ * sessions, checks the limits, stores a durable provider-attempt row and
+ * claims the session's turn (ReviewSession.turnStartedAt). Attempts are
+ * charged before contacting the provider, including failed calls and retries.
+ * A second request while a turn is in flight is refused with 409, so parallel
+ * retries, first messages and finalize calls cannot multiply model calls or
+ * bypass either the reviewer or workspace budget.
  */
 
 import type { Prisma, ReviewInputMode } from "@/app/generated/prisma/client";
@@ -54,6 +56,18 @@ export interface AssistantReviewer {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Defaults deliberately leave room for normal guided reviews while bounding
+// a leaked public link. Deployments may lower them without a code change.
+const DEFAULT_REVIEWER_ATTEMPTS_PER_DAY = 100;
+const DEFAULT_WORKSPACE_ATTEMPTS_PER_DAY = 1_000;
+const DEFAULT_ATTEMPT_COOLDOWN_MS = 3_000;
+
+const REVIEWER_BUDGET_MESSAGE =
+  "Hai raggiunto il limite giornaliero dell'assistente. Puoi comunque approvare il contenuto o scrivere direttamente all'agenzia.";
+const WORKSPACE_BUDGET_MESSAGE =
+  "L'assistente ha raggiunto il limite giornaliero del workspace. Puoi comunque approvare il contenuto o scrivere direttamente all'agenzia.";
+const ATTEMPT_COOLDOWN_MESSAGE = "Attendi qualche secondo prima di chiedere un'altra risposta all'assistente.";
 
 /** Longer than the slowest model call (timeout × retries): an older claim is a dead process. */
 const TURN_STALE_MS = 5 * 60 * 1000;
@@ -114,9 +128,86 @@ async function countClientMessagesLast24h(db: Prisma.TransactionClient, reviewer
   });
 }
 
-/** Serialises this reviewer's limit checks, message inserts and turn claims. */
-async function lockReviewer(tx: Prisma.TransactionClient, reviewerId: string): Promise<void> {
+/** Positive integer env setting, clamped to a safe operational range. */
+function positiveIntSetting(name: string, fallback: number, maximum: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(maximum, Math.max(1, Math.floor(parsed)));
+}
+
+function attemptLimits() {
+  return {
+    reviewerDaily: positiveIntSetting(
+      "REVIEW_ASSISTANT_REVIEWER_DAILY_ATTEMPTS",
+      DEFAULT_REVIEWER_ATTEMPTS_PER_DAY,
+      10_000
+    ),
+    workspaceDaily: positiveIntSetting(
+      "REVIEW_ASSISTANT_WORKSPACE_DAILY_ATTEMPTS",
+      DEFAULT_WORKSPACE_ATTEMPTS_PER_DAY,
+      100_000
+    ),
+    cooldownMs: positiveIntSetting(
+      "REVIEW_ASSISTANT_ATTEMPT_COOLDOWN_MS",
+      DEFAULT_ATTEMPT_COOLDOWN_MS,
+      60_000
+    ),
+  };
+}
+
+/**
+ * Serialises budget checks in one deterministic order. The workspace lock is
+ * always first, so two reviewers cannot deadlock while sharing its budget.
+ */
+async function lockAssistantBudget(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  reviewerId: string
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`review-assistant-workspace:${workspaceId}`}))`;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`review-assistant:${reviewerId}`}))`;
+}
+
+async function workspaceIdForPost(tx: Prisma.TransactionClient, postId: string): Promise<string> {
+  const row = await tx.post.findUnique({ where: { id: postId }, select: { workspaceId: true } });
+  if (!row) throw new AssistantError("Post non trovato", 404);
+  return row.workspaceId;
+}
+
+/**
+ * Checks the rolling budgets and records the provider call before it happens.
+ * All callers hold workspace + reviewer locks, so counts and the insert are
+ * atomic across sessions and across reviewers in the same workspace.
+ */
+async function chargeProviderAttempt(
+  tx: Prisma.TransactionClient,
+  input: { sessionId: string; reviewerId: string; workspaceId: string; now: Date }
+): Promise<void> {
+  const limits = attemptLimits();
+  const since = new Date(input.now.getTime() - DAY_MS);
+  const [latest, reviewerAttempts, workspaceAttempts] = await Promise.all([
+    tx.reviewProviderAttempt.findFirst({
+      where: { session: { reviewerId: input.reviewerId } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+    tx.reviewProviderAttempt.count({
+      where: { createdAt: { gte: since }, session: { reviewerId: input.reviewerId } },
+    }),
+    tx.reviewProviderAttempt.count({
+      where: { createdAt: { gte: since }, session: { post: { workspaceId: input.workspaceId } } },
+    }),
+  ]);
+
+  if (latest && input.now.getTime() - latest.createdAt.getTime() < limits.cooldownMs) {
+    throw new AssistantError(ATTEMPT_COOLDOWN_MESSAGE, 429);
+  }
+  if (reviewerAttempts >= limits.reviewerDaily) throw new AssistantError(REVIEWER_BUDGET_MESSAGE, 429);
+  if (workspaceAttempts >= limits.workspaceDaily) throw new AssistantError(WORKSPACE_BUDGET_MESSAGE, 429);
+
+  await tx.reviewProviderAttempt.create({ data: { sessionId: input.sessionId, createdAt: input.now } });
 }
 
 function turnInFlight(session: { turnStartedAt: Date | null }, now: Date): boolean {
@@ -177,9 +268,10 @@ export async function sendAssistantMessage(
   const message = input.message?.trim() ?? "";
 
   // Checks, message insert and turn claim happen atomically under the
-  // reviewer's lock, on a fresh read (the `post` snapshot may be stale).
+  // workspace + reviewer locks, on a fresh read (the `post` snapshot may be stale).
   const claim = await prisma.$transaction(async (tx) => {
-    await lockReviewer(tx, reviewer.id);
+    const workspaceId = await workspaceIdForPost(tx, post.id);
+    await lockAssistantBudget(tx, workspaceId, reviewer.id);
     const now = new Date();
     const sessions = await tx.reviewSession.findMany({
       where: { postId: post.id, reviewerId: reviewer.id },
@@ -196,6 +288,12 @@ export async function sendAssistantMessage(
       if (!existing || existing.status !== "OPEN" || !input.retry || last?.role !== "CLIENT") {
         throw new AssistantError("Scrivi un messaggio per l'assistente.", 400);
       }
+      await chargeProviderAttempt(tx, {
+        sessionId: existing.id,
+        reviewerId: reviewer.id,
+        workspaceId,
+        now,
+      });
       await tx.reviewSession.update({ where: { id: existing.id }, data: { turnStartedAt: now } });
       return { sessionId: existing.id, claimedAt: now, sessionsOnPost: sessions.length };
     }
@@ -238,6 +336,7 @@ export async function sendAssistantMessage(
     await tx.reviewMessage.create({
       data: { sessionId, role: "CLIENT", content: message, inputMode: input.inputMode },
     });
+    await chargeProviderAttempt(tx, { sessionId, reviewerId: reviewer.id, workspaceId, now });
     return { sessionId, claimedAt: now, sessionsOnPost: sessions.length + (existing ? 0 : 1) };
   });
 
@@ -300,7 +399,8 @@ export async function finalizeSession(
   // Claim the turn (same lock as the chat): a double click or a parallel
   // request gets 409 instead of a second, expensive summary call.
   const claim = await prisma.$transaction(async (tx) => {
-    await lockReviewer(tx, reviewer.id);
+    const workspaceId = await workspaceIdForPost(tx, post.id);
+    await lockAssistantBudget(tx, workspaceId, reviewer.id);
     const now = new Date();
     const fresh = await tx.reviewSession.findUnique({
       where: { id: session.id },
@@ -314,6 +414,12 @@ export async function finalizeSession(
     if (!messages.some((m) => m.role === "CLIENT")) {
       throw new AssistantError("Scrivi almeno un messaggio all'assistente prima di preparare il riepilogo.", 400);
     }
+    await chargeProviderAttempt(tx, {
+      sessionId: fresh.id,
+      reviewerId: reviewer.id,
+      workspaceId,
+      now,
+    });
     await tx.reviewSession.update({ where: { id: fresh.id }, data: { turnStartedAt: now } });
     return { claimedAt: now, messages };
   });

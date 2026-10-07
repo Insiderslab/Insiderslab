@@ -50,3 +50,8 @@ next-env.d.ts
 
 # redis-server locale
 dump.rdb
+
+# Local importer caches and resume state.
+__pycache__/
+*.py[cod]
+*.approve-import-state.json

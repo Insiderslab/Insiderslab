@@ -23,6 +23,7 @@ import {
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
+  type CSSProperties,
 } from "react";
 import { formatTimecode } from "@/lib/domain";
 import {
@@ -93,7 +94,7 @@ const BAND_TONES = {
 const controlButton =
   "inline-flex h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded px-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:cursor-default disabled:opacity-50";
 
-export default function VideoPlayer({
+function VideoPlayerInstance({
   src,
   poster,
   markers = [],
@@ -132,9 +133,12 @@ export default function VideoPlayer({
   const progressPct = markerPercent(time, duration) ?? 0;
 
   // Let the parent (assistant panel, comment form) read the current time
-  // on demand. Keeps answering with the last known time after unmount.
+  // on demand. Invalid browser values fall back to this clip's last time.
   useEffect(() => {
-    registerTimeGetter?.(() => videoRef.current?.currentTime ?? lastTimeRef.current);
+    registerTimeGetter?.(() => {
+      const current = videoRef.current?.currentTime;
+      return typeof current === "number" && Number.isFinite(current) ? current : lastTimeRef.current;
+    });
   }, [registerTimeGetter]);
 
   // Jump requested from outside (a timecode chip in the comment list).
@@ -300,9 +304,17 @@ export default function VideoPlayer({
       : onRequestComment
         ? `${label}: in pausa a ${timeText}. Tocca un punto del fotogramma per commentarlo`
         : `${label}: riproduci`;
+  const mobileWidth = `${Math.min(100, Math.max(0, aspectRatio * 62))}svh`;
+  const playerStyle = { "--mobile-video-width": mobileWidth } as CSSProperties & {
+    "--mobile-video-width": string;
+  };
 
   return (
-    <div className={`w-full ${className}`} onKeyDown={onKeyDown}>
+    <div
+      className={`w-full max-[480px]:mx-auto max-[480px]:w-[clamp(16rem,var(--mobile-video-width),100%)] max-[480px]:max-w-full ${className}`}
+      style={playerStyle}
+      onKeyDown={onKeyDown}
+    >
       <div
         className={`relative w-full overflow-hidden bg-black ${frameClassName}`}
         style={{ aspectRatio: String(aspectRatio) }}
@@ -526,4 +538,10 @@ export default function VideoPlayer({
   );
 }
 
+/** A source change is a different review clip, so none of its playback state is reusable. */
+function VideoPlayer(props: VideoPlayerProps) {
+  return <VideoPlayerInstance key={props.src} {...props} />;
+}
+
+export default VideoPlayer;
 export { VideoPlayer };

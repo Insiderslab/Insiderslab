@@ -34,7 +34,7 @@ describe("storage keys", () => {
   });
 
   it("rejects traversal and malformed keys", () => {
-    const root = "/srv/uploads";
+    const root = path.resolve("/srv/uploads");
     for (const key of [
       "../etc/passwd",
       "ws/../../etc/passwd.jpg",

@@ -1,0 +1,2 @@
+source_id,client_id,title,publish_at,networks,text,first_comment,media_files,media_durations,kind,network_options
+calendar-2026-10-001,REPLACE_WITH_CLIENT_ID,Post di esempio,2026-10-15T10:30:00+02:00,instagram|facebook,"Testo del post, con virgole consentite",Primo commento opzionale,,,SOCIAL_POST,{}
