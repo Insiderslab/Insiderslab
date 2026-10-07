@@ -33,7 +33,7 @@ import { displayDomain } from "./helpers";
 import SafeZoneOverlay from "./safe-zones";
 
 export interface AdMockupProps extends VideoReviewProps {
-  variant: Pick<AdVariant, "media" | "primaryText" | "headline" | "description" | "cta" | "destinationUrl">;
+  variant: Pick<AdVariant, "media" | "primaryText" | "headline" | "description" | "cta" | "destinationUrl" | "google">;
   accountName: string;
   accountAvatarUrl?: string | null;
   pins?: PreviewPin[];

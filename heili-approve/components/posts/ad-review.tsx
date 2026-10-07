@@ -22,6 +22,7 @@ import { AdPlacementPreviews } from "@/components/ads/ad-preview";
 import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdDecisionBadge, { DECISION_LABELS, type AdVariantDecisionState } from "@/components/ads/decision-badge";
 import { displayDomain, numberAdComments } from "@/components/ads/helpers";
+import GoogleAssetsList from "@/components/ads/google-assets-list";
 import AdSpecChecklist from "@/components/ads/spec-checklist";
 import type { PreviewPin, PreviewSeek, PreviewVideoMarker } from "@/components/post-preview/types";
 import AssistantTranscript from "@/components/review/assistant-transcript";
@@ -31,6 +32,7 @@ import {
   adSpecChecks,
   describeSummary,
   summarizeChecks,
+  usesGoogleAssets,
   variantDisplayName,
 } from "@/lib/content/ads";
 import type { AdContent, AdVariant } from "@/lib/content/types";
@@ -619,6 +621,8 @@ function VariantCard({
               )}
             </dl>
           )}
+
+          {usesGoogleAssets(variant.placements) && <GoogleAssetsList variant={variant} />}
 
           <details className="rounded border border-border bg-background p-3" open={summary.errors > 0}>
             <summary className="cursor-pointer text-sm">

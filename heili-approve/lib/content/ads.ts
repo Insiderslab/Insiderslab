@@ -16,6 +16,20 @@ import { z } from "zod";
 import type { MediaItem } from "@/lib/domain";
 import { ValidationError } from "@/lib/errors";
 import {
+  buildGoogleExportFiles,
+  cloneGoogleAssets,
+  emptyGoogleAssets,
+  filled,
+  formatKeyword,
+  googleAssetChecks,
+  googleAssetsOf,
+  googleAssetsSchema,
+  googleDisplayUrl,
+  hasGoogleAssets,
+  GOOGLE_MATCH_LABELS,
+  type GoogleExportFile,
+} from "./google-ads";
+import {
   AD_PLACEMENTS,
   AD_PLATFORMS,
   type AdCampaign,
@@ -26,8 +40,19 @@ import {
   type VariantDecision,
 } from "./types";
 
-export type { AdCampaign, AdContent, AdPlacement, AdPlatform, AdVariant, VariantDecision } from "./types";
-export { AD_PLACEMENTS, AD_PLATFORMS } from "./types";
+export type {
+  AdCampaign,
+  AdContent,
+  AdGoogleAssets,
+  AdPlacement,
+  AdPlatform,
+  AdVariant,
+  GoogleKeyword,
+  GoogleMatchType,
+  VariantDecision,
+} from "./types";
+export { AD_PLACEMENTS, AD_PLATFORMS, GOOGLE_MATCH_TYPES } from "./types";
+export * from "./google-ads";
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +81,7 @@ export const VARIANT_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 
 export const AD_PLATFORM_LABELS: Record<AdPlatform, string> = {
   meta: "Meta (Facebook e Instagram)",
-  google: "Google Display",
+  google: "Google Ads",
   tiktok: "TikTok",
   linkedin: "LinkedIn",
 };
@@ -108,6 +133,10 @@ export interface PlacementSpec {
   /** Max media shown at once (carousel cards, story cards). */
   maxMedia: number;
   safeZones: SafeZones | null;
+  /** False for text-only placements (Google Search): no media checks there. */
+  usesMedia: boolean;
+  /** The button: required, optional (the platform picks one when empty) or not shown. */
+  cta: "required" | "optional" | "none";
 }
 
 export const PLACEMENT_SPECS: Record<AdPlacement, PlacementSpec> = {
@@ -126,6 +155,8 @@ export const PLACEMENT_SPECS: Record<AdPlacement, PlacementSpec> = {
     video: "allowed",
     maxMedia: 10,
     safeZones: null,
+    usesMedia: true,
+    cta: "required",
   },
   meta_stories_reels: {
     placement: "meta_stories_reels",
@@ -139,6 +170,8 @@ export const PLACEMENT_SPECS: Record<AdPlacement, PlacementSpec> = {
     video: "allowed",
     maxMedia: 10,
     safeZones: { top: 0.14, bottom: 0.35, right: 0 },
+    usesMedia: true,
+    cta: "required",
   },
   tiktok_in_feed: {
     placement: "tiktok_in_feed",
@@ -151,6 +184,8 @@ export const PLACEMENT_SPECS: Record<AdPlacement, PlacementSpec> = {
     video: "required",
     maxMedia: 1,
     safeZones: { top: 0.14, bottom: 0.35, right: 0.15 },
+    usesMedia: true,
+    cta: "required",
   },
   google_display: {
     placement: "google_display",
@@ -166,6 +201,43 @@ export const PLACEMENT_SPECS: Record<AdPlacement, PlacementSpec> = {
     video: "unsupported",
     maxMedia: 15,
     safeZones: null,
+    usesMedia: true,
+    cta: "required",
+  },
+  // Responsive search ad: text only (headlines, descriptions, paths, keywords).
+  google_search: {
+    placement: "google_search",
+    platform: "google",
+    label: "Google Ricerca (annuncio adattivo)",
+    fileSlug: "search",
+    preferred: [],
+    accepted: { min: 0, max: 0 },
+    minShortSide: 0,
+    video: "unsupported",
+    maxMedia: 0,
+    safeZones: null,
+    usesMedia: false,
+    cta: "none",
+  },
+  // Performance Max asset group: landscape 1.91:1 and square 1:1 required,
+  // portrait 4:5 optional (sizes checked per format in google-ads.ts).
+  google_pmax: {
+    placement: "google_pmax",
+    platform: "google",
+    label: "Performance Max",
+    fileSlug: "pmax",
+    preferred: [
+      { ratio: 1.91, label: "1,91:1" },
+      { ratio: 1, label: "1:1" },
+      { ratio: 4 / 5, label: "4:5" },
+    ],
+    accepted: { min: 4 / 5, max: 1.91 },
+    minShortSide: 300,
+    video: "allowed",
+    maxMedia: 25,
+    safeZones: null,
+    usesMedia: true,
+    cta: "optional",
   },
   linkedin_feed: {
     placement: "linkedin_feed",
@@ -181,6 +253,8 @@ export const PLACEMENT_SPECS: Record<AdPlacement, PlacementSpec> = {
     video: "allowed",
     maxMedia: 10,
     safeZones: null,
+    usesMedia: true,
+    cta: "required",
   },
 };
 
@@ -190,6 +264,22 @@ export const AD_PLACEMENT_LABELS: Record<AdPlacement, string> = Object.fromEntri
 
 export function placementsForPlatform(platform: AdPlatform): AdPlacement[] {
   return AD_PLACEMENTS.filter((p) => PLACEMENT_SPECS[p].platform === platform);
+}
+
+/**
+ * Placements a new variant starts with: all of the platform's, except Google
+ * Ads, where Search, Performance Max and Display are different campaigns and
+ * a variant usually targets one (Search first).
+ */
+export function defaultPlacementsForPlatform(platform: AdPlatform): AdPlacement[] {
+  return platform === "google" ? ["google_search"] : placementsForPlatform(platform);
+}
+
+/** Placements whose Google assets (titoli, descrizioni, parole chiave) apply. */
+export const GOOGLE_ASSET_PLACEMENTS = ["google_search", "google_pmax"] as const satisfies readonly AdPlacement[];
+
+export function usesGoogleAssets(placements: readonly AdPlacement[]): boolean {
+  return placements.some((p) => p === "google_search" || p === "google_pmax");
 }
 
 export function isAdPlatform(value: unknown): value is AdPlatform {
@@ -315,6 +405,8 @@ export const adVariantSchema = z.object({
     .max(AD_PLACEMENTS.length)
     .default([])
     .transform((list) => AD_PLACEMENTS.filter((p) => list.includes(p))),
+  // Absent on sets saved before Google Ads: kept absent, so they read as before.
+  google: googleAssetsSchema.optional(),
 });
 
 /**
@@ -352,9 +444,10 @@ function stripUndefined<T extends object>(value: T): T {
 function toAdContent(data: z.output<typeof adContentSchema>): AdContent {
   return {
     campaign: { ...data.campaign },
-    variants: data.variants.map((v) => ({
+    variants: data.variants.map(({ google, ...v }) => ({
       ...v,
       media: v.media.map((m) => stripUndefined(m) as MediaItem),
+      ...(google ? { google: { ...google, logos: google.logos.map((m) => stripUndefined(m) as MediaItem) } } : {}),
     })),
   };
 }
@@ -433,6 +526,7 @@ export function newVariant(
   options: { platform?: AdPlatform; existingIds?: readonly string[] } = {}
 ): AdVariant {
   const id = nextVariantId(options.existingIds ?? [], index);
+  const platform = options.platform ?? "meta";
   return {
     id,
     name: `Variante ${id}`,
@@ -442,7 +536,8 @@ export function newVariant(
     description: "",
     cta: "",
     destinationUrl: "",
-    placements: placementsForPlatform(options.platform ?? "meta"),
+    placements: defaultPlacementsForPlatform(platform),
+    ...(platform === "google" ? { google: emptyGoogleAssets() } : {}),
   };
 }
 
@@ -457,6 +552,7 @@ export function duplicateVariant(variant: AdVariant, existingIds: readonly strin
     name: `${renamed} (copia)`.slice(0, AD_LIMITS.variantName),
     media: variant.media.map((m) => ({ ...m })),
     placements: [...variant.placements],
+    ...(variant.google ? { google: cloneGoogleAssets(variant.google) } : {}),
   };
 }
 
@@ -529,7 +625,7 @@ export function evaluateRatio(ratio: number, placement: AdPlacement): RatioVerdi
 
 // ─── Spec checks ─────────────────────────────────────────────────────────────
 
-export type AdVariantField = "media" | "placements" | AdTextField | "cta" | "destinationUrl";
+export type AdVariantField = "media" | "placements" | AdTextField | "cta" | "destinationUrl" | "google";
 
 export interface AdSpecCheck {
   /** Stable key for React lists. */
@@ -586,7 +682,9 @@ export function adSpecChecks(variant: AdVariant, options: { platform?: AdPlatfor
     });
   }
 
-  if (media.length === 0) {
+  // Text-only placements (Google Search) need no media.
+  const needsMedia = placements.length === 0 || placements.some((p) => PLACEMENT_SPECS[p].usesMedia);
+  if (media.length === 0 && needsMedia) {
     add({
       key: "media:none",
       status: "error",
@@ -614,6 +712,11 @@ export function adSpecChecks(variant: AdVariant, options: { platform?: AdPlatfor
         mediaIndex: null,
       });
     }
+
+    if (placement === "google_search" || placement === "google_pmax") {
+      for (const check of googleAssetChecks(variant, placement)) checks.push(check);
+    }
+    if (!spec.usesMedia) continue;
 
     if (media.length > spec.maxMedia) {
       add({
@@ -674,6 +777,9 @@ export function adSpecChecks(variant: AdVariant, options: { platform?: AdPlatfor
         });
       }
 
+      // Performance Max takes YouTube videos of any shape.
+      if (placement === "google_pmax" && item.type === "video") return;
+
       // Aspect ratio.
       const ratio = mediaRatio(item);
       const preferred = spec.preferred.map((r) => r.label).join(" o ");
@@ -702,8 +808,9 @@ export function adSpecChecks(variant: AdVariant, options: { platform?: AdPlatfor
           mediaIndex: index,
         });
 
+        // Performance Max minimums depend on the format: checked in google-ads.ts.
         const shortSide = Math.min(item.width ?? 0, item.height ?? 0);
-        if (shortSide > 0 && shortSide < spec.minShortSide) {
+        if (placement !== "google_pmax" && shortSide > 0 && shortSide < spec.minShortSide) {
           add({
             ...base,
             key: `${key}:size`,
@@ -737,8 +844,11 @@ export function adSpecChecks(variant: AdVariant, options: { platform?: AdPlatfor
   if (platforms.length === 0) platforms.push(options.platform ?? "meta");
 
   for (const platform of platforms) {
+    const own = placements.filter((p) => PLACEMENT_SPECS[p].platform === platform);
+    // Google: these three fields are the Display ad's; Search and PMax use the Google assets.
+    const textFields = platform === "google" && own.length > 0 && !own.includes("google_display") ? [] : (["primaryText", "headline", "description"] as const);
     const specs = AD_TEXT_SPECS[platform];
-    for (const field of ["primaryText", "headline", "description"] as const) {
+    for (const field of textFields) {
       const spec = specs[field];
       if (!spec) continue;
       const result = textCheck(variant[field], spec);
@@ -755,8 +865,27 @@ export function adSpecChecks(variant: AdVariant, options: { platform?: AdPlatfor
       });
     }
 
+    const ctaMode = own.length === 0 || own.some((p) => PLACEMENT_SPECS[p].cta === "required")
+      ? "required"
+      : own.some((p) => PLACEMENT_SPECS[p].cta === "optional")
+        ? "optional"
+        : "none";
+    if (ctaMode === "none") continue;
     const cta = variant.cta.trim();
     const suggestions = CTA_SUGGESTIONS[platform];
+    if (!cta && ctaMode === "optional") {
+      add({
+        key: `${platform}:cta`,
+        status: "ok",
+        label: "CTA",
+        message: "Nessun pulsante scelto: lo sceglie Google in automatico.",
+        placement: null,
+        platform,
+        field: "cta",
+        mediaIndex: null,
+      });
+      continue;
+    }
     add({
       key: `${platform}:cta`,
       status: !cta ? "error" : suggestionMatch(cta, suggestions) ? "ok" : "warning",
@@ -976,7 +1105,7 @@ export function extensionForMedia(item: Pick<MediaItem, "mimeType" | "url" | "ty
 
 /** Placements a media suits best: those whose ratio check is ok, else all of the variant's. */
 export function placementsForMedia(variant: Pick<AdVariant, "placements">, item: MediaItem): AdPlacement[] {
-  const placements = variant.placements.filter(isAdPlacement);
+  const placements = variant.placements.filter((p) => isAdPlacement(p) && PLACEMENT_SPECS[p].usesMedia);
   const ratio = mediaRatio(item);
   if (ratio === null) return placements;
   const fitting = placements.filter((p) => evaluateRatio(ratio, p).status === "ok");
@@ -1069,6 +1198,30 @@ export function buildAdsCopyCsv(variants: AdVariant[], files: readonly PlannedEx
       .map((f) => f.fileName)
       .join(", "),
   ]);
+  // Google Ads columns only when a variant has Google assets: other sets keep their columns.
+  if (variants.some((v) => hasGoogleAssets(v.google))) {
+    header.push(
+      "Titoli Google",
+      "Titoli lunghi",
+      "Descrizioni Google",
+      "Nome attività",
+      "URL visualizzato",
+      "Parole chiave",
+      "Parole chiave escluse"
+    );
+    variants.forEach((v, i) => {
+      const g = googleAssetsOf(v);
+      rows[i].push(
+        filled(g.headlines).join(" | "),
+        filled(g.longHeadlines).join(" | "),
+        filled(g.descriptions).join(" | "),
+        g.businessName,
+        hasGoogleAssets(v.google) ? (googleDisplayUrl(v.destinationUrl, g) ?? "") : "",
+        g.keywords.map(formatKeyword).join(" | "),
+        g.negativeKeywords.join(" | ")
+      );
+    });
+  }
   return CSV_BOM + [header, ...rows].map((row) => row.map((cell) => csvCell(cell)).join(";")).join("\r\n") + "\r\n";
 }
 
@@ -1092,6 +1245,8 @@ export interface AdsReadmeInput {
   externalMedia: Array<{ variantId: string; mediaIndex: number; url: string }>;
   /** Uploaded media whose file is no longer on disk. */
   missingMedia: Array<{ variantId: string; mediaIndex: number; fileName: string }>;
+  /** Google Ads Editor files in the package (buildGoogleExportFiles). */
+  googleFiles?: ReadonlyArray<Pick<GoogleExportFile, "fileName" | "description">>;
 }
 
 function formatReadmeDate(date: Date, timeZone: string): string {
@@ -1142,6 +1297,7 @@ export function buildAdsReadme(input: AdsReadmeInput): string {
   if (input.files.length === 0) lines.push("(nessun file caricato nell'app)");
   for (const file of input.files) lines.push(`- ${file.fileName}`);
   lines.push("- copy.csv (testi delle varianti approvate)");
+  for (const file of input.googleFiles ?? []) lines.push(`- ${file.fileName} (${file.description})`);
   lines.push("");
 
   if (input.externalMedia.length > 0) {
@@ -1171,10 +1327,41 @@ export function buildAdsReadme(input: AdsReadmeInput): string {
     lines.push(`${specs.headline?.label ?? "Titolo"}: ${variant.headline || "-"}`);
     lines.push(`${specs.description?.label ?? "Descrizione"}: ${variant.description || "-"}`);
     lines.push(`CTA: ${variant.cta || "-"}`);
-    lines.push(`URL: ${variant.destinationUrl || "-"}`, "");
+    lines.push(`URL: ${variant.destinationUrl || "-"}`);
+    if (hasGoogleAssets(variant.google)) lines.push(...googleReadmeLines(variant));
+    lines.push("");
   }
 
   return lines.join("\r\n");
+}
+
+/** The Google Ads assets of a variant, numbered, for README.txt. */
+function googleReadmeLines(variant: AdVariant): string[] {
+  const g = googleAssetsOf(variant);
+  const lines: string[] = ["Google Ads:"];
+  const list = (title: string, items: string[]) => {
+    if (items.length === 0) return;
+    lines.push(`  ${title} (${items.length}):`);
+    items.forEach((item, i) => lines.push(`    ${i + 1}. ${item}`));
+  };
+  list("Titoli", filled(g.headlines));
+  list("Titoli lunghi", filled(g.longHeadlines));
+  list("Descrizioni", filled(g.descriptions));
+  if (g.businessName.trim()) lines.push(`  Nome attività: ${g.businessName.trim()}`);
+  const shown = googleDisplayUrl(variant.destinationUrl, g);
+  if (shown && (g.path1.trim() || g.path2.trim())) lines.push(`  URL visualizzato: ${shown}`);
+  list(
+    "Parole chiave",
+    g.keywords.map((k) => `${formatKeyword(k)} (${GOOGLE_MATCH_LABELS[k.match]})`)
+  );
+  list("Parole chiave escluse", g.negativeKeywords);
+  if (g.logos.length > 0) lines.push(`  Loghi: ${g.logos.length} (${g.logos.map((l) => l.url).join(", ")})`);
+  return lines;
+}
+
+/** The Google Ads Editor CSVs of the approved variants (empty for other sets). */
+export function adsGoogleExportFiles(campaign: Pick<AdCampaign, "name">, approvedVariants: AdVariant[]): GoogleExportFile[] {
+  return buildGoogleExportFiles(campaign.name, approvedVariants);
 }
 
 function indent(text: string): string[] {

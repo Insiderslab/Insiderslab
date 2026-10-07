@@ -12,6 +12,10 @@
  * the agency with their notes), or goes back to the agency when all are
  * discarded. After sending, the outcome and the next item to review.
  *
+ * Google Ads variants also list their titoli, descrizioni and parole chiave:
+ * "Commenta questo titolo" opens a composer that quotes the asset in the
+ * comment body (formatAssetComment), so the agency sees which one.
+ *
  * The AI assistant gets the variant, placement and video moment on screen
  * (getContext) for its chip "Usa la variante e il momento attuali".
  */
@@ -27,6 +31,7 @@ import {
 } from "@/app/review/[token]/actions";
 import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdVariantReview, { type AdCommentRequest } from "@/components/ads/ad-variant-review";
+import AssetCommentComposer from "@/components/ads/asset-comment-composer";
 import AdDecisionBadge from "@/components/ads/decision-badge";
 import AssistantPanel from "@/components/review/assistant-panel";
 import {
@@ -36,6 +41,7 @@ import {
   variantDisplayName,
   type AdPlacement,
   type AdVariant,
+  type GoogleAssetRef,
 } from "@/lib/content/ads";
 import type { AssistantAdsContext } from "@/lib/review-assistant/shared";
 import BottomSheet from "./bottom-sheet";
@@ -119,6 +125,7 @@ export default function AdsReview({
   const [decided, setDecided] = useState<Record<string, PortalVariantDecision>>({});
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [draft, setDraft] = useState<VariantDraft | null>(null);
+  const [assetDraft, setAssetDraft] = useState<{ variantId: string; asset: GoogleAssetRef } | null>(null);
   const [draftKey, setDraftKey] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
@@ -197,6 +204,7 @@ export default function AdsReview({
   function openDraft(variantId: string, next: CommentDraft) {
     activeVariant.current = variantId;
     setNotice(null);
+    setAssetDraft(null);
     setDraft({ variantId, draft: next });
     setDraftKey((k) => k + 1);
   }
@@ -227,8 +235,16 @@ export default function AdsReview({
       return result.error;
     }
     setDraft(null);
+    setAssetDraft(null);
     setNotice("Commento inviato: lo vedrà l'agenzia.");
     return null;
+  }
+
+  function openAssetDraft(variantId: string, asset: GoogleAssetRef) {
+    activeVariant.current = variantId;
+    setNotice(null);
+    setDraft(null);
+    setAssetDraft({ variantId, asset });
   }
 
   // ─── Decisions ─────────────────────────────────────────────────────────────
@@ -256,6 +272,7 @@ export default function AdsReview({
   function finish(next: Outcome) {
     setOutcome(next);
     setDraft(null);
+    setAssetDraft(null);
     setSheet(null);
     setAssistantOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -361,6 +378,7 @@ export default function AdsReview({
     setStale(false);
     setSheet(null);
     setDraft(null);
+    setAssetDraft(null);
     setDecided({});
     router.refresh();
   }
@@ -546,6 +564,18 @@ export default function AdsReview({
                   draft={draft.draft}
                   onSubmit={(input) => submitComment(variant.id, input)}
                   onCancel={() => setDraft(null)}
+                />
+              ) : undefined
+            }
+            onCommentAsset={canComment ? (asset) => openAssetDraft(variant.id, asset) : undefined}
+            activeAsset={assetDraft?.variantId === variant.id ? assetDraft.asset : null}
+            assetComposer={
+              assetDraft?.variantId === variant.id && canComment ? (
+                <AssetCommentComposer
+                  key={`${assetDraft.asset.kind}-${assetDraft.asset.index}`}
+                  asset={assetDraft.asset}
+                  onSubmit={(body) => submitComment(variant.id, { body })}
+                  onCancel={() => setAssetDraft(null)}
                 />
               ) : undefined
             }

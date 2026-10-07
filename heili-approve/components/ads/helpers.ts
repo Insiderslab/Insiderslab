@@ -8,7 +8,8 @@
 import {
   AD_PLACEMENTS,
   PLACEMENT_SPECS,
-  placementsForPlatform,
+  defaultPlacementsForPlatform,
+  emptyGoogleAssets,
   type AdContent,
   type AdPlacement,
   type AdPlatform,
@@ -143,12 +144,14 @@ export function moveVariant<T>(list: readonly T[], from: number, to: number): T[
  */
 export function switchPlatform(content: AdContent, platform: AdPlatform): AdContent {
   if (content.campaign.platform === platform) return content;
-  const defaults = placementsForPlatform(platform);
+  const defaults = defaultPlacementsForPlatform(platform);
   return {
     campaign: { ...content.campaign, platform },
     variants: content.variants.map((variant) => {
       const kept = variant.placements.filter((p) => PLACEMENT_SPECS[p].platform === platform);
-      return { ...variant, placements: kept.length > 0 ? kept : defaults };
+      const next = { ...variant, placements: kept.length > 0 ? kept : defaults };
+      // Google Ads variants get (empty) assets to fill in; other platforms keep any they had.
+      return platform === "google" && !variant.google ? { ...next, google: emptyGoogleAssets() } : next;
     }),
   };
 }
@@ -171,14 +174,18 @@ export function patchVariant(content: AdContent, id: string, patch: Partial<Omit
 export function withMediaDimensions(content: AdContent, url: string, width: number, height: number): AdContent {
   if (!(width > 0) || !(height > 0)) return content;
   let changed = false;
+  const missing = (m: { url: string; width?: number; height?: number }) => m.url === url && (!m.width || !m.height);
+  const sized = <T extends { url: string; width?: number; height?: number }>(m: T): T =>
+    missing(m) ? { ...m, width: Math.round(width), height: Math.round(height) } : m;
   const variants = content.variants.map((variant) => {
-    if (!variant.media.some((m) => m.url === url && (!m.width || !m.height))) return variant;
+    const inMedia = variant.media.some(missing);
+    const inLogos = variant.google?.logos.some(missing) ?? false;
+    if (!inMedia && !inLogos) return variant;
     changed = true;
     return {
       ...variant,
-      media: variant.media.map((m) =>
-        m.url === url && (!m.width || !m.height) ? { ...m, width: Math.round(width), height: Math.round(height) } : m
-      ),
+      media: inMedia ? variant.media.map(sized) : variant.media,
+      ...(variant.google && inLogos ? { google: { ...variant.google, logos: variant.google.logos.map(sized) } } : {}),
     };
   });
   return changed ? { ...content, variants } : content;

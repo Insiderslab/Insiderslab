@@ -6,6 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import {
   adExportZipName,
+  adsGoogleExportFiles,
   buildAdsCopyCsv,
   buildAdsReadme,
   coerceAdContent,
@@ -26,7 +27,10 @@ import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
  *   named `<cliente>_<campagna>_<variante>_<posizionamenti>.<ext>`;
  * - copy.csv (UTF-8 with BOM, ";"): variant, texts, CTA, URL, placements;
  * - README.txt: campaign, the client's decision and note on every variant
- *   (discarded ones included), the copy verbatim, external links.
+ *   (discarded ones included), the copy verbatim, external links;
+ * - for Google Ads sets, Google Ads Editor CSVs of the approved variants:
+ *   google-ads-rsa.csv (Search), google-ads-keywords.csv (keywords and
+ *   negatives), google-ads-pmax-assets.csv (Performance Max text assets).
  *
  * Agency-authenticated, workspace-scoped, AD_CREATIVE only, and only once the
  * set is APPROVED (or DELIVERED). Files are read from local storage through
@@ -133,6 +137,7 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
   }
 
   const included = files.map((f) => f.planned);
+  const googleFiles = adsGoogleExportFiles(content.campaign, approvedVariants);
   const readme = buildAdsReadme({
     clientName: post.client.name,
     campaign: content.campaign,
@@ -151,6 +156,7 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
     files: included,
     externalMedia,
     missingMedia,
+    googleFiles,
   });
 
   const zip = new JSZip();
@@ -163,6 +169,7 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
   }
   zip.file("copy.csv", buildAdsCopyCsv(approvedVariants, included), { compression: "DEFLATE" });
   zip.file("README.txt", readme, { compression: "DEFLATE" });
+  for (const file of googleFiles) zip.file(file.fileName, file.content, { compression: "DEFLATE" });
 
   // JSZip emits a readable-stream v2 stream: pipe it through a core
   // PassThrough so Readable.toWeb can adapt it with backpressure.

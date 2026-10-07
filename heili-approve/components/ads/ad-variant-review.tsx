@@ -7,7 +7,10 @@
  *   review player on videos (markers, "Commenta a m:ss", tap on the paused
  *   frame). Taps are reported through onRequestComment; the parent opens its
  *   comment form and passes it back as `composer`, shown under the preview.
- * - The copy in full (testo, titolo, descrizione, CTA, link).
+ * - The copy in full (testo, titolo, descrizione, CTA, link) and, for Google
+ *   Ads, the list of titoli, descrizioni and parole chiave: tapping one shows
+ *   "Commenta questo titolo"; the parent opens its composer for that asset
+ *   (onCommentAsset) and passes it back as `assetComposer`.
  * - The decision: "Approva variante" / "Scarta" (a note is required to
  *   discard: it goes to the agency). The parent wires the server action
  *   through onDecide and passes the saved decision back.
@@ -18,6 +21,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { AdPlacementPreviews } from "./ad-preview";
 import AdDecisionBadge, { type AdVariantDecisionState, type AdVerdict } from "./decision-badge";
+import GoogleAssetsList from "./google-assets-list";
 import {
   commentMoment,
   displayDomain,
@@ -28,7 +32,16 @@ import {
   type NumberedComment,
 } from "./helpers";
 import type { PreviewPin, PreviewSeek } from "@/components/post-preview/types";
-import { AD_TEXT_SPECS, variantDisplayName, type AdPlacement, type AdPlatform, type AdVariant } from "@/lib/content/ads";
+import {
+  AD_TEXT_SPECS,
+  parseAssetComment,
+  usesGoogleAssets,
+  variantDisplayName,
+  type AdPlacement,
+  type AdPlatform,
+  type AdVariant,
+  type GoogleAssetRef,
+} from "@/lib/content/ads";
 
 /** Same cap as lib/creative-decisions (MAX_DECISION_NOTE_LENGTH), not imported: that module is server-only. */
 const MAX_NOTE = 2000;
@@ -62,6 +75,11 @@ export interface AdVariantReviewProps {
   onRequestGeneralComment?: () => void;
   /** The parent's comment form, rendered right under the preview. */
   composer?: ReactNode;
+  /** Google Ads: "Commenta questo titolo" on a headline, description, keyword… */
+  onCommentAsset?: (asset: GoogleAssetRef) => void;
+  /** The asset being commented and the parent's form for it (shown under the asset). */
+  activeAsset?: GoogleAssetRef | null;
+  assetComposer?: ReactNode;
   /** Point being commented while the composer is open (drawn as "+"). */
   draftPin?: { mediaIndex: number; x: number; y: number; timeSec?: number } | null;
   /** External seek (e.g. from the assistant); timecode chips seek on their own. */
@@ -86,6 +104,9 @@ export default function AdVariantReview({
   onRequestComment,
   onRequestGeneralComment,
   composer,
+  onCommentAsset,
+  activeAsset,
+  assetComposer,
   draftPin,
   seekTo,
   registerTimeGetter,
@@ -167,6 +188,16 @@ export default function AdVariantReview({
         <div className="min-w-0 space-y-5">
           <CopySummary variant={variant} platform={platform} />
 
+          {usesGoogleAssets(variant.placements) ? (
+            <GoogleAssetsList
+              variant={variant}
+              onCommentAsset={onCommentAsset}
+              activeAsset={activeAsset}
+              composer={assetComposer}
+              commented={commentedAssets(comments)}
+            />
+          ) : null}
+
           <DecisionPanel key={`${decision?.verdict ?? "none"}:${decision?.note ?? ""}`} decision={decision} canDecide={canDecide} onDecide={onDecide} variantName={name} />
 
           <section className="space-y-3" aria-label={`Commenti su ${name}`}>
@@ -201,6 +232,16 @@ export default function AdVariantReview({
       </div>
     </article>
   );
+}
+
+/** Names ("Titolo 3") of the Google assets the comments quote. */
+function commentedAssets(comments: readonly AdReviewComment[]): Set<string> {
+  const names = new Set<string>();
+  for (const c of comments) {
+    const asset = parseAssetComment(c.body);
+    if (asset) names.add(asset.name);
+  }
+  return names;
 }
 
 // ─── Copy ────────────────────────────────────────────────────────────────────
@@ -443,9 +484,24 @@ function CommentRow({
               <span className="rounded-full border border-border px-3 py-1 text-sm">{moment}</span>
             )
           ) : null}
-          <p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p>
+          <CommentBody body={comment.body} />
         </div>
       </div>
     </li>
+  );
+}
+
+/** The body, with the quoted Google asset (formatAssetComment) shown as a quote. */
+function CommentBody({ body }: { body: string }) {
+  const asset = parseAssetComment(body);
+  if (!asset) return <p className="whitespace-pre-wrap break-words text-sm">{body}</p>;
+  return (
+    <div className="space-y-1">
+      <blockquote className="border-l-2 border-accent pl-2 text-sm">
+        <span className="block text-xs text-muted">{asset.name}</span>
+        <span className="break-words">«{asset.quote}»</span>
+      </blockquote>
+      <p className="whitespace-pre-wrap break-words text-sm">{asset.text}</p>
+    </div>
   );
 }

@@ -58,6 +58,8 @@ export const AD_PLACEMENTS = [
   "meta_stories_reels", // Stories / Reels, 9:16 with safe zones
   "tiktok_in_feed", //   9:16
   "google_display", //   responsive display, 1.91:1 and 1:1
+  "google_search", //    responsive search ad (RSA): text only, keywords
+  "google_pmax", //      Performance Max asset group: text + images + logo (+ video)
   "linkedin_feed", //    1.91:1 or 1:1
 ] as const;
 export type AdPlacement = (typeof AD_PLACEMENTS)[number];
@@ -71,6 +73,40 @@ export interface AdCampaign {
   budgetNote: string;
   /** Audience notes for the client, free text. */
   audienceNote: string;
+}
+
+/** Google Ads keyword match types: broad `parola`, phrase `"parola"`, exact `[parola]`. */
+export const GOOGLE_MATCH_TYPES = ["broad", "phrase", "exact"] as const;
+export type GoogleMatchType = (typeof GOOGLE_MATCH_TYPES)[number];
+
+export interface GoogleKeyword {
+  /** The keyword without match-type syntax. */
+  text: string;
+  match: GoogleMatchType;
+}
+
+/**
+ * Google Ads text assets of a variant (Search RSA and Performance Max share
+ * them). Optional on AdVariant: sets saved before Google Ads had none.
+ */
+export interface AdGoogleAssets {
+  /** Titoli: RSA and PMax, ≤ 30 characters each. */
+  headlines: string[];
+  /** Titoli lunghi: PMax only, ≤ 90 characters. */
+  longHeadlines: string[];
+  /** Descrizioni: RSA (2–4) and PMax (2–5), ≤ 90 characters. */
+  descriptions: string[];
+  /** Nome dell'attività: PMax, ≤ 25 characters. */
+  businessName: string;
+  /** Display URL paths: example.com/path1/path2, ≤ 15 characters each. */
+  path1: string;
+  path2: string;
+  /** Search keywords of the ad group. */
+  keywords: GoogleKeyword[];
+  /** Negative keywords, as written (may carry "…" / […] syntax). */
+  negativeKeywords: string[];
+  /** PMax logos (1:1 required, 4:1 optional); the client logo is shown when empty. */
+  logos: MediaItem[];
 }
 
 export interface AdVariant {
@@ -87,6 +123,8 @@ export interface AdVariant {
   cta: string;
   destinationUrl: string;
   placements: AdPlacement[];
+  /** Google Ads assets (google_search / google_pmax); absent on older sets. */
+  google?: AdGoogleAssets;
 }
 
 export interface AdContent {

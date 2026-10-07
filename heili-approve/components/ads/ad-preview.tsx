@@ -13,6 +13,7 @@
 import { useId, useState } from "react";
 import { PLACEMENT_SPECS, type AdPlacement } from "@/lib/content/ads";
 import { GoogleDisplayAd, LinkedInAd, MetaFeedAd, StoriesReelsAd, TikTokAd, type AdMockupProps } from "./ad-mockups";
+import { GooglePMaxAd, GoogleSearchAd } from "./google-mockups";
 
 export interface AdPreviewProps extends AdMockupProps {
   placement: AdPlacement;
@@ -64,6 +65,8 @@ export default function AdPreview({
         <TikTokAd {...mockup} safeZones={zones} showSafeZones={showSafeZones} />
       ) : null}
       {placement === "google_display" ? <GoogleDisplayAd {...mockup} /> : null}
+      {placement === "google_search" ? <GoogleSearchAd {...mockup} /> : null}
+      {placement === "google_pmax" ? <GooglePMaxAd {...mockup} /> : null}
       {placement === "linkedin_feed" ? <LinkedInAd {...mockup} /> : null}
 
       {zones && showSafeZones ? (

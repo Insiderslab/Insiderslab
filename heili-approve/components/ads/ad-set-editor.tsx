@@ -8,6 +8,8 @@
  *   uploaded through /api/uploads (the posts' MediaUploader), copy with
  *   counters named as the platform names the fields, CTA with the
  *   platform's suggestions, destination URL, placements.
+ * - Google Ads (Search, Performance Max): titoli, titoli lunghi, descrizioni,
+ *   nome dell'attività, percorsi, parole chiave e loghi (GoogleAssetsEditor).
  * - Live spec checks (format ±2%, duration, text limits, CTA, https) and the
  *   preview per placement next to the form; then what still blocks sending
  *   the set to the client (validateAdsForReview).
@@ -31,6 +33,7 @@ import {
   adSpecChecks,
   charCount,
   duplicateVariant,
+  emptyGoogleAssets,
   newVariant,
   placementsForPlatform,
   summarizeChecks,
@@ -46,6 +49,7 @@ import {
 import type { MediaItem } from "@/lib/domain";
 import { AdPlacementPreviews } from "./ad-preview";
 import { moveVariant, patchVariant, switchPlatform, withMediaDimensions } from "./helpers";
+import GoogleAssetsEditor from "./google-assets-editor";
 import AdSpecChecklist from "./spec-checklist";
 
 export interface AdSetEditorProps {
@@ -103,6 +107,13 @@ export default function AdSetEditor({
   const platform = value.campaign.platform;
   const selected = value.variants.find((v) => v.id === selectedId) ?? value.variants[0] ?? null;
   const selectedIndex = selected ? value.variants.indexOf(selected) : -1;
+  // Google Ads: Search is text only; the Display fields and the button belong to some formats only.
+  const selectedPlacements = selected?.placements ?? [];
+  const googleSearch = platform === "google" && selectedPlacements.includes("google_search");
+  const googlePmax = platform === "google" && selectedPlacements.includes("google_pmax");
+  const textOnly = selectedPlacements.length > 0 && selectedPlacements.every((p) => !PLACEMENT_SPECS[p].usesMedia);
+  const showCta = !(selectedPlacements.length > 0 && selectedPlacements.every((p) => PLACEMENT_SPECS[p].cta === "none"));
+  const showCopy = !(platform === "google" && selectedPlacements.length > 0 && !selectedPlacements.includes("google_display"));
 
   const deferred = useDeferredValue(value);
   const statusById = useMemo(() => {
@@ -391,10 +402,18 @@ export default function AdSetEditor({
                 </div>
               </div>
 
+              {textOnly && selected.media.length === 0 ? (
+                <p className="inset p-3 text-sm text-muted">
+                  Gli annunci della rete di ricerca sono solo testo: niente immagini né video. Scrivi titoli, descrizioni e
+                  parole chiave qui sotto.
+                </p>
+              ) : (
               <fieldset className="space-y-2">
                 <legend className={labelClass}>Immagini e video</legend>
                 <p className="text-xs text-muted">
-                  Più media = carosello (o più schede nelle Storie). Massimo {AD_LIMITS.mediaPerVariant} per variante.
+                  {googlePmax
+                    ? "Performance Max: almeno un'immagine orizzontale 1,91:1 e una quadrata 1:1, meglio anche una verticale 4:5; un video è facoltativo."
+                    : `Più media = carosello (o più schede nelle Storie). Massimo ${AD_LIMITS.mediaPerVariant} per variante.`}
                 </p>
                 <MediaUploader
                   key={selected.id}
@@ -404,9 +423,13 @@ export default function AdSetEditor({
                   disabled={disabled}
                 />
               </fieldset>
+              )}
 
-              <CopyFields variant={selected} platform={platform} disabled={disabled} onChange={(patch) => updateVariant(selected.id, patch)} ids={ids} />
+              {showCopy ? (
+                <CopyFields variant={selected} platform={platform} disabled={disabled} onChange={(patch) => updateVariant(selected.id, patch)} ids={ids} />
+              ) : null}
 
+              {showCta ? (
               <div>
                 <label htmlFor={`${ids}-cta`} className={labelClass}>
                   Pulsante (call to action)
@@ -444,7 +467,11 @@ export default function AdSetEditor({
                     </button>
                   ))}
                 </div>
+                {googlePmax && !selectedPlacements.includes("google_display") ? (
+                  <p className="mt-1 text-xs text-muted">Facoltativo: se lo lasci vuoto lo sceglie Google.</p>
+                ) : null}
               </div>
+              ) : null}
 
               <div>
                 <label htmlFor={`${ids}-url`} className={labelClass}>
@@ -479,13 +506,31 @@ export default function AdSetEditor({
                         />
                         <span>
                           {spec.label}{" "}
-                          <span className="text-muted">· {spec.preferred.map((r) => r.label).join(" o ")}</span>
+                          <span className="text-muted">
+                            · {spec.usesMedia ? spec.preferred.map((r) => r.label).join(" o ") : "solo testo e parole chiave"}
+                          </span>
                         </span>
                       </label>
                     );
                   })}
                 </div>
               </fieldset>
+
+              {googleSearch || googlePmax ? (
+                <GoogleAssetsEditor
+                  key={`google-${selected.id}`}
+                  assets={selected.google ?? emptyGoogleAssets()}
+                  onChange={(update) => {
+                    const current = valueRef.current.variants.find((v) => v.id === selected.id);
+                    if (current) updateVariant(selected.id, { google: update(current.google ?? emptyGoogleAssets()) });
+                  }}
+                  search={googleSearch}
+                  pmax={googlePmax}
+                  finalUrl={selected.destinationUrl}
+                  disabled={disabled}
+                  onBusyChange={(isBusy) => setVariantBusy(`${selected.id}:logos`, isBusy)}
+                />
+              ) : null}
             </div>
 
             <aside className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start" aria-label="Anteprima e controlli">
@@ -648,7 +693,7 @@ function useMeasureMissingDimensions(content: AdContent, onMeasured: (url: strin
   });
 
   const missing = content.variants
-    .flatMap((v) => v.media)
+    .flatMap((v) => [...v.media, ...(v.google?.logos ?? [])])
     .filter((m) => !m.width || !m.height)
     .filter((m, i, list) => list.findIndex((x) => x.url === m.url) === i);
   const key = missing.map((m) => m.url).join("\n");

@@ -16,9 +16,14 @@
  *   IN_REVIEW. The video comes from ffmpeg (testsrc); without ffmpeg the e2e
  *   fixture video is used instead.
  *
+ * - for the same client a Google Ads set ("Google Ads — prenotazioni
+ *   autunno"): a Search variant with headlines, descriptions and keywords and
+ *   a Performance Max variant with images and a logo, IN_REVIEW.
+ *
  * - a client with all three services ("Agriturismo Le Querce": social posts,
  *   articles and ads creatives) with one item of each kind IN_REVIEW, to see
- *   the unified portal with its tabs.
+ *   the unified portal with its tabs. It also has a second reviewer without
+ *   email ("Paolo Fabbri"): the agency sends that link by hand (WhatsApp…).
  *
  * Every client gets its services (Client.services): Aurora and Verde social
  * posts, Cantina articles, Kinetik ads creatives, Le Querce all three.
@@ -264,6 +269,13 @@ async function seedClient(
     reviewer = (await createReviewer(client.id, workspaceId, data.reviewer)).reviewer;
   }
   return { client, reviewer, reviewUrl: getReviewUrl(reviewer) };
+}
+
+/** A reviewer without email (link shared by hand), matched by name on re-runs. */
+async function seedLinkOnlyReviewer(workspaceId: string, clientId: string, name: string) {
+  let reviewer = await prisma.clientReviewer.findFirst({ where: { clientId, name, email: null, active: true } });
+  if (!reviewer) reviewer = (await createReviewer(clientId, workspaceId, { name, email: null })).reviewer;
+  return { reviewer, reviewUrl: getReviewUrl(reviewer) };
 }
 
 type SeedPost = {
@@ -750,6 +762,126 @@ async function seedAds(workspaceId: string, userId: string, clientId: string) {
   return [{ client: "", title: post.title, status: post.status, id: post.id, kind: post.kind }];
 }
 
+/**
+ * Google Ads set for Kinetik: a Search variant (responsive search ad with
+ * headlines, descriptions, paths and keywords of every match type) and a
+ * Performance Max variant (asset group with landscape, square and portrait
+ * images and a logo, no video), IN_REVIEW.
+ */
+async function seedGoogleAds(workspaceId: string, userId: string, clientId: string) {
+  const actor = userActor(userId);
+  const title = "Google Ads — prenotazioni autunno";
+  let post = await findSeeded(workspaceId, clientId, "AD_CREATIVE", title);
+  if (!post) {
+    const landscape = await savePng(workspaceId, "kinetik-pmax-1.91x1.png", "concrete", 81, "Sala corsi della palestra, vista orizzontale", 1200, 628);
+    const square = await savePng(workspaceId, "kinetik-pmax-1x1.png", "sunset", 83, "Istruttore che corregge uno squat", 1200, 1200);
+    const portrait = await savePng(workspaceId, "kinetik-pmax-4x5.png", "garden", 85, "Allieva al rack, foto verticale", 960, 1200);
+    // Variant media get their pixel size from the asset on save; logos carry it here.
+    const logo = { ...(await savePng(workspaceId, "kinetik-logo-1x1.png", "espresso", 87, "Logo Palestra Kinetik", 512, 512)), width: 512, height: 512 };
+    const url = "https://www.palestrakinetik.it/prova-gratuita";
+    const content: AdContent = {
+      campaign: {
+        name: "Prenotazioni d'autunno",
+        platform: "google",
+        objective: "Contatti (lead)",
+        budgetNote: "€20/giorno su Ricerca e €15/giorno su Performance Max, dal 15 ottobre",
+        audienceNote: "Milano e 10 km intorno; chi cerca palestre, corsi e personal trainer in zona",
+      },
+      variants: [
+        {
+          id: "A",
+          name: "Variante A — Rete di ricerca",
+          media: [],
+          primaryText: "",
+          headline: "",
+          description: "",
+          cta: "",
+          destinationUrl: url,
+          placements: ["google_search"],
+          google: {
+            headlines: [
+              "Palestra Kinetik a Milano",
+              "Prova gratis per 7 giorni",
+              "Istruttore sempre con te",
+              "Corsi di functional training",
+              "Aperti dalle 6 alle 23",
+              "Sala pesi rinnovata",
+              "Prenota la prova online",
+              "Nessun vincolo di iscrizione",
+            ],
+            longHeadlines: [],
+            descriptions: [
+              "Sala pesi, corsi e un istruttore che ti segue. La prima settimana è gratis.",
+              "Prenota online la tua prova gratuita: scegli giorno e orario in un minuto.",
+              "Parcheggio interno, spogliatoi nuovi e corsi tutti i giorni. Ti aspettiamo.",
+            ],
+            businessName: "",
+            path1: "prova",
+            path2: "gratis",
+            keywords: [
+              { text: "palestra milano", match: "broad" },
+              { text: "palestra vicino a me", match: "broad" },
+              { text: "functional training milano", match: "broad" },
+              { text: "prova gratuita palestra", match: "phrase" },
+              { text: "palestra con istruttore", match: "phrase" },
+              { text: "corsi palestra milano", match: "phrase" },
+              { text: "personal trainer milano", match: "phrase" },
+              { text: "palestra kinetik", match: "exact" },
+              { text: "kinetik milano", match: "exact" },
+              { text: "palestra milano prova gratuita", match: "exact" },
+            ],
+            negativeKeywords: ["lavoro", '"corso istruttore"', "[palestra gratis]"],
+            logos: [],
+          },
+        },
+        {
+          id: "B",
+          name: "Variante B — Performance Max",
+          media: [landscape, square, portrait],
+          primaryText: "",
+          headline: "",
+          description: "",
+          cta: "Iscriviti",
+          destinationUrl: url,
+          placements: ["google_pmax"],
+          google: {
+            headlines: [
+              "Kinetik Milano",
+              "Prova gratis 7 giorni",
+              "Istruttore dedicato",
+              "Functional training",
+              "Aperti fino alle 23",
+            ],
+            longHeadlines: [
+              "Allenati con un istruttore che ti segue: la prima settimana da Kinetik è gratis",
+              "Sala pesi, corsi e parcheggio interno a Milano. Prenota la prova online",
+            ],
+            descriptions: [
+              "La prima settimana è gratis, senza vincoli.",
+              "Sala pesi rinnovata, corsi tutti i giorni e un istruttore che conosce il tuo nome.",
+              "Prenota online la prova: scegli giorno e orario in un minuto.",
+            ],
+            businessName: "Palestra Kinetik",
+            path1: "",
+            path2: "",
+            keywords: [],
+            negativeKeywords: [],
+            logos: [logo],
+          },
+        },
+      ],
+    };
+    post = await createPost(
+      workspaceId,
+      { clientId, kind: "AD_CREATIVE", title, publishAt: romeAt(10, "08:00"), content },
+      actor
+    );
+    await submitForReview([post.id], workspaceId, actor);
+    post = await refetch(post.id);
+  }
+  return { client: "", title: post.title, status: post.status, id: post.id, kind: post.kind };
+}
+
 // ─── Multi-service client: one item of each kind in review ───────────────────
 
 const QUERCE_BODY = `Ottobre in Val d'Orcia è il mese che preferiamo: le colline cambiano colore ogni settimana, le giornate sono ancora tiepide e in cucina arrivano funghi, castagne e il primo olio nuovo. Abbiamo preparato un piccolo programma per chi vuole passare un fine settimana con noi senza correre.
@@ -927,6 +1059,7 @@ async function main() {
     client: cantina.client.name,
   }));
   const adSets = (await seedAds(workspace.id, user.id, kinetik.client.id)).map((p) => ({ ...p, client: kinetik.client.name }));
+  const googleAds = { ...(await seedGoogleAds(workspace.id, user.id, kinetik.client.id)), client: kinetik.client.name };
 
   // One client, three services: the unified portal.
   const querce = await seedClient(workspace.id, {
@@ -937,6 +1070,7 @@ async function main() {
     reviewer: { name: "Chiara Fabbri", email: "chiara@agriturismolequerce.it" },
   });
   const mixed = await seedMultiService(workspace.id, user.id, querce.client.id, querce.reviewer);
+  const querceLinkOnly = await seedLinkOnlyReviewer(workspace.id, querce.client.id, "Paolo Fabbri");
 
   const baseUrl = (process.env.PUBLIC_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
   console.log("");
@@ -952,6 +1086,9 @@ async function main() {
   console.log(
     `Link revisione ${querce.client.name} (${querce.reviewer.name}, portale unificato: post social, articoli e creatività): ${querce.reviewUrl}`
   );
+  console.log(
+    `Link revisione ${querce.client.name} (${querceLinkOnly.reviewer.name}, senza email: link da mandare a mano): ${querceLinkOnly.reviewUrl}`
+  );
   console.log("Post social:");
   for (const post of posts) console.log(`  [${post.status}] ${post.client} — ${post.title}`);
   console.log("Articoli (blog):");
@@ -966,6 +1103,10 @@ async function main() {
     console.log(`      cliente: ${kinetik.reviewUrl}/posts/${post.id}`);
     console.log(`      agenzia: ${baseUrl}/posts/${post.id}`);
   }
+  console.log("Creatività Google Ads (Ricerca e Performance Max):");
+  console.log(`  [${googleAds.status}] ${googleAds.client} — ${googleAds.title}`);
+  console.log(`      cliente: ${kinetik.reviewUrl}/posts/${googleAds.id}`);
+  console.log(`      agenzia: ${baseUrl}/posts/${googleAds.id}`);
   console.log(`Tre servizi (${querce.client.name}):`);
   for (const post of mixed) console.log(`  [${post.status}] ${post.kind} — ${post.title}`);
   console.log(
@@ -988,9 +1129,18 @@ async function main() {
           client: { id: kinetik.client.id, name: kinetik.client.name, reviewerId: kinetik.reviewer.id, reviewUrl: kinetik.reviewUrl },
           posts: adSets,
         },
+        googleAds: {
+          client: { id: kinetik.client.id, name: kinetik.client.name, reviewerId: kinetik.reviewer.id, reviewUrl: kinetik.reviewUrl },
+          post: googleAds,
+        },
         multi: {
           client: { id: querce.client.id, name: querce.client.name, reviewerId: querce.reviewer.id, reviewUrl: querce.reviewUrl },
           posts: mixed,
+          linkOnlyReviewer: {
+            id: querceLinkOnly.reviewer.id,
+            name: querceLinkOnly.reviewer.name,
+            reviewUrl: querceLinkOnly.reviewUrl,
+          },
         },
       })
   );

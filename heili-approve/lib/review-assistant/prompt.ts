@@ -23,7 +23,15 @@
  * same transcript, same ban on approving on the client's behalf.
  */
 
-import { AD_PLATFORM_LABELS, PLACEMENT_SPECS, variantDisplayName } from "@/lib/content/ads";
+import {
+  AD_PLATFORM_LABELS,
+  GOOGLE_MATCH_LABELS,
+  PLACEMENT_SPECS,
+  filled,
+  googleAssetsOf,
+  usesGoogleAssets,
+  variantDisplayName,
+} from "@/lib/content/ads";
 import type { AdContent, BlogContent } from "@/lib/content/types";
 import { NETWORK_LABELS, formatTimecode, type MediaItem, type Network, type NetworkOptions } from "@/lib/domain";
 import type { ReviewerPost } from "@/lib/posts";
@@ -441,6 +449,7 @@ function renderAdsBlock(ctx: AssistantPostContext, content: Extract<AssistantKin
     if (variant.description.trim()) lines.push(`Descrizione: ${escapeForPrompt(variant.description.trim())}`);
     lines.push(`Pulsante (CTA): ${escapeForPrompt(variant.cta.trim()) || "(nessuno)"}`);
     if (variant.destinationUrl.trim()) lines.push(`Link di destinazione: ${escapeForPrompt(variant.destinationUrl.trim())}`);
+    if (usesGoogleAssets(variant.placements)) lines.push(...googleAssetLines(variant));
     lines.push(`Media (${variant.media.length}):`);
     if (variant.media.length === 0) lines.push("- nessun media");
     variant.media.forEach((item, index) => {
@@ -470,6 +479,29 @@ function renderAdsBlock(ctx: AssistantPostContext, content: Extract<AssistantKin
     }
   }
   return `<post>\n${lines.join("\n")}\n</post>`;
+}
+
+/** Google Ads texts of a variant, numbered as the portal shows them ("Titolo 3"). */
+function googleAssetLines(variant: AdContent["variants"][number]): string[] {
+  const g = googleAssetsOf(variant);
+  const lines: string[] = [];
+  const list = (title: string, items: string[]) => {
+    if (items.length === 0) return;
+    lines.push(`${title}:`);
+    items.forEach((item, i) => lines.push(`  ${i + 1}. ${escapeForPrompt(item)}`));
+  };
+  list("Titoli Google (Titolo 1, 2…)", filled(g.headlines));
+  if (variant.placements.includes("google_pmax")) list("Titoli lunghi Google", filled(g.longHeadlines));
+  list("Descrizioni Google (Descrizione 1, 2…)", filled(g.descriptions));
+  if (g.businessName.trim()) lines.push(`Nome dell'attività: ${escapeForPrompt(g.businessName.trim())}`);
+  if (variant.placements.includes("google_search")) {
+    list(
+      "Parole chiave (Parola chiave 1, 2…)",
+      g.keywords.map((k) => `${k.text} (corrispondenza ${GOOGLE_MATCH_LABELS[k.match]})`)
+    );
+    list("Parole chiave escluse", filled(g.negativeKeywords));
+  }
+  return lines;
 }
 
 // ─── System prompts ──────────────────────────────────────────────────────────
@@ -613,7 +645,8 @@ ${renderPostBlock(ctx)}`;
 
 const VARIANT_RULES = `Variants of the set:
 - Each variant has a variantId (an attribute of its <variante> block): the client may call it "la B", "la seconda", "quella con la foto del prodotto" or by its name.
-- A marker like "[variante B «Prima/dopo» · Storie e Reels · al momento 0:07]" inside a client message was inserted by the portal: it is the variant (and placement, and video moment when present) the client was looking at while writing.`;
+- A marker like "[variante B «Prima/dopo» · Storie e Reels · al momento 0:07]" inside a client message was inserted by the portal: it is the variant (and placement, and video moment when present) the client was looking at while writing.
+- Google Ads variants (Rete di ricerca, Performance Max) have numbered lists of headlines ("Titolo 3"), long headlines, descriptions and keywords instead of one text: Google combines them on its own. When the client's remark on them is vague ("i titoli non mi convincono", "togli quella parola"), ask which one, quoting two or three of them by number and text, and whether the problem is the wording, the tone or the meaning; for keywords, ask whether they want it removed, added or with a different match type. A comment starting with "[Titolo 3] «…»" quotes the asset it is about.`;
 
 function buildAdsTurnSystemPrompt(ctx: AssistantPostContext): string {
   return `You are the review assistant of an advertising agency, inside "Approve by Heili", the portal where the agency's clients review ad creatives before a campaign starts. The set under review has one or more variants (A, B, C…) of the same ad; the client approves or discards each variant and then sends the decisions. You are talking with ${escapeForPrompt(ctx.reviewerName)}, who reviews content for the brand ${escapeForPrompt(ctx.clientName)}. The whole conversation is saved and the agency will read it together with a summary.
@@ -655,7 +688,7 @@ Output fields:
   - mediaIndex: the 0-based mediaIndex inside that variant's media list when the change is about one specific image or video, otherwise null.
   - timeSec: for a change at a specific moment of a video, the second it starts (a number: "al momento 0:07" → 7, "verso il settimo secondo" → 7, "all'inizio" → 0); set variantId and mediaIndex to that video. Otherwise null.
   - timeEndSec: the end of the interval when the client gave one ("dal 12 al 15" → 15), otherwise null. Never earlier than timeSec.
-  - request: an instruction for the agency in Italian, starting with a verb (e.g. "Rallentare la scritta finale della variante B"), keeping the client's own words; mention the placement when the problem is specific to one.
+  - request: an instruction for the agency in Italian, starting with a verb (e.g. "Rallentare la scritta finale della variante B"), keeping the client's own words; mention the placement when the problem is specific to one, and for Google Ads texts the asset by number and text (e.g. "Riscrivere il Titolo 3 «Palestra economica»: troppo commerciale").
   - priority: "alta" if the client insisted or it blocks the approval, "bassa" if they said it is optional or just a preference, otherwise "media".
   - anchorQuote: always null for ads.
 - Dictated client messages may contain speech-to-text mistakes: interpret them sensibly.
