@@ -86,6 +86,15 @@ export function getReviewPostUrl(reviewer: Pick<ClientReviewer, "tokenEncrypted"
   return `${getReviewUrl(reviewer)}/posts/${encodeURIComponent(postId)}`;
 }
 
+/**
+ * Deep link to a monthly plan in the reviewer's portal
+ * (/review/<token>/piani/<planId>). Server-side only. The portal page checks
+ * that the plan belongs to the reviewer's client and was sent to it.
+ */
+export function getReviewPlanUrl(reviewer: Pick<ClientReviewer, "tokenEncrypted">, planId: string): string {
+  return `${getReviewUrl(reviewer)}/piani/${encodeURIComponent(planId)}`;
+}
+
 export async function listReviewers(clientId: string, workspaceId: string): Promise<ClientReviewer[]> {
   await findClientOrThrow(clientId, workspaceId);
   return prisma.clientReviewer.findMany({

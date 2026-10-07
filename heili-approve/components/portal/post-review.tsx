@@ -12,6 +12,7 @@
  * after a decision the page offers the next post to review.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { ContentKind } from "@/app/generated/prisma/client";
@@ -32,7 +33,7 @@ import {
   StaleBanner,
   SuccessPanel,
 } from "./review-pieces";
-import type { PortalClient, PortalComment, PortalPost, PortalQueue } from "./types";
+import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
 
 type Outcome = "approved" | "changes";
 
@@ -52,6 +53,8 @@ export interface PostReviewProps {
   historySlot?: ReactNode;
   /** Kinds in the client's list (wording of the navigation); social only by default. */
   listKinds?: ContentKind[];
+  /** The post belongs to a monthly plan: previous / next of the plan and "Torna al piano". */
+  plan?: PortalPlanNav;
 }
 
 export default function PostReview({
@@ -64,6 +67,7 @@ export default function PostReview({
   changesSlot,
   historySlot,
   listKinds = ["SOCIAL_POST"],
+  plan,
 }: PostReviewProps) {
   const router = useRouter();
   const previewRef = useRef<HTMLDivElement>(null);
@@ -89,8 +93,17 @@ export default function PostReview({
   const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
   const hasVideo = post.media.some((m) => m.type === "video");
   const nextHref = queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
-  const homeHref = portalPath(token);
-  const wording = portalWording(listKinds);
+  const homeHref = plan?.href ?? portalPath(token);
+  const baseWording = portalWording(listKinds);
+  // Inside a plan the way back is the plan, and "next" stays in the plan.
+  const wording = plan
+    ? {
+        ...baseWording,
+        backLabel: "← Torna al piano",
+        homeLabel: "Torna al piano",
+        allDone: "Hai rivisto tutti i post del piano in attesa. Grazie!",
+      }
+    : baseWording;
   const mixedList = new Set(listKinds).size > 1;
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved).length;
 
@@ -287,7 +300,11 @@ export default function PostReview({
 
   return (
     <div className="space-y-6">
-      <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
+      {plan ? (
+        <PlanNav plan={plan} />
+      ) : (
+        <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
+      )}
 
       {stale && <StaleBanner text="L'agenzia ha aggiornato questo post nel frattempo." onReload={reload} />}
 
@@ -512,6 +529,45 @@ export default function PostReview({
 }
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
+
+/** "Piano social di ottobre · Post 3 di 12" with "Post precedente / successivo del piano". */
+function PlanNav({ plan }: { plan: PortalPlanNav }) {
+  return (
+    <nav className="inset space-y-2 p-3" aria-label="Post del piano" data-testid="plan-nav">
+      <p className="label-caps">{plan.heading}</p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3">
+        <Link href={plan.href} className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline">
+          ← Torna al piano
+        </Link>
+        <span className="text-sm text-muted tabular">
+          Post {plan.position} di {plan.total}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {plan.prevHref ? (
+          <Link
+            href={plan.prevHref}
+            className="flex min-h-11 items-center justify-start rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-border-hover"
+          >
+            ‹ Post precedente
+          </Link>
+        ) : (
+          <span className="flex min-h-11 items-center px-3 text-sm text-muted">Primo del piano</span>
+        )}
+        {plan.nextHref ? (
+          <Link
+            href={plan.nextHref}
+            className="flex min-h-11 items-center justify-end rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-border-hover"
+          >
+            Post successivo ›
+          </Link>
+        ) : (
+          <span className="flex min-h-11 items-center justify-end px-3 text-sm text-muted">Ultimo del piano</span>
+        )}
+      </div>
+    </nav>
+  );
+}
 
 function StatusNotice({ post }: { post: PortalPost }) {
   let text: string;

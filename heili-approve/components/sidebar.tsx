@@ -33,6 +33,8 @@ interface SidebarProps {
 const NAV_ICONS: Record<string, string[]> = {
   "/dashboard": ["M4 4h7v9H4z", "M13 4h7v5h-7z", "M13 11h7v9h-7z", "M4 15h7v5H4z"],
   "/calendar": ["M4 6h16v14H4z", "M4 10h16", "M8 3v4", "M16 3v4", "M8 14h3"],
+  // Monthly plan: a calendar page with a 3×2 grid of posts.
+  "/plans": ["M4 4h16v16H4z", "M4 9h16", "M9.5 9v11", "M14.5 9v11", "M4 14.5h16"],
   "/clients": ["M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", "M3 20c.6-3.4 3-5.5 6-5.5s5.4 2.1 6 5.5", "M15.5 4.5a3.5 3.5 0 0 1 0 6.5", "M17.5 14.8c1.9.7 3.1 2.5 3.5 5.2"],
   "/settings": [
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",

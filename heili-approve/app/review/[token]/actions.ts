@@ -35,6 +35,7 @@ import {
 } from "@/lib/posts";
 import { toRequestChangesItems } from "@/lib/review-assistant/content";
 import { parseActionItems } from "@/lib/review-assistant/shared";
+import { addPlanComment, approvePlan, type ApprovePlanResult } from "@/lib/plans";
 import { resolveReviewerToken } from "@/lib/reviewers";
 
 const LINK_INVALID = "Questo link non è più valido. Chiedi all'agenzia di inviartene uno nuovo.";
@@ -86,7 +87,17 @@ const decideSchema = z.object({
   note: z.string().max(10_000).nullish(),
 });
 
+const approvePlanSchema = z.object({
+  planId: idSchema,
+  /** The posts the plan page showed, at the version shown. */
+  posts: z.array(z.object({ postId: idSchema, versionNumber: versionSchema })).max(500),
+});
+
+const planCommentSchema = z.object({ planId: idSchema, body: z.string().max(10_000) });
+
 export type ApproveInput = z.input<typeof approveSchema>;
+export type ApprovePlanInput = z.input<typeof approvePlanSchema>;
+export type PlanCommentInput = z.input<typeof planCommentSchema>;
 export type RequestChangesInput = z.input<typeof changesSchema>;
 export type PortalCommentInput = z.input<typeof commentSchema>;
 export type DecideVariantInput = z.input<typeof decideSchema>;
@@ -132,7 +143,11 @@ async function asReviewer<T>(
   }
 }
 
-/** Approves exactly the version the client saw. Approve-all does not exist on purpose. */
+/**
+ * Approves exactly the version the client saw. The only "approve all" is the
+ * monthly plan's (approvePlanAction), which approves post by post at the
+ * versions shown on the plan page.
+ */
 export async function approvePostAction(token: string, input: ApproveInput): Promise<PortalActionResult> {
   const result = await asReviewer(token, async (reviewer) => {
     const { postId, versionNumber } = parseOrThrow(approveSchema, input);
@@ -254,6 +269,35 @@ export async function finalizeDecisionsAction(
     const { postId, versionNumber } = parseOrThrow(approveSchema, input);
     const { outcome, evaluation } = await finalizeCreativeReview(postId, reviewer, versionNumber);
     return { ...progressOf(evaluation), result: outcome };
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/**
+ * Monthly plan: "Approva tutto il piano". Approves, one by one through
+ * approvePost, every post still waiting for the client at the version the
+ * plan page showed; posts with open comments, changes requested or a newer
+ * version are left out and returned (lib/plans approvePlan).
+ */
+export async function approvePlanAction(
+  token: string,
+  input: ApprovePlanInput
+): Promise<PortalActionResult<ApprovePlanResult>> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { planId, posts } = parseOrThrow(approvePlanSchema, input);
+    return approvePlan(planId, reviewer, posts);
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/** Monthly plan: "Commento sul piano", a general note on the whole month. */
+export async function addPlanCommentAction(token: string, input: PlanCommentInput): Promise<PortalActionResult> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { planId, body } = parseOrThrow(planCommentSchema, input);
+    await addPlanComment(planId, reviewer, body);
+    return undefined;
   });
   if (result.ok) refresh();
   return result;

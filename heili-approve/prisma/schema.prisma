@@ -33,6 +33,8 @@ model User {
   versionsCreated  PostVersion[]         @relation("VersionCreatedBy")
   comments         PostComment[]
   events           PostEvent[]
+  plansCreated     ContentPlan[]         @relation("PlanCreatedBy")
+  planComments     ContentPlanComment[]
 }
 
 model Account {
@@ -95,6 +97,7 @@ model Workspace {
   clients     Client[]
   posts       Post[]
   media       MediaAsset[]
+  plans       ContentPlan[]
 
   @@index([ownerId])
 }
@@ -177,6 +180,7 @@ model Client {
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   reviewers ClientReviewer[]
   posts     Post[]
+  plans     ContentPlan[]
 
   @@index([workspaceId])
 }
@@ -200,11 +204,12 @@ model ClientReviewer {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
   comments          PostComment[]
   events            PostEvent[]
   reviewSessions    ReviewSession[]
   creativeDecisions CreativeDecision[]
+  planComments      ContentPlanComment[]
 
   @@unique([clientId, email])
   @@index([clientId])
@@ -264,6 +269,9 @@ model Post {
   lastError        String?
   scheduleAttempts Int       @default(0)
 
+  /// Piano del mese a cui appartiene (facoltativo, vedi ContentPlan).
+  planId String?
+
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -276,11 +284,13 @@ model Post {
   events            PostEvent[]
   reviewSessions    ReviewSession[]
   creativeDecisions CreativeDecision[]
+  plan              ContentPlan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, kind, status])
   @@index([workspaceId, status])
   @@index([clientId, status])
   @@index([publishAt])
+  @@index([planId])
 }
 
 /// Ogni modifica del contenuto dopo il primo invio crea una nuova versione,
@@ -506,4 +516,76 @@ model CreativeDecision {
 
   @@unique([postId, versionNumber, variantId])
   @@index([postId])
+}
+
+// ─── Piano del mese ──────────────────────────────────────────────────────────
+
+/// Stato del piano, ricavato dai suoi post (lib/plan-rules.ts derivePlanStatus):
+/// IN_REVIEW se almeno un post aspetta il cliente, CHANGES_REQUESTED se il
+/// cliente ha chiesto modifiche a qualcuno, DRAFT se c'è qualcosa da (re)inviare,
+/// APPROVED quando tutti i post sono approvati. La colonna è una copia
+/// aggiornata da lib/plans.ts (syncPlanStatus) ogni volta che il piano si legge
+/// o cambia: la verità sono gli stati dei post.
+enum PlanStatus {
+  DRAFT
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+/// Piano mensile dei contenuti di un cliente ("Piano social ottobre 2026"):
+/// l'agenzia presenta tutti i post del mese insieme, con un messaggio
+/// introduttivo, e il cliente li rivede in un'unica pagina (griglia Instagram,
+/// calendario, "Approva tutto il piano"). I post restano post: ogni
+/// approvazione è sempre legata alla versione, post per post.
+model ContentPlan {
+  id                  String      @id @default(cuid())
+  workspaceId         String
+  clientId            String
+  /// Tipo di contenuto del piano (oggi solo SOCIAL_POST nell'interfaccia).
+  kind                ContentKind @default(SOCIAL_POST)
+  /// Mese del piano come "YYYY-MM", inteso nel fuso orario del cliente:
+  /// un post delle 23:30 del 31 ottobre a Roma è di ottobre.
+  month               String
+  title               String
+  /// Messaggio dell'agenzia al cliente (strategia, note del mese).
+  intro               String?
+  status              PlanStatus  @default(DRAFT)
+  /// Primo invio al cliente ("Invia il piano al cliente"); il cliente vede il
+  /// piano solo dopo. Aggiornato a ogni nuovo invio.
+  sentAt              DateTime?
+  reviewDueAt         DateTime?
+  /// Avviso all'agenzia "il cliente ha deciso tutti i post" già mandato per
+  /// l'ultimo invio (una volta sola; azzerato a ogni nuovo invio).
+  completedNotifiedAt DateTime?
+  createdById         String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client    Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("PlanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  posts     Post[]
+  comments  ContentPlanComment[]
+
+  @@unique([clientId, kind, month])
+  @@index([workspaceId, month])
+}
+
+/// Commento generale del cliente (o risposta dell'agenzia) sul piano intero,
+/// "Commento sul piano". Il feedback sul singolo post resta sul post.
+model ContentPlanComment {
+  id         String            @id @default(cuid())
+  planId     String
+  authorType CommentAuthorType
+  reviewerId String?
+  userId     String?
+  body       String
+  createdAt  DateTime          @default(now())
+
+  plan     ContentPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  reviewer ClientReviewer? @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+  user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([planId, createdAt])
 }

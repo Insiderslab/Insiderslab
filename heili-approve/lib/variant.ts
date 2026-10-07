@@ -255,12 +255,16 @@ export interface NavItem {
   kind: ContentKind | null;
 }
 
-/** Sidebar entries: Dashboard, one per enabled kind, Calendario, Clienti, Impostazioni. */
+/**
+ * Sidebar entries: Dashboard, one per enabled kind, Calendario, Piani (the
+ * monthly social plans, only with social posts), Clienti, Impostazioni.
+ */
 export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
   return [
     { label: "Dashboard", href: "/dashboard", kind: null },
     ...VARIANT_KINDS[variant].map((kind) => ({ label: KIND_UI[kind].navLabel, href: postsHref(kind, variant), kind })),
     { label: "Calendario", href: "/calendar", kind: null },
+    ...(VARIANT_KINDS[variant].includes("SOCIAL_POST") ? [{ label: "Piani", href: "/plans", kind: null }] : []),
     { label: "Clienti", href: "/clients", kind: null },
     { label: "Impostazioni", href: "/settings", kind: null },
   ];

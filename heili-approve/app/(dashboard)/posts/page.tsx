@@ -183,12 +183,19 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
               : `${total} da gestire: il cliente ha chiesto modifiche`
             : `${total} ${total === 1 && singleShown ? KIND_CONFIG[singleShown].label.toLowerCase() : words.plural}`}
         </p>
-        <Link
-          href={newHref}
-          className="rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          {newLabel}
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {social && clientId && (
+            <Link href={`/plans?clientId=${clientId}`} className="btn btn-sm" data-testid="posts-plan-link">
+              Piano del mese
+            </Link>
+          )}
+          <Link
+            href={newHref}
+            className="rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            {newLabel}
+          </Link>
+        </div>
       </div>
 
       <PostFilters

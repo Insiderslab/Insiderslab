@@ -1422,7 +1422,14 @@ export async function submitForReview(
   postIds: string[],
   workspaceId: string,
   actor: Actor,
-  opts: { reviewDueAt?: Date } = {}
+  opts: {
+    reviewDueAt?: Date;
+    /**
+     * false: no review-request email here (the caller sends its own, e.g. the
+     * monthly plan's single email per reviewer, lib/plans.ts).
+     */
+    notify?: boolean;
+  } = {}
 ): Promise<{
   submitted: string[];
   /** Clients with no active reviewer: nobody can see the items yet. */
@@ -1525,7 +1532,7 @@ export async function submitForReview(
     };
   });
 
-  await notifyReviewRequested(ids);
+  if (opts.notify !== false) await notifyReviewRequested(ids);
   return { submitted: ids, clientsWithoutReviewers, clientsWithoutEmail };
 }
 
@@ -1587,7 +1594,34 @@ async function loadPostForReviewerAction(db: DbClient, postId: string, reviewer:
 const STALE_VERSION_MESSAGE =
   "Il post è stato aggiornato dall'agenzia nel frattempo: ricarica la pagina per vedere la versione più recente";
 
-export async function approvePost(postId: string, reviewer: ReviewerRef, versionNumber: number): Promise<Post> {
+/**
+ * After a client decision on a post of a monthly plan: keeps the plan's
+ * status in sync and tells the agency once when the whole plan is decided.
+ * Imported lazily (lib/plans imports this module). Never throws.
+ */
+async function afterPlanDecision(planId: string | null): Promise<void> {
+  if (!planId) return;
+  try {
+    const { afterPlanPostDecided } = await import("@/lib/plans");
+    await afterPlanPostDecided(planId);
+  } catch (error) {
+    console.error(`[posts] Plan follow-up failed for plan ${planId}:`, error);
+  }
+}
+
+export async function approvePost(
+  postId: string,
+  reviewer: ReviewerRef,
+  versionNumber: number,
+  opts: {
+    /**
+     * false: no "Approvato" email and no plan follow-up (approving a whole
+     * monthly plan sends one summary instead, lib/plans.ts). Scheduling is
+     * never skipped.
+     */
+    notify?: boolean;
+  } = {}
+): Promise<Post> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
   const actor: Actor = { kind: "reviewer", reviewerId: reviewer.id };
 
@@ -1649,7 +1683,10 @@ export async function approvePost(postId: string, reviewer: ReviewerRef, version
     }
   }
 
-  await notifyApproved(postId);
+  if (opts.notify !== false) {
+    await notifyApproved(postId);
+    await afterPlanDecision(result.post.planId);
+  }
   return prisma.post.findUniqueOrThrow({ where: { id: postId } });
 }
 
@@ -1773,6 +1810,7 @@ export async function requestChanges(
 
   await notifyChangesRequested(postId);
   const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
+  await afterPlanDecision(post.planId);
   return { post, comment: result.comment, actionComments: result.actionComments };
 }
 
@@ -2078,6 +2116,8 @@ export interface ReviewerPost {
   scheduledAt: Date | null;
   /** The client can approve / request changes right now. */
   canAct: boolean;
+  /** Monthly plan the post belongs to (lib/plans.ts), if any. */
+  planId?: string | null;
   client: { id: string; name: string; logoUrl: string | null; timezone: string };
   /** Newest first. */
   versions: ReviewerPostVersion[];
@@ -2155,6 +2195,7 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
     approvedAt: post.approvedAt,
     scheduledAt: post.scheduledAt,
     canAct: post.status === "IN_REVIEW" && visible === post.currentVersionNumber,
+    planId: post.planId,
     client: post.client,
     versions: versions.map((v) => ({
       id: v.id,
@@ -2219,6 +2260,8 @@ export interface ReviewerPostSummary {
   variantCount: number | null;
   /** First ~160 characters of the caption / article excerpt / first variant's text. */
   excerpt: string;
+  /** Monthly plan the post belongs to (lib/plans.ts), if any. */
+  planId?: string | null;
 }
 
 /** Markdown → one line of plain text, good enough (and cheap) for a list excerpt. */
@@ -2310,6 +2353,7 @@ export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<Revie
       submittedAt: p.submittedAt,
       approvedAt: p.approvedAt,
       canAct: p.status === "IN_REVIEW" && visible === p.currentVersionNumber,
+      planId: p.planId,
       ...summarizeVersionForList(p.kind, version),
     };
   });

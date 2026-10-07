@@ -462,3 +462,21 @@ export function portalPath(token: string, postId?: string): string {
   const base = `/review/${encodeURIComponent(token)}`;
   return postId ? `${base}/posts/${encodeURIComponent(postId)}` : base;
 }
+
+/** Path of a monthly plan in the portal (/review/<token>/piani/<planId>). */
+export function portalPlanPath(token: string, planId: string): string {
+  return `${portalPath(token)}/piani/${encodeURIComponent(planId)}`;
+}
+
+/** "ven 9 ottobre · 18:30": a post's slot in a monthly plan, in the client's time zone. */
+export function formatPlanSlot(date: Date, timeZone: string | null | undefined): string {
+  const p = dateParts(date, safeTimeZone(timeZone), {
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return `${p.weekday} ${p.day} ${p.month} · ${p.hour}:${p.minute}`;
+}

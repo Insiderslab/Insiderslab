@@ -149,3 +149,60 @@ export interface PortalQueue {
   /** 1-based position of the current post among them, null if it is not one. */
   position: number | null;
 }
+
+// ─── Monthly plan ────────────────────────────────────────────────────────────
+
+/** One post of a monthly plan as the plan page lists it. */
+export interface PortalPlanPost {
+  id: string;
+  title: string;
+  status: PostStatus;
+  canAct: boolean;
+  /** Version shown (and approved by "Approva tutto il piano"). */
+  versionNumber: number;
+  /** "ven 9 ottobre · 18:30" in the client's time zone. */
+  dateLabel: string;
+  networks: Network[];
+  cover: MediaItem | null;
+  mediaCount: number;
+  excerpt: string;
+  /** Open client comments on the version shown (excluded from "Approva tutto"). */
+  openComments: number;
+  href: string;
+}
+
+export interface PortalPlanComment {
+  id: string;
+  authorName: string;
+  isMine: boolean;
+  fromAgency: boolean;
+  body: string;
+  createdLabel: string;
+}
+
+export interface PortalPlan {
+  id: string;
+  /** "Piano social di ottobre". */
+  heading: string;
+  /** "ottobre". */
+  monthName: string;
+  intro: string | null;
+  clientName: string;
+  logoUrl: string | null;
+  /** "venerdì 9 ottobre" — due date in the client's zone, if any. */
+  dueLabel: string | null;
+  autoSchedule: boolean;
+  posts: PortalPlanPost[];
+  comments: PortalPlanComment[];
+}
+
+/** Navigation of a post that belongs to a plan (post review page). */
+export interface PortalPlanNav {
+  href: string;
+  /** "Piano social di ottobre". */
+  heading: string;
+  position: number;
+  total: number;
+  prevHref: string | null;
+  nextHref: string | null;
+}

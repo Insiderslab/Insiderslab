@@ -25,6 +25,10 @@
  *   the unified portal with its tabs. It also has a second reviewer without
  *   email ("Paolo Fabbri"): the agency sends that link by hand (WhatsApp…).
  *
+ * - a monthly plan ("Piano del mese") for Caffè Aurora NEXT month: six
+ *   social posts IN_REVIEW, attached to the plan, sent with an intro from the
+ *   agency (only these posts: other drafts of that month are left alone).
+ *
  * Every client gets its services (Client.services): Aurora and Verde social
  * posts, Cantina articles, Kinetik ads creatives, Le Querce all three.
  *
@@ -56,6 +60,8 @@ import { zonedDateTimeToUtc } from "@/lib/metricool/payload";
 import type { AdContent, BlogContent } from "@/lib/content/types";
 import { buildAnchor, htmlToTextWithBlocks, renderMarkdownSafe } from "@/lib/content/blog";
 import { addComment, createPost, requestChanges, submitForReview, updatePost } from "@/lib/posts";
+import { addPlanMonths, defaultPlanTitle, planMonthName, planMonthOf } from "@/lib/plan-rules";
+import { syncPlanStatus } from "@/lib/plans";
 import { createReviewer, getReviewUrl } from "@/lib/reviewers";
 import { saveMediaStream } from "@/lib/storage";
 import { sortKinds } from "@/lib/variant";
@@ -472,6 +478,174 @@ const VERDE_POSTS: SeedPost[] = [
     images: [{ palette: "garden", alt: "Plastico in legno sul tavolo dello studio" }],
   },
 ];
+
+// ─── Monthly plan (Piano del mese) ───────────────────────────────────────────
+
+type PlanSeedPost = {
+  day: number;
+  time: string;
+  title: (month: string) => string;
+  networks: Network[];
+  networkOptions: NetworkOptions;
+  text: (month: string) => string;
+  images: Array<{ palette: keyof typeof PALETTES; alt: string }>;
+};
+
+const AURORA_PLAN_POSTS: PlanSeedPost[] = [
+  {
+    day: 3,
+    time: "08:30",
+    title: (m) => `Buongiorno ${m}: la colazione del mese`,
+    networks: ["instagram", "facebook"],
+    networkOptions: IG_FB_POST,
+    text: (m) =>
+      `A ${m} la colazione cambia: cornetto integrale al miele di castagno e cappuccino con latte d'avena tostata. ☕️\n\n#CaffèAurora #colazione #Bologna`,
+    images: [{ palette: "sunset", alt: "Cornetto integrale e cappuccino sul bancone" }],
+  },
+  {
+    day: 6,
+    time: "18:00",
+    title: (m) => `Aperitivo del giovedì — edizione di ${m}`,
+    networks: ["instagram"],
+    networkOptions: IG_POST,
+    text: () => "Il giovedì sera si accende: espresso tonic, taglieri e la playlist scelta dal nostro barista. 🎶\n\n#aperitivo #Bologna",
+    images: [{ palette: "concrete", alt: "Espresso tonic e tagliere sul tavolino del dehors" }],
+  },
+  {
+    day: 10,
+    time: "10:00",
+    title: () => "Dietro il bancone: la tostatura",
+    networks: ["instagram"],
+    networkOptions: IG_POST,
+    text: () =>
+      "Ogni lunedì mattina tostiamo in piccoli lotti. Scorrete per vedere i chicchi prima e dopo: dal verde al nocciola in 12 minuti. ➡️\n\n#specialtycoffee #tostatura",
+    images: [
+      { palette: "garden", alt: "Chicchi di caffè verdi prima della tostatura" },
+      { palette: "espresso", alt: "Chicchi tostati appena usciti dal tostatore" },
+    ],
+  },
+  {
+    day: 14,
+    time: "12:30",
+    title: () => "Ricetta: affogato al caffè",
+    networks: ["instagram", "facebook"],
+    networkOptions: IG_FB_POST,
+    text: () =>
+      "Una pallina di fiordilatte, un espresso bollente versato sopra e niente altro. La ricetta più corta del mondo, la nostra preferita. 🍨\n\n#ricette #affogato",
+    images: [{ palette: "cappuccino", alt: "Affogato al caffè in una coppetta di vetro" }],
+  },
+  {
+    day: 20,
+    time: "09:00",
+    title: (m) => `I vostri scatti di ${m}`,
+    networks: ["instagram"],
+    networkOptions: IG_POST,
+    text: () =>
+      "Ogni mese ripubblichiamo la foto più bella scattata da voi da Aurora. Taggateci con #CaffèAurora per partecipare! 📸",
+    images: [{ palette: "garden", alt: "Foto di un cliente: tazzina sul tavolino all'aperto" }],
+  },
+  {
+    day: 27,
+    time: "17:30",
+    title: () => "Prenota il tavolo per le feste",
+    networks: ["instagram", "facebook"],
+    networkOptions: IG_FB_POST,
+    text: () =>
+      "Cene di squadra, auguri tra amici, brindisi di fine anno: la sala di sopra è vostra fino a 20 persone. Scriveteci in DM per prenotare. 🎄",
+    images: [{ palette: "sunset", alt: "Sala al piano di sopra apparecchiata per una cena" }],
+  },
+];
+
+const AURORA_PLAN_INTRO =
+  "Ciao Giulia! Questo mese puntiamo su due cose: la colazione nuova (che lanciamo il 3) e le prenotazioni per le feste, " +
+  "che spingiamo dall'ultima settimana. In mezzo, un carosello sulla tostatura per raccontare il vostro lavoro e un " +
+  "repost dei clienti per la community. Se il ritmo ti torna, puoi approvare tutto in un colpo.";
+
+/**
+ * Caffè Aurora's plan for next month: six posts IN_REVIEW attached to the
+ * plan and a sent plan with an intro. Written step by step (not with
+ * sendPlan) so other posts of that month are never touched; no emails.
+ */
+async function seedAuroraPlan(
+  workspaceId: string,
+  userId: string,
+  client: { id: string; timezone: string },
+  variant: number
+) {
+  const month = addPlanMonths(planMonthOf(new Date(), client.timezone), 1);
+  const monthName = planMonthName(month);
+  let plan = await prisma.contentPlan.findUnique({
+    where: { clientId_kind_month: { clientId: client.id, kind: "SOCIAL_POST", month } },
+  });
+  if (!plan) {
+    plan = await prisma.contentPlan.create({
+      data: {
+        workspaceId,
+        clientId: client.id,
+        kind: "SOCIAL_POST",
+        month,
+        title: defaultPlanTitle(month),
+        intro: AURORA_PLAN_INTRO,
+        createdById: userId,
+      },
+    });
+  }
+
+  const actor = userActor(userId);
+  const ids: string[] = [];
+  for (const [i, spec] of AURORA_PLAN_POSTS.entries()) {
+    const title = spec.title(monthName);
+    let post = await prisma.post.findFirst({ where: { workspaceId, clientId: client.id, title, planId: plan.id } });
+    if (!post) {
+      const publishAt = zonedDateTimeToUtc(`${month}-${String(spec.day).padStart(2, "0")}T${spec.time}`, client.timezone);
+      if (!publishAt) throw new Error(`Invalid plan date ${month}-${spec.day}`);
+      const media: MediaItem[] = [];
+      for (const [j, image] of spec.images.entries()) {
+        media.push(await saveImage(workspaceId, `piano-${month}-${i + 1}-${j + 1}.png`, image.palette, variant + i * 2 + j, image.alt));
+      }
+      post = await createPost(
+        workspaceId,
+        {
+          clientId: client.id,
+          title,
+          publishAt,
+          networks: spec.networks,
+          networkOptions: spec.networkOptions,
+          text: spec.text(monthName),
+          firstCommentText: null,
+          media,
+        },
+        actor
+      );
+      await prisma.post.update({ where: { id: post.id }, data: { planId: plan.id } });
+    }
+    ids.push(post.id);
+  }
+
+  const drafts = await prisma.post.findMany({ where: { id: { in: ids }, status: "DRAFT" }, select: { id: true } });
+  if (drafts.length > 0) {
+    // Due on the 1st of the plan's month at 18:00 (in five days if that is less than a day away).
+    const due = zonedDateTimeToUtc(`${month}-01T18:00`, client.timezone) ?? undefined;
+    const reviewDueAt = due && due.getTime() > Date.now() + 86_400_000 ? due : romeAt(5, "18:00");
+    await submitForReview(
+      drafts.map((d) => d.id),
+      workspaceId,
+      actor,
+      { reviewDueAt, notify: false }
+    );
+    await prisma.contentPlan.update({
+      where: { id: plan.id },
+      data: { sentAt: new Date(), reviewDueAt, completedNotifiedAt: null },
+    });
+  }
+  await syncPlanStatus(plan.id);
+  const posts = await prisma.post.findMany({
+    where: { planId: plan.id },
+    orderBy: { publishAt: "asc" },
+    select: { id: true, title: true, status: true },
+  });
+  return { plan: await prisma.contentPlan.findUniqueOrThrow({ where: { id: plan.id } }), posts };
+}
 
 // ─── Blog and ads demo data ──────────────────────────────────────────────────
 
@@ -1039,6 +1213,8 @@ async function main() {
     posts.push({ client: verde.client.name, title: post.title, status: post.status, id: post.id });
   }
 
+  const auroraPlan = await seedAuroraPlan(workspace.id, user.id, aurora.client, 60);
+
   // Blog and ads clients: no social networks, no Metricool brand.
   const cantina = await seedClient(workspace.id, {
     name: "Cantina Valdobbia",
@@ -1089,6 +1265,9 @@ async function main() {
   console.log(
     `Link revisione ${querce.client.name} (${querceLinkOnly.reviewer.name}, senza email: link da mandare a mano): ${querceLinkOnly.reviewUrl}`
   );
+  console.log(`Piano del mese ${aurora.client.name}: ${auroraPlan.plan.title} (${auroraPlan.posts.length} post)`);
+  console.log(`      cliente: ${aurora.reviewUrl}/piani/${auroraPlan.plan.id}`);
+  console.log(`      agenzia: ${baseUrl}/plans/${auroraPlan.plan.id}`);
   console.log("Post social:");
   for (const post of posts) console.log(`  [${post.status}] ${post.client} — ${post.title}`);
   console.log("Articoli (blog):");
@@ -1121,6 +1300,14 @@ async function main() {
           { id: verde.client.id, name: verde.client.name, reviewerId: verde.reviewer.id, reviewUrl: verde.reviewUrl },
         ],
         posts,
+        plan: {
+          id: auroraPlan.plan.id,
+          month: auroraPlan.plan.month,
+          title: auroraPlan.plan.title,
+          clientId: aurora.client.id,
+          reviewUrl: `${aurora.reviewUrl}/piani/${auroraPlan.plan.id}`,
+          posts: auroraPlan.posts,
+        },
         blog: {
           client: { id: cantina.client.id, name: cantina.client.name, reviewerId: cantina.reviewer.id, reviewUrl: cantina.reviewUrl },
           posts: articles,

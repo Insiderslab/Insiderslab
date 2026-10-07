@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Agency-only areas. The client portal (/review/...) and public media
 // (/media/...) are deliberately not listed: they authenticate by token.
-const PROTECTED_PREFIXES = ["/dashboard", "/posts", "/calendar", "/clients", "/settings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/posts", "/calendar", "/plans", "/clients", "/settings"];
 
 function hasSessionCookie(request: NextRequest): boolean {
   return (
@@ -36,6 +36,7 @@ export const config = {
     "/dashboard/:path*",
     "/posts/:path*",
     "/calendar/:path*",
+    "/plans/:path*",
     "/clients/:path*",
     "/settings/:path*",
   ],

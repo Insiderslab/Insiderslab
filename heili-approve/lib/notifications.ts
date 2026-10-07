@@ -20,7 +20,14 @@ import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, formatTimeRange, isNetwork, type Network } from "@/lib/domain";
 import { renderEmail, sendEmail, type EmailListItem } from "@/lib/email";
 import { getBaseUrl } from "@/lib/env";
-import { getReviewUrl } from "@/lib/reviewers";
+import {
+  APPROVED_LIKE,
+  byPublishAsc,
+  planHeading,
+  planOutcomeSummary,
+  planShortName,
+} from "@/lib/plan-rules";
+import { getReviewPlanUrl, getReviewUrl } from "@/lib/reviewers";
 import { kindCountPhrase, productName } from "@/lib/variant";
 
 // ─── Formatting (pure) ───────────────────────────────────────────────────────
@@ -673,5 +680,197 @@ export async function notifyScheduleFailed(postId: string): Promise<void> {
     });
   } catch (error) {
     logFailure("notifyScheduleFailed", error);
+  }
+}
+
+// ─── Monthly plans ───────────────────────────────────────────────────────────
+
+/**
+ * Wording of the plan email to the client (pure): "Piano social di ottobre
+ * per Caffè Aurora: 12 post da approvare".
+ */
+export function planEmailCopy(params: {
+  heading: string;
+  clientName: string;
+  agencyName: string;
+  toReview: number;
+}): ReviewEmailCopy {
+  const posts = params.toReview === 1 ? "1 post" : `${params.toReview} post`;
+  const lower = params.heading.charAt(0).toLowerCase() + params.heading.slice(1);
+  return {
+    subject: `${params.heading} per ${params.clientName}: ${posts} da approvare`,
+    heading: params.heading,
+    intro:
+      `${params.agencyName} ha preparato il ${lower} per ${params.clientName}: ${posts} da rivedere. ` +
+      "Li vedi tutti insieme, anche come appariranno sul profilo Instagram, e puoi approvarli uno per uno o tutti in una volta.",
+    ctaLabel: "Rivedi il piano",
+  };
+}
+
+function agencyPlanUrl(planId: string): string {
+  return `${getBaseUrl()}/plans/${planId}`;
+}
+
+async function loadPlan(planId: string) {
+  return prisma.contentPlan.findUnique({
+    where: { id: planId },
+    include: {
+      client: { include: { reviewers: { where: { active: true, email: { not: null } } } } },
+      workspace: { select: { id: true, name: true } },
+      posts: {
+        where: { status: { not: "CANCELLED" } },
+        select: {
+          id: true,
+          title: true,
+          kind: true,
+          status: true,
+          publishAt: true,
+          networks: true,
+          reviewDueAt: true,
+          versions: latestVersionContent,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * "Invia il piano al cliente": ONE email per active reviewer with an email
+ * for the whole plan (never one per post), listing the posts waiting for
+ * them and linking to the plan page of their portal. Reviewers without an
+ * email are skipped (the agency shares the plan link by hand). Returns how
+ * many emails went out. Never throws.
+ */
+export async function notifyPlanSent(planId: string): Promise<number> {
+  let sent = 0;
+  try {
+    const plan = await loadPlan(planId);
+    if (!plan || plan.client.archivedAt) return 0;
+    const toReview = byPublishAsc(plan.posts.filter((p) => p.status === "IN_REVIEW"));
+    if (toReview.length === 0) return 0;
+    const timeZone = plan.client.timezone;
+    const copy = planEmailCopy({
+      heading: planHeading(plan.month, { kind: plan.kind, timeZone }),
+      clientName: plan.client.name,
+      agencyName: plan.workspace.name,
+      toReview: toReview.length,
+    });
+    const due = plan.reviewDueAt ?? toReview.map((p) => p.reviewDueAt).find((d): d is Date => !!d) ?? null;
+    const items = toReview.map((p) => postListItem({ ...p, content: p.versions[0]?.content }, timeZone));
+
+    for (const reviewer of plan.client.reviewers) {
+      if (!reviewer.email) continue;
+      try {
+        const paragraphs = [`Ciao ${reviewer.name},`, copy.intro];
+        if (due) paragraphs.push(`Ti chiediamo una risposta entro ${formatPublishDate(due, timeZone)}.`);
+        const { html, text } = renderEmail({
+          heading: copy.heading,
+          paragraphs,
+          ...(plan.intro?.trim() ? { quote: plan.intro.trim().slice(0, 2000) } : {}),
+          items,
+          cta: { label: copy.ctaLabel, url: getReviewPlanUrl(reviewer, plan.id) },
+          footer: `Link personale per ${reviewer.name}: non inoltrarlo. Inviato da ${plan.workspace.name} con ${productName()}.`,
+        });
+        const result = await sendEmail({ to: reviewer.email, subject: copy.subject, html, text });
+        if (result.ok) sent += 1;
+      } catch (error) {
+        logFailure(`notifyPlanSent(reviewer ${reviewer.id})`, error);
+      }
+    }
+  } catch (error) {
+    logFailure("notifyPlanSent", error);
+  }
+  return sent;
+}
+
+/**
+ * "Approva tutto il piano" without finishing the plan: one email to the
+ * agency instead of one "Approvato" per post. Never throws.
+ */
+export async function notifyPlanApproved(planId: string, reviewerId: string, approvedPostIds: string[]): Promise<void> {
+  try {
+    if (approvedPostIds.length === 0) return;
+    const plan = await loadPlan(planId);
+    if (!plan) return;
+    const reviewer = await prisma.clientReviewer.findUnique({ where: { id: reviewerId }, select: { name: true } });
+    const who = `${reviewer?.name ?? plan.client.name} (${plan.client.name})`;
+    const name = planShortName(plan.month);
+    const approved = byPublishAsc(plan.posts.filter((p) => approvedPostIds.includes(p.id)));
+    const count = approved.length === 1 ? "1 post" : `${approved.length} post`;
+    const autoSchedule = plan.client.autoSchedule
+      ? plan.client.metricoolBlogId
+        ? "I post approvati vengono programmati automaticamente su Metricool."
+        : "Il cliente non ha un brand Metricool collegato: collegalo per programmarli."
+      : "La programmazione automatica è disattivata per questo cliente: programmali dal pannello.";
+    await sendToAgency(plan.workspaceId, `${name}: ${count} approvati da ${plan.client.name}`, {
+      heading: "Post del piano approvati",
+      paragraphs: [
+        `${who} ha approvato in un solo passaggio ${count} del ${name.charAt(0).toLowerCase()}${name.slice(1)}.`,
+        `Situazione del piano: ${planOutcomeSummary(plan.posts.map((p) => p.status))}.`,
+        autoSchedule,
+      ],
+      items: approved.map((p) => postListItem(p, plan.client.timezone)),
+      cta: { label: "Apri il piano", url: agencyPlanUrl(plan.id) },
+    });
+  } catch (error) {
+    logFailure("notifyPlanApproved", error);
+  }
+}
+
+/**
+ * The client has decided every post of the plan that was sent to them:
+ * "Piano di ottobre: 10 approvati, 2 con modifiche". The caller makes sure
+ * it goes out once per send (ContentPlan.completedNotifiedAt). Never throws.
+ */
+export async function notifyPlanDecided(planId: string): Promise<void> {
+  try {
+    const plan = await loadPlan(planId);
+    if (!plan) return;
+    const summary = planOutcomeSummary(plan.posts.map((p) => p.status));
+    const name = planShortName(plan.month);
+    const changes = byPublishAsc(plan.posts.filter((p) => p.status === "CHANGES_REQUESTED"));
+    const approved = byPublishAsc(plan.posts.filter((p) => APPROVED_LIKE.includes(p.status)));
+    const label = (p: (typeof plan.posts)[number], verdict: string) => {
+      const item = postListItem(p, plan.client.timezone);
+      return { title: `${item.title} — ${verdict}`, ...(item.detail ? { detail: item.detail } : {}) };
+    };
+    await sendToAgency(plan.workspaceId, `${name} di ${plan.client.name}: ${summary}`, {
+      heading: "Il cliente ha rivisto il piano",
+      paragraphs: [
+        `${plan.client.name} ha dato una risposta su tutti i post del ${name.charAt(0).toLowerCase()}${name.slice(1)}: ${summary}.`,
+        changes.length > 0
+          ? "Apri i post con modifiche richieste, prepara le nuove versioni e reinvia il piano."
+          : "Tutti i post inviati sono approvati.",
+      ],
+      items: [...changes.map((p) => label(p, "modifiche richieste")), ...approved.map((p) => label(p, "approvato"))],
+      cta: { label: "Apri il piano", url: agencyPlanUrl(plan.id) },
+    });
+  } catch (error) {
+    logFailure("notifyPlanDecided", error);
+  }
+}
+
+/** A general comment of the client on the whole plan ("Commento sul piano"). Never throws. */
+export async function notifyPlanComment(commentId: string): Promise<void> {
+  try {
+    const comment = await prisma.contentPlanComment.findUnique({
+      where: { id: commentId },
+      include: {
+        reviewer: { select: { name: true } },
+        plan: { include: { client: { select: { name: true } } } },
+      },
+    });
+    if (!comment || comment.authorType !== "CLIENT") return;
+    const plan = comment.plan;
+    const name = planShortName(plan.month);
+    const who = comment.reviewer?.name ?? plan.client.name;
+    await sendToAgency(plan.workspaceId, `Commento sul ${name.charAt(0).toLowerCase()}${name.slice(1)}: ${plan.client.name}`, {
+      heading: "Commento sul piano",
+      paragraphs: [`${who} (${plan.client.name}) ha scritto un commento sul ${name.charAt(0).toLowerCase()}${name.slice(1)}.`],
+      quote: comment.body.slice(0, 2000),
+      cta: { label: "Apri il piano", url: agencyPlanUrl(plan.id) },
+    });
+  } catch (error) {
+    logFailure("notifyPlanComment", error);
   }
 }

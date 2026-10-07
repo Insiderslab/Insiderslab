@@ -17,6 +17,7 @@ import { KIND_UI, enabledKinds, isMetricoolEnabled, parseKindParam, type AppVari
 const pageTitles: Array<[prefix: string, title: string]> = [
   ["/dashboard", "Dashboard"],
   ["/calendar", "Calendario"],
+  ["/plans", "Piani del mese"],
   ["/clients", "Clienti"],
   ["/settings", "Impostazioni"],
 ];

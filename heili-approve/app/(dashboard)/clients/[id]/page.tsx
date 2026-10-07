@@ -238,7 +238,12 @@ export default async function ClientDetailPage({
                       {KIND_UI[kind].serviceLabel}
                       {!active && <span className="text-xs font-normal text-muted">· servizio non attivo</span>}
                     </h4>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {kind === "SOCIAL_POST" && (
+                        <Link href={`/plans?clientId=${client.id}`} className="btn btn-sm btn-quiet">
+                          Piani
+                        </Link>
+                      )}
                       {overview.total > 0 && (
                         <Link href={listHref(kind)} className="btn btn-sm btn-quiet">
                           Vedi tutti ({overview.total})

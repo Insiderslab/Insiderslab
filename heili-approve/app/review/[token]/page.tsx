@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   formatPortalDate,
   groupPortalPosts,
+  portalPlanPath,
   parsePortalKind,
   portalKindTabs,
   portalKinds,
@@ -11,6 +12,9 @@ import {
 import KindTabs from "@/components/portal/kind-tabs";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
 import { clientServices } from "@/lib/clients";
+import { PlanProgressBar } from "@/components/plans/plan-bits";
+import { planHeading, planMonthOf, planProgress, type PlanProgress } from "@/lib/plan-rules";
+import { listPlansForReviewer } from "@/lib/plans";
 import { listPostsForReviewer } from "@/lib/posts";
 import { enabledKinds, kindCountPhrase } from "@/lib/variant";
 import { getPortalReviewer } from "./reviewer";
@@ -39,7 +43,9 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 
   const timeZone = reviewer.client.timezone;
   const now = new Date();
-  const allPosts = await listPostsForReviewer({ id: reviewer.id, clientId: reviewer.clientId });
+  const ref = { id: reviewer.id, clientId: reviewer.clientId };
+  const [allPosts, plans] = await Promise.all([listPostsForReviewer(ref), listPlansForReviewer(ref)]);
+  const planCards = portalPlanCards(plans, { token, now, timeZone });
   const kindsShown = portalKinds(clientServices(reviewer.client), allPosts);
   const selected = parsePortalKind(query.tipo, kindsShown);
   const tabs = portalKindTabs(token, kindsShown, allPosts, tabsSelected(selected, kindsShown));
@@ -117,6 +123,14 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
           </ol>
         )}
       </section>
+
+      {planCards.length > 0 && (
+        <section className="space-y-3" aria-label="Piani del mese">
+          {planCards.map((plan) => (
+            <PlanCard key={plan.id} plan={plan} />
+          ))}
+        </section>
+      )}
 
       {tabs.length > 0 && <KindTabs tabs={tabs} />}
 
@@ -209,5 +223,69 @@ function Section({
       </div>
       <div className="space-y-3">{children}</div>
     </section>
+  );
+}
+
+interface PlanCardData {
+  id: string;
+  heading: string;
+  href: string;
+  progress: PlanProgress;
+  waiting: number;
+}
+
+/**
+ * Monthly plans on the portal home: every sent plan with posts still waiting
+ * for the client (highlighted), plus the plan of the current and next months
+ * once done (quiet), newest first.
+ */
+function portalPlanCards(
+  plans: Awaited<ReturnType<typeof listPlansForReviewer>>,
+  { token, now, timeZone }: { token: string; now: Date; timeZone: string }
+): PlanCardData[] {
+  const current = planMonthOf(now, timeZone);
+  return plans
+    .map((plan) => {
+      const progress = planProgress(plan.posts.map((p) => p.status));
+      return {
+        id: plan.id,
+        month: plan.month,
+        heading: planHeading(plan.month, { kind: plan.kind, now, timeZone }),
+        href: portalPlanPath(token, plan.id),
+        progress,
+        waiting: progress.inReview,
+      };
+    })
+    .filter((plan) => plan.progress.total > 0 && (plan.waiting > 0 || plan.month >= current));
+}
+
+function PlanCard({ plan }: { plan: PlanCardData }) {
+  const highlight = plan.waiting > 0;
+  return (
+    <Link
+      href={plan.href}
+      className={`panel block space-y-3 p-4 transition-colors hover:border-line-strong sm:p-5 ${highlight ? "!border-2 !border-accent" : ""}`}
+      data-testid="portal-plan-card"
+    >
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <span className="label-caps">Piano del mese</span>
+        <span className={highlight ? "chip chip-brand" : "chip chip-fresh"}>
+          {highlight ? (plan.waiting === 1 ? "1 post da approvare" : `${plan.waiting} post da approvare`) : "Rivisto"}
+        </span>
+      </span>
+      <span className="block text-xl font-semibold leading-tight">{plan.heading}</span>
+      <span className="block text-sm text-muted">
+        {plan.progress.total === 1 ? "1 post" : `${plan.progress.total} post`} · tutto il mese in una pagina, con la griglia del
+        profilo
+      </span>
+      <PlanProgressBar progress={plan.progress} size="sm" />
+      <span
+        className={`flex min-h-12 w-full items-center justify-center rounded-lg px-4 text-base font-semibold sm:w-auto sm:inline-flex ${
+          highlight ? "bg-accent text-white" : "border border-border"
+        }`}
+      >
+        {highlight ? "Rivedi il piano" : "Apri il piano"}
+      </span>
+    </Link>
   );
 }

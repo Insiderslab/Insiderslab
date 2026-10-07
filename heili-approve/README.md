@@ -170,6 +170,52 @@ Le regole di versione e di approvazione sono le stesse per tutti i tipi.
   il nome e riceve il link da chi gestisce il cliente. Su ogni contenuto in
   revisione, «Condividi con il cliente» dà il link diretto a quel contenuto.
 
+### Piano del mese
+
+Per i clienti con i **post social** l'agenzia presenta il **piano mensile**
+tutto insieme («Piano social ottobre 2026»), invece di mandare i post uno alla
+volta.
+
+- **Agenzia — «Piani» nel menu** (solo con i post social attivi): elenco per
+  cliente e mese (rispetta il cliente scelto nel menu) con stato, avanzamento
+  «8 di 12 approvati», data di invio e scadenza. «Apri il piano del mese» crea il
+  piano di un cliente per un mese, oppure apre quello che c'è già (uno per
+  cliente e mese). Ci si arriva anche dal **calendario** («Prepara il piano di
+  ottobre» / «Piano di ottobre» con il cliente scelto), dall'elenco dei post
+  filtrato per cliente e dalla scheda cliente («Piani»).
+- **Pagina del piano:** calendario del mese con le miniature, **griglia del
+  profilo Instagram** (tre colonne, dal post più recente) per vedere la
+  coerenza visiva, elenco dei post con il loro stato, messaggio per il cliente
+  (strategia, note del mese), scadenza e **«Invia il piano al cliente»**: tutte
+  le bozze e i post con modifiche richieste partono insieme (stessi controlli
+  dell'invio singolo) e ogni referente riceve **una sola email** per tutto il
+  piano, con il link alla pagina del piano. Poi compare il **link del piano**
+  con «Invia su WhatsApp» («Ciao Chiara, ecco il piano social di ottobre per
+  Agriturismo Le Querce: 12 post da rivedere. …»). I post del mese creati dopo
+  l'apertura del piano si aggiungono con «Aggiungi al piano» (o entrano da soli
+  al prossimo invio).
+- **Cliente — `/review/<token>/piani/<id>`:** «Piano social di ottobre», il
+  messaggio dell'agenzia, «3 di 12 approvati», la griglia Instagram e i post in
+  ordine di calendario; ogni post apre la solita pagina di revisione, che per i
+  post di un piano ha «Post precedente / successivo» e «Torna al piano».
+  **«Approva tutto il piano»** approva in un passaggio tutti i post che
+  aspettano il cliente, ognuno nella versione mostrata (stesse regole e stessa
+  programmazione su Metricool dell'approvazione singola); i post con un
+  commento aperto o con modifiche richieste restano fuori e sono elencati nella
+  conferma. C'è anche un «Commento sul piano» generale. La home del portale
+  mette in evidenza il piano da rivedere.
+- **Notifiche all'agenzia:** una email per «Approva tutto» (non una per post) e
+  una sola, quando il cliente ha risposto su tutti i post inviati: «Piano di
+  ottobre: 10 approvati, 2 con modifiche».
+- **Regole:** il cliente vede solo i piani già inviati del suo cliente (gli
+  altri rispondono 404) e mai le bozze. Il mese è salvato come `YYYY-MM` e vale
+  nel **fuso del cliente** (un post alle 23:30 del 31 ottobre a Roma è di
+  ottobre). Lo stato del piano (bozza, in revisione, modifiche richieste,
+  approvato) si ricava dai suoi post. Migrazione `20261007130000_content_plans`
+  (`ContentPlan`, `ContentPlanComment`, `Post.planId`).
+- **Seed:** Caffè Aurora ha il piano del mese prossimo con sei post in
+  revisione (chiave `plan` in `SEED_JSON`, link stampati dal seed).
+
 ### Istanze separate per tipo (facoltativo, avanzato)
 
 La variabile **`APP_VARIANT`** (letta all'avvio; un valore sbagliato ferma il
@@ -278,13 +324,13 @@ del server.
 npx prisma generate
 npx tsc --noEmit --incremental false
 npm run lint
-npx vitest run            # 443 test unitari
+npx vitest run            # 542 test unitari
 npm run build
 ```
 
 ### Test end-to-end (Playwright)
 
-I test usano l'app vera, avviata con `APP_VARIANT=all`. Cinque file in `e2e/`:
+I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
 
 - `approval-flow.spec.mjs` — social (sotto);
 - `blog-flow.spec.mjs` — l'agenzia scrive un articolo (Markdown, immagine in
@@ -304,6 +350,13 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Cinque file in `e2e/`:
   contenuto» propone solo i servizi del cliente; un nuovo cliente con il solo
   servizio *Articoli* nasconde Metricool; il servizio rifiuta di creare un tipo che
   il cliente non ha (`e2e/support/create-content.ts`);
+- `monthly-plan.spec.mjs` — piano del mese: un cliente nuovo con quattro
+  bozze il mese prossimo (una alle 23:30 dell'ultimo giorno); l'agenzia apre il
+  piano dal calendario, controlla griglia e ordine, scrive il messaggio e lo
+  invia; il cliente a 390 px apre il piano, commenta un post (navigazione del
+  piano), «Approva tutto il piano» approva gli altri tre ed elenca quello
+  commentato; il worker li programma; l'ultimo approvato da solo chiude il
+  piano; il link di un altro cliente risponde 404;
 - `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
   (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
   «Articoli», che non ci sia Metricool e che una creatività ads non si possa

@@ -42,7 +42,9 @@ import { KindBadge, KindIcon } from "@/components/posts/kind-badge";
 import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, STATUS_LABELS, isNetwork, statusLabelFor } from "@/lib/domain";
-import { KIND_UI, enabledKinds, kindParam, productName, resolveKindFilter } from "@/lib/variant";
+import { planMonthName } from "@/lib/plan-rules";
+import { findPlanForMonth } from "@/lib/plans";
+import { KIND_UI, enabledKinds, isKindEnabled, kindParam, productName, resolveKindFilter } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export async function generateMetadata() {
@@ -126,6 +128,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   });
   const byDay = groupByDay(posts, (p) => p.publishAt, timezone);
 
+  // "Piano di ottobre": the monthly social plan of the selected client and month.
+  const planMonth = monthKey(month);
+  const monthPlan =
+    client && isKindEnabled("SOCIAL_POST") ? await findPlanForMonth(context.workspaceId, client.id, planMonth) : null;
+  const planHref = monthPlan
+    ? `/plans/${monthPlan.id}`
+    : `/plans?${new URLSearchParams({ nuovo: "1", ...(client ? { clientId: client.id } : {}), mese: planMonth }).toString()}`;
+
   const keep = (extra: Record<string, string>) => {
     const query = new URLSearchParams({
       mese: monthKey(month),
@@ -154,10 +164,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           kind={kindValue}
           keep={{ mese: monthKey(month), settimana: weekStart }}
         />
-        <p className="text-xs text-muted">
-          Orari in {timezone} ({timeZoneAbbr(timezone, now)})
-          {client ? "" : " · scegli un cliente per vederli nel suo fuso"}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:justify-end">
+          {client && isKindEnabled("SOCIAL_POST") && (
+            <Link href={planHref} className="btn btn-sm" data-testid="calendar-plan-link">
+              {monthPlan ? `Piano di ${planMonthName(planMonth)}` : `Prepara il piano di ${planMonthName(planMonth)}`}
+            </Link>
+          )}
+          <p className="text-xs text-muted">
+            Orari in {timezone} ({timeZoneAbbr(timezone, now)})
+            {client ? "" : " · scegli un cliente per vederli nel suo fuso"}
+          </p>
+        </div>
       </div>
 
       {/* ── Month (desktop) ── */}

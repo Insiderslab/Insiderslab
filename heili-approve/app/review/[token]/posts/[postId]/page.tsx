@@ -12,6 +12,8 @@ import {
   formatShortDateTime,
   nextPostToReview,
   numberPassageComments,
+  portalPath,
+  portalPlanPath,
 } from "@/components/portal/helpers";
 import OlderVersions from "@/components/portal/older-versions";
 import PostReview from "@/components/portal/post-review";
@@ -22,6 +24,7 @@ import type {
   PortalItemBase,
   PortalOlderVersion,
   PortalPassageComment,
+  PortalPlanNav,
   PortalPost,
   PortalQueue,
   PortalVariantDecision,
@@ -44,6 +47,8 @@ import {
   type ReviewerPostVersion,
   type ReviewerRef,
 } from "@/lib/posts";
+import { byPublishAsc, planHeading, planNeighbors } from "@/lib/plan-rules";
+import { getPlanForReviewer } from "@/lib/plans";
 import { isAssistantEnabled } from "@/lib/review-assistant";
 import { getPortalReviewer } from "../../reviewer";
 
@@ -174,7 +179,30 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
 
   const found = changesBase(post.versions, current, viewedVersions, timeZone);
 
-  const toReview = summaries.filter((p) => p.canAct).map((p) => p.id);
+  // A post of a monthly plan the client can see: navigation stays inside the plan.
+  const plan = post.kind === "SOCIAL_POST" && post.planId ? await planOf(post.planId, ref) : null;
+  const planPosts = plan
+    ? byPublishAsc(summaries.filter((p) => p.planId === plan.id && p.kind === post.kind)).map((p) => ({ id: p.id, canAct: p.canAct }))
+    : [];
+  let planNav: PortalPlanNav | undefined;
+  if (plan) {
+    const around = planNeighbors(
+      planPosts.map((p) => p.id),
+      post.id
+    );
+    if (around.position !== null) {
+      planNav = {
+        href: portalPlanPath(token, plan.id),
+        heading: planHeading(plan.month, { kind: plan.kind, now, timeZone }),
+        position: around.position,
+        total: around.total,
+        prevHref: around.prevId ? portalPath(token, around.prevId) : null,
+        nextHref: around.nextId ? portalPath(token, around.nextId) : null,
+      };
+    }
+  }
+
+  const toReview = (planNav ? planPosts : summaries).filter((p) => p.canAct).map((p) => p.id);
   const index = toReview.indexOf(post.id);
   const queue: PortalQueue = {
     nextPostId: nextPostToReview(toReview, post.id),
@@ -347,9 +375,20 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
         changesSlot={changes ? <VersionChanges changes={changes} currentNumber={current.number} /> : undefined}
         historySlot={historySlot}
         listKinds={listKinds}
+        plan={planNav}
       />
     </main>
   );
+}
+
+/** The post's plan when the client may see it (sent, of their client); null otherwise. */
+async function planOf(planId: string, reviewer: ReviewerRef) {
+  try {
+    return await getPlanForReviewer(planId, reviewer);
+  } catch (error) {
+    if (error instanceof NotFoundError) return null;
+    throw error;
+  }
 }
 
 /**

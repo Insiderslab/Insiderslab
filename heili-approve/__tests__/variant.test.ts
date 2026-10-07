@@ -111,6 +111,7 @@ describe("navigation", () => {
       ["Dashboard", "/dashboard"],
       ["Post", "/posts"],
       ["Calendario", "/calendar"],
+      ["Piani", "/plans"],
       ["Clienti", "/clients"],
       ["Impostazioni", "/settings"],
     ]);
@@ -119,6 +120,10 @@ describe("navigation", () => {
   it("names the single kind of a blog or ads instance, without ?kind=", () => {
     expect(navItems("blog")[1]).toEqual({ label: "Articoli", href: "/posts", kind: "BLOG_ARTICLE" });
     expect(navItems("ads")[1]).toEqual({ label: "Creatività", href: "/posts", kind: "AD_CREATIVE" });
+    // Monthly plans are social only.
+    expect(navItems("blog").some((item) => item.href === "/plans")).toBe(false);
+    expect(navItems("ads").some((item) => item.href === "/plans")).toBe(false);
+    expect(navItems("all").some((item) => item.href === "/plans")).toBe(true);
     expect(newPostHref("AD_CREATIVE", "ads")).toBe("/posts/new");
   });
 
