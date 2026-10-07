@@ -12,7 +12,7 @@ import type { ReactNode, RefObject } from "react";
 import type { PortalQueue } from "./types";
 import type { PortalWording } from "./helpers";
 
-/** "← Tutti i post · Post 1 di 3 da approvare · Prossimo post →". */
+/** Clearly labelled controls and progress for the review queue. */
 export function ReviewNav({
   homeHref,
   nextHref,
@@ -29,16 +29,18 @@ export function ReviewNav({
 }) {
   const progressLabel =
     queue.position !== null ? wording.position(queue.position, queue.toReviewCount) : null;
+  const backLabel = wording.backLabel.replace(/^←\s*/, "");
+  const nextLabel = wording.nextLabel.replace(/\s*→$/, "");
 
   return (
     <nav className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm" aria-label="Navigazione della revisione">
       <Link
         href={homeHref}
-        aria-label={wording.backLabel}
-        className="inline-flex min-h-11 min-w-0 items-center justify-start text-muted hover:text-foreground"
+        aria-label={backLabel}
+        className="inline-flex min-h-11 min-w-0 items-center justify-start justify-self-start rounded-md border border-border bg-surface px-3 font-medium text-foreground hover:border-border-hover"
       >
-        <span className="sm:hidden" aria-hidden="true">← Elenco</span>
-        <span className="hidden sm:inline">{wording.backLabel}</span>
+        <span className="sm:hidden">Elenco</span>
+        <span className="hidden truncate sm:inline">{backLabel}</span>
       </Link>
       {progressLabel && showProgress && (
         <span className="text-center text-muted" aria-label={progressLabel}>
@@ -51,11 +53,11 @@ export function ReviewNav({
       {nextHref && showProgress && (
         <Link
           href={nextHref}
-          aria-label={wording.nextLabel}
-          className="inline-flex min-h-11 min-w-0 items-center justify-end text-right font-medium text-accent"
+          aria-label={nextLabel}
+          className="inline-flex min-h-11 min-w-0 items-center justify-end justify-self-end rounded-md bg-accent px-3 text-right font-semibold text-white hover:bg-accent-hover"
         >
-          <span className="sm:hidden" aria-hidden="true">Successivo →</span>
-          <span className="hidden sm:inline">{wording.nextLabel}</span>
+          <span className="sm:hidden">Successivo</span>
+          <span className="hidden truncate sm:inline">{nextLabel}</span>
         </Link>
       )}
     </nav>

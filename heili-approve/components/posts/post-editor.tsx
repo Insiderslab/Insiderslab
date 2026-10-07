@@ -273,7 +273,7 @@ export default function PostEditor({
         event.preventDefault();
         save(false);
       }}
-      className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]"
+      className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(480px,560px)]"
     >
       <div className="min-w-0 space-y-6">
         {readOnly && readOnlyReason && (
@@ -643,7 +643,7 @@ export default function PostEditor({
       </div>
 
       {/* ── Live preview ── */}
-      <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+      <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
         <h3 className="mb-2 text-sm font-medium text-muted">Anteprima</h3>
         <NetworkPreviewTabs
           networks={values.networks}

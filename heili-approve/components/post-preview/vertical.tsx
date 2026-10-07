@@ -25,7 +25,7 @@ import MediaStage from "./media-stage";
 import { Avatar, FirstComment, MockupFrame, stageProps } from "./parts";
 import type { MockupProps } from "./types";
 
-const FRAME = "max-w-[340px] overflow-hidden rounded-xl border border-border bg-background";
+const FRAME = "max-w-[420px] overflow-hidden rounded-xl border border-border bg-background";
 const SHADOW = "[text-shadow:0_1px_2px_rgba(0,0,0,0.6)]";
 
 function RightRail({ items }: { items: ReactNode[] }) {

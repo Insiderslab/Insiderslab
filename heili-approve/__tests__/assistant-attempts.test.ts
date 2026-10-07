@@ -260,6 +260,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   delete process.env.REVIEW_ASSISTANT_REVIEWER_DAILY_ATTEMPTS;
   delete process.env.REVIEW_ASSISTANT_WORKSPACE_DAILY_ATTEMPTS;
   delete process.env.REVIEW_ASSISTANT_ATTEMPT_COOLDOWN_MS;
@@ -288,6 +289,9 @@ describe("persistent review-assistant provider budgets", () => {
   });
 
   it("enforces a reviewer cooldown before another provider call", async () => {
+    // Freeze the clock so the 1 ms test cooldown cannot expire under CPU load.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-08T10:00:00Z"));
     attempts.push({ sessionId: sessions[0].id, createdAt: new Date() });
 
     await expect(

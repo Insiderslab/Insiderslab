@@ -128,7 +128,7 @@ describe("BlogReview", () => {
     expect(html).toContain(">Approva<");
     expect(html).toContain("Parlane con l&#x27;assistente");
     expect(html).toContain("Dettagli per i motori di ricerca");
-    expect(html).toContain("← Tutti gli articoli");
+    expect(html).toContain("Tutti gli articoli");
     expect(html).toContain("Articolo 1 di 2 da approvare");
   });
 
@@ -170,7 +170,7 @@ describe("AdsReview", () => {
     expect(html).toContain('id="variante-C"');
     expect(html).toContain("Invia le mie decisioni");
     expect(html).toContain("Inizio campagna: </span>");
-    expect(html).toContain("Prossimo contenuto →");
+    expect(html).toContain("Prossimo contenuto");
     // Incomplete: the send button is disabled.
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Invia le mie decisioni<\/button>/);
   });
@@ -220,9 +220,9 @@ describe("PostReview (social) keeps its wording", () => {
         publishInPast: false,
       })
     );
-    expect(html).toContain("← Tutti i post");
+    expect(html).toContain("Tutti i post");
     expect(html).toContain("Post 1 di 2 da approvare");
-    expect(html).toContain("Prossimo post →");
+    expect(html).toContain("Prossimo post");
     expect(html).toContain("Pubblicazione: </span>");
     expect(html).not.toContain("Post social");
   });
@@ -264,8 +264,8 @@ describe("PostReview (social) keeps its wording", () => {
     expect(html).toContain("Link e dettagli nel primo commento");
     expect(html).not.toMatch(/<details[^>]*\sopen(?:=|\s|>)/);
     expect(html).toContain('aria-label="Navigazione della revisione"');
-    expect(html).toContain('aria-label="← Tutti i post"');
-    expect(html).toContain('aria-label="Prossimo post →"');
+    expect(html).toContain('aria-label="Tutti i post"');
+    expect(html).toContain('aria-label="Prossimo post"');
   });
 });
 

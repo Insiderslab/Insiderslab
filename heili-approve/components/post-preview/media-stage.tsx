@@ -237,8 +237,8 @@ export default function MediaStage({
           </div>
         ) : null}
         {indicators === "counter" || indicators === "dots-counter" ? (
-          <span className="absolute right-3 top-3 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white" aria-hidden="true">
-            {current + 1}/{total}
+          <span className="absolute right-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-xs font-medium text-white" aria-hidden="true">
+            {current + 1} di {total}
           </span>
         ) : null}
         {current > 0 ? (
@@ -249,10 +249,11 @@ export default function MediaStage({
               go(current - 1);
             }}
             aria-label="Contenuto precedente"
-            className="pointer-events-auto absolute left-1 top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center"
+            className="pointer-events-auto absolute left-2 top-1/2 flex h-11 min-w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-black">
-              <ChevronLeftIcon className="h-4 w-4" />
+            <span className="flex h-9 min-w-9 items-center justify-center rounded-full bg-black/70 px-2 text-xs font-semibold text-white shadow-sm backdrop-blur-sm sm:px-3">
+              <ChevronLeftIcon className="h-4 w-4 sm:hidden" />
+              <span className="hidden sm:inline">Precedente</span>
             </span>
           </button>
         ) : null}
@@ -264,10 +265,11 @@ export default function MediaStage({
               go(current + 1);
             }}
             aria-label="Contenuto successivo"
-            className="pointer-events-auto absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center"
+            className="pointer-events-auto absolute right-2 top-1/2 flex h-11 min-w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-black">
-              <ChevronRightIcon className="h-4 w-4" />
+            <span className="flex h-9 min-w-9 items-center justify-center rounded-full bg-black/70 px-2 text-xs font-semibold text-white shadow-sm backdrop-blur-sm sm:px-3">
+              <ChevronRightIcon className="h-4 w-4 sm:hidden" />
+              <span className="hidden sm:inline">Successivo</span>
             </span>
           </button>
         ) : null}
@@ -296,7 +298,7 @@ export default function MediaStage({
         {renderSlide(item, current, frameRatio, slideOverlay, frameClassName)}
       </div>
       {total > 1 && (indicators === "dots" || indicators === "dots-counter") ? (
-        <div className={`flex items-center justify-center ${dotsClassName}`}>
+        <div className={`flex items-center justify-start overflow-x-auto px-2 sm:justify-center ${dotsClassName}`}>
           {media.map((m, i) => (
             <button
               key={`${m.url}-${i}`}
@@ -304,9 +306,9 @@ export default function MediaStage({
               onClick={() => go(i)}
               aria-label={`Vai al contenuto ${i + 1} di ${total}`}
               aria-current={i === current ? "true" : undefined}
-              className="flex h-6 w-4 cursor-pointer items-center justify-center"
+              className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${i === current ? "bg-[#0095f6]" : "bg-[#a8a8a8]"}`} />
+              <span className={`h-2 rounded-full transition-[width] ${i === current ? "w-5 bg-[#0095f6]" : "w-2 bg-[#a8a8a8]"}`} />
             </button>
           ))}
         </div>

@@ -239,9 +239,9 @@ export default function PostReview({
     : null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(480px,600px)_minmax(0,1fr)]">
       {/* ── Preview ── */}
-      <div className="min-w-0 space-y-3 lg:sticky lg:top-4 lg:self-start">
+      <div className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start">
         {versions.length > 1 && (
           <label className="block text-sm">
             <span className="sr-only">Versione mostrata</span>

@@ -324,93 +324,103 @@ export default function PostReview({
         </SuccessPanel>
       )}
 
-      <header className="space-y-2">
-        {mixedList && <KindLabel kind="SOCIAL_POST" />}
-        <h1 className="text-xl font-semibold leading-snug sm:text-2xl">{post.title}</h1>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <span className={`font-medium ${post.canAct ? "text-accent" : post.status === "CHANGES_REQUESTED" ? "text-warning" : "text-success"}`}>
-            {outcome === "approved"
-              ? "Approvato"
-              : outcome === "changes"
-                ? "Modifiche richieste"
-                : PORTAL_STATUS_LABELS[post.status]}
-          </span>
-          <span className="text-muted">Versione {post.versionNumber}</span>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,640px)_minmax(300px,1fr)] lg:grid-rows-[auto_1fr] lg:items-start">
+        <div className="space-y-4 lg:col-start-2 lg:row-start-1">
+          <header className="space-y-2">
+            {mixedList && <KindLabel kind="SOCIAL_POST" />}
+            <h1 className="text-xl font-semibold leading-snug sm:text-2xl">{post.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span className={`font-medium ${post.canAct ? "text-accent" : post.status === "CHANGES_REQUESTED" ? "text-warning" : "text-success"}`}>
+                {outcome === "approved"
+                  ? "Approvato"
+                  : outcome === "changes"
+                    ? "Modifiche richieste"
+                    : PORTAL_STATUS_LABELS[post.status]}
+              </span>
+              <span className="text-muted">Versione {post.versionNumber}</span>
+            </div>
+            <p className="text-base">
+              <span className="text-muted">Pubblicazione: </span>
+              <span className="font-medium">{post.publishLabel}</span>
+            </p>
+            {post.canAct && post.reviewDueLabel && outcome === null && (
+              <p className="text-sm font-medium text-warning">Ti chiediamo di rispondere entro {post.reviewDueLabel}.</p>
+            )}
+          </header>
+
+          {outcome === null && !post.canAct && <StatusNotice post={post} />}
         </div>
-        <p className="text-base">
-          <span className="text-muted">Pubblicazione: </span>
-          <span className="font-medium">{post.publishLabel}</span>
-        </p>
-        {post.canAct && post.reviewDueLabel && outcome === null && (
-          <p className="text-sm font-medium text-warning">Ti chiediamo di rispondere entro {post.reviewDueLabel}.</p>
-        )}
-      </header>
 
-      {outcome === null && !post.canAct && <StatusNotice post={post} />}
+        <section
+          ref={previewRef}
+          className="scroll-mt-4 space-y-3 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:rounded-xl lg:border lg:border-border lg:bg-surface lg:p-5"
+          aria-label="Anteprima del post"
+        >
+          {canComment && (
+            <p className="text-sm text-muted">
+              {hasVideo
+                ? "Metti in pausa o tocca «Commenta» sul video per lasciare una nota su un momento preciso."
+                : post.media.length > 0
+                  ? "Tocca un punto dell'immagine per lasciare una nota proprio lì."
+                  : "Leggi il testo e lasciaci un commento se vuoi cambiare qualcosa."}
+            </p>
+          )}
+          <NetworkPreviewTabs
+            networks={post.networks}
+            networkOptions={post.networkOptions}
+            text={post.text}
+            firstCommentText={post.firstCommentText}
+            media={post.media}
+            accountName={client.name}
+            accountAvatarUrl={client.logoUrl}
+            publishAt={post.publishAt}
+            timeZone={post.timeZone}
+            pins={pins}
+            markers={markers}
+            onMediaClick={canComment ? (p) => openDraft({ kind: "pin", mediaIndex: p.mediaIndex, x: p.x, y: p.y }) : undefined}
+            onRequestComment={
+              canComment
+                ? (p) => openDraft({ kind: "moment", mediaIndex: p.mediaIndex, timeSec: p.timeSec, x: p.x, y: p.y })
+                : undefined
+            }
+            registerTimeGetter={hasVideo ? registerTimeGetter : undefined}
+            seekTo={seek}
+          />
+        </section>
 
-      <section ref={previewRef} className="scroll-mt-4 space-y-3" aria-label="Anteprima del post">
-        {canComment && (
-          <p className="text-sm text-muted">
-            {hasVideo
-              ? "Metti in pausa o tocca «Commenta» sul video per lasciare una nota su un momento preciso."
-              : post.media.length > 0
-                ? "Tocca un punto dell'immagine per lasciare una nota proprio lì."
-                : "Leggi il testo e lasciaci un commento se vuoi cambiare qualcosa."}
-          </p>
-        )}
-        <NetworkPreviewTabs
-          networks={post.networks}
-          networkOptions={post.networkOptions}
-          text={post.text}
-          firstCommentText={post.firstCommentText}
-          media={post.media}
-          accountName={client.name}
-          accountAvatarUrl={client.logoUrl}
-          publishAt={post.publishAt}
-          timeZone={post.timeZone}
-          pins={pins}
-          markers={markers}
-          onMediaClick={canComment ? (p) => openDraft({ kind: "pin", mediaIndex: p.mediaIndex, x: p.x, y: p.y }) : undefined}
-          onRequestComment={
-            canComment
-              ? (p) => openDraft({ kind: "moment", mediaIndex: p.mediaIndex, timeSec: p.timeSec, x: p.x, y: p.y })
-              : undefined
-          }
-          registerTimeGetter={hasVideo ? registerTimeGetter : undefined}
-          seekTo={seek}
-        />
-      </section>
-
-      {(post.text || post.firstCommentText) && (
-        <details className="rounded-lg border border-border bg-surface">
-          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
-            Leggi il testo completo
-          </summary>
-          <div className="space-y-4 border-t border-border p-4">
-            {post.text && (
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold">Testo del post</h2>
-                <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+        <div className="space-y-4 lg:col-start-2 lg:row-start-2">
+          {(post.text || post.firstCommentText) && (
+            <details className="rounded-lg border border-border bg-surface">
+              <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+                Leggi il testo completo
+              </summary>
+              <div className="space-y-4 border-t border-border p-4">
+                {post.text && (
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-semibold">Testo del post</h2>
+                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+                  </div>
+                )}
+                {post.firstCommentText && (
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-semibold">Primo commento</h2>
+                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.firstCommentText}</p>
+                  </div>
+                )}
               </div>
-            )}
-            {post.firstCommentText && (
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold">Primo commento</h2>
-                <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.firstCommentText}</p>
-              </div>
-            )}
-          </div>
-        </details>
-      )}
+            </details>
+          )}
 
-      {changesSlot && (
-        <details className="rounded-lg border border-accent/40 bg-surface">
-          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
-            Modifiche dalla versione precedente
-          </summary>
-          <div className="border-t border-border p-2 sm:p-3">{changesSlot}</div>
-        </details>
-      )}
+          {changesSlot && (
+            <details className="rounded-lg border border-accent/40 bg-surface">
+              <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+                Modifiche dalla versione precedente
+              </summary>
+              <div className="border-t border-border p-2 sm:p-3">{changesSlot}</div>
+            </details>
+          )}
+        </div>
+      </div>
 
       {draft && canComment && (
         <CommentComposer
@@ -578,7 +588,7 @@ function PlanNav({ plan }: { plan: PortalPlanNav }) {
             href={plan.prevHref}
             className="flex min-h-11 items-center justify-start rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-border-hover"
           >
-            ‹ Post precedente
+            Post precedente
           </Link>
         ) : (
           <span className="flex min-h-11 items-center px-3 text-sm text-muted">Primo del piano</span>
@@ -588,7 +598,7 @@ function PlanNav({ plan }: { plan: PortalPlanNav }) {
             href={plan.nextHref}
             className="flex min-h-11 items-center justify-end rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-border-hover"
           >
-            Post successivo ›
+            Post successivo
           </Link>
         ) : (
           <span className="flex min-h-11 items-center justify-end px-3 text-sm text-muted">Ultimo del piano</span>

@@ -27,7 +27,7 @@ export default function PortalHeader({
 }) {
   return (
     <header className="border-b border-border bg-surface">
-      <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
         <Link href={homeHref} className="flex min-w-0 items-center gap-3">
           {logoUrl ? (
             <img
