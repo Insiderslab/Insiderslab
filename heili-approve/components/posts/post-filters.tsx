@@ -32,7 +32,7 @@ interface PostFiltersProps {
 }
 
 const selectClass =
-  "w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent/40 sm:w-auto";
+  "field sm:!w-auto";
 
 const DEFAULT_STATUSES: Option[] = POST_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] }));
 

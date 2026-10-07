@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/top-bar";
+import type { SwitcherClient } from "@/components/client-switcher";
 import type { AppVariant } from "@/lib/variant";
 
 interface DashboardShellProps {
@@ -12,6 +13,9 @@ interface DashboardShellProps {
   needsAttention: number;
   /** Product variant of this instance (read on the server, see lib/variant.ts). */
   variant: AppVariant;
+  /** Clients for the selector in the menu (not archived), and the one picked. */
+  clients: SwitcherClient[];
+  currentClientId: string | null;
 }
 
 export default function DashboardShell({
@@ -20,7 +24,10 @@ export default function DashboardShell({
   metricoolConnected,
   needsAttention,
   variant,
+  clients,
+  currentClientId,
 }: DashboardShellProps) {
+  const currentClient = clients.find((c) => c.id === currentClientId) ?? null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -31,6 +38,8 @@ export default function DashboardShell({
         onClose={() => setSidebarOpen(false)}
         workspaceName={workspaceName}
         variant={variant}
+        clients={clients}
+        currentClientId={currentClientId}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -39,10 +48,11 @@ export default function DashboardShell({
           metricoolConnected={metricoolConnected}
           needsAttention={needsAttention}
           variant={variant}
+          currentClientName={currentClient?.name ?? null}
         />
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="px-4 lg:px-8 py-5 sm:py-6 max-w-7xl mx-auto">
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:py-6 lg:px-8">
             {children}
           </div>
         </main>

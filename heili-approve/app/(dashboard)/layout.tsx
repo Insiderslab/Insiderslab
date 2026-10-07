@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/dashboard-shell";
 import { auth } from "@/lib/auth";
+import { getCurrentClientId } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { enabledKinds, getAppVariant } from "@/lib/variant";
 import { ensureWorkspaceForUser } from "@/lib/workspace";
@@ -32,11 +33,21 @@ export default async function DashboardLayout({
   // Items waiting on the agency: the client asked for changes, or scheduling
   // on Metricool failed. Only kinds this instance handles. Shown as a counter
   // in the top bar.
+  // The client picked in the menu scopes the counter too.
+  const [clients, currentClientId] = await Promise.all([
+    prisma.client.findMany({
+      where: { workspaceId: workspace.id, archivedAt: null },
+      select: { id: true, name: true, logoUrl: true },
+      orderBy: { name: "asc" },
+    }),
+    getCurrentClientId(workspace.id),
+  ]);
   const needsAttention = await prisma.post.count({
     where: {
       workspaceId: workspace.id,
       kind: { in: enabledKinds(variant) },
       status: { in: ["CHANGES_REQUESTED", "FAILED"] },
+      ...(currentClientId ? { clientId: currentClientId } : {}),
     },
   });
 
@@ -46,6 +57,8 @@ export default async function DashboardLayout({
       metricoolConnected={Boolean(workspace.metricoolTokenEncrypted)}
       needsAttention={needsAttention}
       variant={variant}
+      clients={clients}
+      currentClientId={currentClientId}
     >
       {children}
     </DashboardShell>

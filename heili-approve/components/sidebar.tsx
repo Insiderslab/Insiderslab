@@ -3,16 +3,20 @@
 /**
  * Sidebar Navigation
  *
- * Text-only nav with active state and workspace section. Entries follow the
- * product variant: one per enabled content kind ("Post", "Articoli",
- * "Creatività"), which share /posts and differ by ?kind= when there are
- * several.
+ * Heili layout: surface-sunken rail, symbol + product name at the top, the
+ * client selector ("Cliente attivo") right below it, then the menu with line
+ * icons. Entries follow the product variant: one per enabled content kind
+ * ("Post", "Articoli", "Creatività"), which share /posts and differ by ?kind=
+ * when there are several. Workspace and "Heili by 3Runes" sit in the footer.
  */
 
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ContentKind } from "@/app/generated/prisma/client";
+import { ApproveLockup } from "@/components/brand";
+import ClientSwitcher, { type SwitcherClient } from "@/components/client-switcher";
+import { KindIcon } from "@/components/posts/kind-badge";
 import WorkspaceSwitcher from "@/components/workspace-switcher";
 import { enabledKinds, navItems, parseKindParam, productName, type AppVariant, type NavItem } from "@/lib/variant";
 
@@ -21,6 +25,41 @@ interface SidebarProps {
   onClose: () => void;
   workspaceName: string;
   variant: AppVariant;
+  clients: SwitcherClient[];
+  currentClientId: string | null;
+}
+
+/** Line icons (24 grid, 1.75 stroke) for the fixed menu entries. */
+const NAV_ICONS: Record<string, string[]> = {
+  "/dashboard": ["M4 4h7v9H4z", "M13 4h7v5h-7z", "M13 11h7v9h-7z", "M4 15h7v5H4z"],
+  "/calendar": ["M4 6h16v14H4z", "M4 10h16", "M8 3v4", "M16 3v4", "M8 14h3"],
+  "/clients": ["M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", "M3 20c.6-3.4 3-5.5 6-5.5s5.4 2.1 6 5.5", "M15.5 4.5a3.5 3.5 0 0 1 0 6.5", "M17.5 14.8c1.9.7 3.1 2.5 3.5 5.2"],
+  "/settings": [
+    "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+    "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+  ],
+};
+
+function NavIcon({ item }: { item: NavItem }) {
+  if (item.kind) return <KindIcon kind={item.kind} className="h-5 w-5" />;
+  const paths = NAV_ICONS[item.href] ?? NAV_ICONS["/dashboard"];
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 shrink-0"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
 }
 
 function isPostsPath(pathname: string): boolean {
@@ -52,15 +91,13 @@ function NavList({ variant, activeKind, onClose }: NavListProps) {
             href={item.href}
             onClick={onClose}
             aria-current={isActive ? "page" : undefined}
-            className={`
-              block px-3 py-2.5 rounded text-sm
-              ${
-                isActive
-                  ? "bg-surface-hover text-foreground font-medium"
-                  : "text-muted hover:text-foreground hover:bg-surface-hover"
-              }
-            `}
+            className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-[15px] transition-colors ${
+              isActive
+                ? "bg-accent-soft font-semibold text-accent"
+                : "text-muted hover:bg-surface hover:text-foreground"
+            }`}
           >
+            <NavIcon item={item} />
             {item.label}
           </Link>
         );
@@ -75,50 +112,55 @@ function NavListWithKind(props: Omit<NavListProps, "activeKind">) {
   return <NavList {...props} activeKind={parseKindParam(searchParams.get("kind"))} />;
 }
 
-export default function Sidebar({
-  isOpen,
-  onClose,
-  workspaceName,
-  variant,
-}: SidebarProps) {
+/** Static stand-in while the selector reads the URL (no search params on the server). */
+function ClientSwitcherFallback({ clients, currentClientId }: { clients: SwitcherClient[]; currentClientId: string | null }) {
+  const current = clients.find((c) => c.id === currentClientId);
+  return (
+    <div>
+      <p className="label-caps mb-1.5 px-1">Cliente</p>
+      <div className="flex min-h-[50px] items-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold">
+        <span className="truncate">{current?.name ?? "Tutti i clienti"}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function Sidebar({ isOpen, onClose, workspaceName, variant, clients, currentClientId }: SidebarProps) {
   return (
     <>
       {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onClose} />}
 
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-dvh w-64 max-w-[85vw] shrink-0 bg-surface border-r border-border flex flex-col
+          fixed top-0 left-0 z-50 flex h-dvh w-72 max-w-[85vw] shrink-0 flex-col border-r border-border bg-surface-sunken
           transition-transform duration-200 ease-out
-          lg:h-full lg:translate-x-0 lg:static lg:z-auto
+          lg:static lg:z-auto lg:h-full lg:w-64 lg:translate-x-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        {/* Same reason as the top bar: the drawer is full height, so the
-            wordmark would otherwise land under the status bar. */}
-        <div
-          className="px-6 py-5 border-b border-border"
-          style={{ paddingTop: "calc(1.25rem + env(safe-area-inset-top))" }}
-        >
-          <Link href="/dashboard" className="text-base font-semibold">
-            {productName(variant)}
+        {/* The drawer is full height: keep the brand clear of the status bar. */}
+        <div className="px-5 pb-4" style={{ paddingTop: "calc(1.25rem + env(safe-area-inset-top))" }}>
+          <Link href="/dashboard" onClick={onClose} aria-label="Approve by Heili, vai alla dashboard">
+            <ApproveLockup subtitle={variant === "all" ? "by Heili" : productName(variant)} />
           </Link>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <div className="px-3 pb-3">
+          <Suspense fallback={<ClientSwitcherFallback clients={clients} currentClientId={currentClientId} />}>
+            <ClientSwitcher clients={clients} currentClientId={currentClientId} onNavigate={onClose} />
+          </Suspense>
+        </div>
+
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2" aria-label="Menu principale">
           <Suspense fallback={<NavList variant={variant} activeKind={null} onClose={onClose} />}>
             <NavListWithKind variant={variant} onClose={onClose} />
           </Suspense>
         </nav>
 
-        <div className="px-5 py-4 border-t border-border">
+        <div className="space-y-1 border-t border-border px-4 py-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <WorkspaceSwitcher fallbackName={workspaceName} />
-          <p className="text-xs text-muted mt-1">by 3Runes</p>
+          <p className="text-xs text-muted">Heili by 3Runes</p>
         </div>
       </aside>
     </>

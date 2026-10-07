@@ -22,6 +22,7 @@ import { emptyAdContent } from "@/lib/content/ads";
 import { emptyBlogContent } from "@/lib/content/blog";
 import { isNetwork } from "@/lib/domain";
 import { KIND_UI, enabledKinds, parseKindParam, postsHref, productName } from "@/lib/variant";
+import { getCurrentClientId } from "@/lib/current-client";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 type SearchParams = { kind?: string | string[]; clientId?: string | string[]; data?: string | string[] };
@@ -77,7 +78,8 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
 
   const params = await searchParams;
   const kinds = enabledKinds();
-  const requestedClient = first(params.clientId);
+  // The client in the URL, else the one picked in the menu.
+  const requestedClient = first(params.clientId) || ((await getCurrentClientId(context.workspaceId)) ?? "");
   const requestedDay = first(params.data);
   const day = isDayKey(requestedDay) ? requestedDay : null;
   const allClients = await loadEditorClients(context.workspaceId);

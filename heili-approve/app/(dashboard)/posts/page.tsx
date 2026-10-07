@@ -22,6 +22,7 @@ import {
 import PostFilters from "@/components/posts/post-filters";
 import PostList, { type PostListRow } from "@/components/posts/post-list";
 import { AD_PLATFORM_LABELS } from "@/lib/content/ads";
+import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, isNetwork, statusLabelFor, STATUS_LABELS } from "@/lib/domain";
 import { readKindContent, summarizeVersionForList } from "@/lib/posts";
@@ -96,8 +97,12 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
     orderBy: { name: "asc" },
   });
   const requestedClient = first(params.clientId);
-  // Only ids of this workspace reach the query.
-  const clientId = clients.some((c) => c.id === requestedClient) ? requestedClient : "";
+  // Only ids of this workspace reach the query; without one in the URL, the client picked in the menu.
+  const clientId = resolveClientScope(
+    requestedClient,
+    clients.map((c) => c.id),
+    await getCurrentClientId(context.workspaceId)
+  );
 
   const now = new Date();
   const where: Prisma.PostWhereInput = {

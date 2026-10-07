@@ -78,8 +78,8 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 
   return (
     <main className="space-y-8">
-      <section className="space-y-2">
-        <h1 className="text-2xl font-semibold">Ciao {firstName}!</h1>
+      <section className="panel space-y-3 p-5 sm:p-6">
+        <h1 className="text-[28px] font-semibold leading-tight">Ciao {firstName}!</h1>
         <p className="text-base text-muted">
           {groups.toReview.length === 0
             ? `Non ci sono ${noun.many} da approvare in questo momento. Ti scriveremo quando ce ne saranno di nuovi.`
@@ -92,10 +92,29 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
         {groups.toReview.length > 0 && (
           <Link
             href={portalPath(token, groups.toReview[0].id)}
-            className="mt-2 flex min-h-12 w-full items-center justify-center rounded-lg bg-accent px-5 text-base font-semibold text-white hover:bg-accent-hover sm:w-auto sm:inline-flex"
+            className="btn btn-primary !min-h-12 w-full !text-base sm:w-auto"
           >
             {groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Inizia dal primo"}
           </Link>
+        )}
+        {groups.toReview.length > 0 && (
+          <ol className="grid gap-2 pt-1 text-sm text-muted sm:grid-cols-3" aria-label="Come funziona">
+            {[
+              ["Guarda", `Apri ${noun.theOne} come apparirà davvero.`],
+              ["Commenta", "Tocca un punto o un secondo del video; puoi anche dettare a voce."],
+              ["Approva", "Un tocco e l'agenzia procede. Oppure chiedi modifiche."],
+            ].map(([title, text], index) => (
+              <li key={title} className="inset flex gap-2.5 p-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
+                  {index + 1}
+                </span>
+                <span>
+                  <span className="block font-semibold text-foreground">{title}</span>
+                  {text}
+                </span>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
 
@@ -152,7 +171,7 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
       )}
 
       {posts.length === 0 && (
-        <p className="rounded-lg border border-border bg-surface p-4 text-sm text-muted">
+        <p className="panel p-4 text-sm text-muted">
           Qui troverai {noun.theMany} che l&apos;agenzia prepara per {reviewer.client.name}, pronti da rivedere
           e approvare.
         </p>
@@ -184,13 +203,7 @@ function Section({
       <div className="space-y-1">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           {title}
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              highlight ? "bg-accent text-white" : "bg-surface text-muted"
-            }`}
-          >
-            {count}
-          </span>
+          <span className={highlight ? "chip chip-brand" : "chip chip-offline"}>{count}</span>
         </h2>
         {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
       </div>

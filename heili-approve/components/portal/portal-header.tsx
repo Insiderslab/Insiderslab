@@ -8,6 +8,7 @@
  */
 
 import Link from "next/link";
+import { HeiliSymbol } from "@/components/brand";
 import { initials } from "@/components/post-preview/helpers";
 
 export default function PortalHeader({
@@ -25,7 +26,7 @@ export default function PortalHeader({
   tagline?: string;
 }) {
   return (
-    <header className="border-b border-border bg-background">
+    <header className="border-b border-border bg-surface">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <Link href={homeHref} className="flex min-w-0 items-center gap-3">
           {logoUrl ? (
@@ -33,22 +34,25 @@ export default function PortalHeader({
               src={logoUrl}
               alt=""
               referrerPolicy="no-referrer"
-              className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
+              className="h-10 w-10 shrink-0 rounded-lg border border-border object-cover"
             />
           ) : (
             <span
               aria-hidden="true"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-xs font-semibold text-muted"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-sm font-semibold text-accent"
             >
               {initials(clientName)}
             </span>
           )}
           <span className="min-w-0">
-            <span className="block truncate text-base font-semibold">{clientName}</span>
+            <span className="block truncate font-display text-base font-semibold">{clientName}</span>
             {tagline && <span className="block text-xs leading-snug text-muted">{tagline}</span>}
           </span>
         </Link>
-        <span className="shrink-0 text-[11px] text-muted">{productName}</span>
+        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted" title={productName}>
+          <HeiliSymbol className="h-5 w-5" />
+          <span className="hidden sm:inline">{productName}</span>
+        </span>
       </div>
     </header>
   );

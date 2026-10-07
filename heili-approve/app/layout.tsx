@@ -47,6 +47,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it" className="h-full">
+      <head>
+        {/* Heili type: Schibsted Grotesk (titles), Source Sans 3 (text), IBM Plex Mono (data). */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Schibsted+Grotesk:wght@600;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+        />
+      </head>
       <body
         className="min-h-full bg-background text-foreground font-sans antialiased"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

@@ -39,6 +39,7 @@ import {
   weekDays,
 } from "@/components/posts/helpers";
 import { KindBadge, KindIcon } from "@/components/posts/kind-badge";
+import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, STATUS_LABELS, isNetwork, statusLabelFor } from "@/lib/domain";
 import { KIND_UI, enabledKinds, kindParam, productName, resolveKindFilter } from "@/lib/variant";
@@ -72,7 +73,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     select: { id: true, name: true, timezone: true, archivedAt: true },
     orderBy: { name: "asc" },
   });
-  const client = clients.find((c) => c.id === first(params.clientId)) ?? null;
+  // The client in the URL, else the one picked in the menu.
+  const scopedId = resolveClientScope(
+    first(params.clientId),
+    clients.map((c) => c.id),
+    await getCurrentClientId(context.workspaceId)
+  );
+  const client = clients.find((c) => c.id === scopedId) ?? null;
   const timezone = client?.timezone ?? DEFAULT_TIME_ZONE;
 
   const kinds = enabledKinds();

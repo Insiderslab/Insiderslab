@@ -15,7 +15,7 @@ import { useState, useTransition } from "react";
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
 import { canTransition, type MediaType } from "@/lib/domain";
-import { DEFAULT_TIME_ZONE, TONE_BORDER, formatDateTime, localPartsToUtc, statusTone, timeZoneAbbr } from "./helpers";
+import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, timeZoneAbbr } from "./helpers";
 import { KindBadge, KindIcon, KindStatusBadge } from "./kind-badge";
 
 export interface PostListRow {
@@ -39,7 +39,7 @@ function Thumbnail({ media, kind }: { media: PostListRow["thumbnail"]; kind: Con
   if (!media) {
     return (
       <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-border bg-surface-hover text-muted"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-muted"
         aria-hidden
       >
         {kind !== "SOCIAL_POST" && <KindIcon kind={kind} className="h-5 w-5" />}
@@ -54,13 +54,13 @@ function Thumbnail({ media, kind }: { media: PostListRow["thumbnail"]; kind: Con
         preload="metadata"
         muted
         playsInline
-        className="h-11 w-11 shrink-0 rounded border border-border object-cover"
+        className="h-11 w-11 shrink-0 rounded-lg object-cover"
         aria-hidden
       />
     );
   }
   // eslint-disable-next-line @next/next/no-img-element -- uploaded media, arbitrary sizes
-  return <img src={media.url} alt="" className="h-11 w-11 shrink-0 rounded border border-border object-cover" />;
+  return <img src={media.url} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />;
 }
 
 function Extra({ row }: { row: PostListRow }) {
@@ -156,7 +156,7 @@ export default function PostList({
   return (
     <div className="space-y-3">
       {selectable.length > 0 && (
-        <div className="panel flex flex-col gap-3 rounded p-3 text-sm sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="panel flex flex-col gap-3 p-3 text-sm sm:flex-row sm:flex-wrap sm:items-center">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={allChosen} onChange={toggleAll} className="h-4 w-4 accent-accent" />
             {chosen.length > 0
@@ -171,7 +171,7 @@ export default function PostList({
                   type="date"
                   value={dueDate}
                   onChange={(event) => setDueDate(event.target.value)}
-                  className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-accent/40"
+                  className="field !min-h-9 !w-auto !py-1"
                 />
                 {dueDate && <span className="text-xs">alle 18:00 ({timeZoneAbbr(DEFAULT_TIME_ZONE)})</span>}
               </label>
@@ -179,7 +179,7 @@ export default function PostList({
                 type="button"
                 onClick={submit}
                 disabled={pending}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:ml-auto"
+                className="btn btn-primary sm:ml-auto"
               >
                 {pending ? "Invio…" : `Invia in revisione (${chosen.length})`}
               </button>
@@ -191,9 +191,9 @@ export default function PostList({
       {notice && <p className="text-sm text-success">{notice}</p>}
 
       {/* ── Desktop table ── */}
-      <div className="hidden overflow-hidden rounded border border-border md:block">
+      <div className="panel hidden overflow-hidden md:block">
         <table className="w-full text-sm">
-          <thead className="bg-surface text-left text-xs text-muted">
+          <thead className="bg-surface-sunken text-left text-xs text-muted">
             <tr>
               <th className="w-10 px-3 py-2" />
               <th className="px-3 py-2 font-medium">Titolo</th>
@@ -205,13 +205,13 @@ export default function PostList({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} className="border-t border-border align-top hover:bg-surface">
+              <tr key={row.id} className="border-t border-border align-top hover:bg-background">
                 <td className="px-3 py-3">{checkbox(row)}</td>
                 <td className="px-3 py-3">
                   <div className="flex min-w-0 gap-3">
                     <Thumbnail media={row.thumbnail} kind={row.kind} />
                     <div className="min-w-0">
-                      <Link href={`/posts/${row.id}`} className="font-medium text-foreground hover:underline">
+                      <Link href={`/posts/${row.id}`} className="font-semibold text-foreground hover:underline">
                         {row.title}
                       </Link>
                       <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted">
@@ -250,15 +250,15 @@ export default function PostList({
         {rows.map((row) => (
           <li
             key={row.id}
-            className={`flex gap-3 rounded border border-l-4 border-border bg-surface p-3 ${TONE_BORDER[statusTone(row.status)]}`}
+            className="panel flex gap-3 p-3"
           >
             <div className="pt-0.5">{checkbox(row)}</div>
             <Thumbnail media={row.thumbnail} kind={row.kind} />
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <Link href={`/posts/${row.id}`} className="min-w-0 break-words text-sm font-medium hover:underline">
-                  {row.title}
-                </Link>
+              <Link href={`/posts/${row.id}`} className="block min-w-0 break-words font-semibold hover:underline">
+                {row.title}
+              </Link>
+              <div className="mt-1">
                 <KindStatusBadge kind={row.kind} status={row.status} />
               </div>
               <p className="mt-0.5 text-xs text-muted">

@@ -8,7 +8,7 @@
 
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { KIND_CONFIG, STATUS_TONES, statusLabelFor } from "@/lib/domain";
-import { TONE_TEXT } from "./helpers";
+import { ToneChip } from "@/components/status-badge";
 
 /** Short names for badges (KIND_CONFIG.label is "Creatività ads", too long in a cell). */
 export const KIND_SHORT_LABELS: Record<ContentKind, string> = {
@@ -70,8 +70,6 @@ export function KindBadge({
 /** Like StatusBadge, worded for the kind (DELIVERED = "Pubblicato" for blog). */
 export function KindStatusBadge({ kind, status }: { kind: ContentKind; status: PostStatus }) {
   return (
-    <span className={`shrink-0 whitespace-nowrap text-sm font-medium ${TONE_TEXT[STATUS_TONES[status]]}`}>
-      {statusLabelFor(kind, status)}
-    </span>
+    <ToneChip tone={STATUS_TONES[status]}>{statusLabelFor(kind, status)}</ToneChip>
   );
 }

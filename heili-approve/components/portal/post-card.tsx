@@ -31,10 +31,10 @@ export interface PortalPostCardData {
   reviewDueLabel: string | null;
 }
 
-const toneClass = {
-  action: "text-accent",
-  waiting: "text-warning",
-  done: "text-success",
+const toneChip = {
+  action: "chip chip-brand",
+  waiting: "chip chip-stale",
+  done: "chip chip-fresh",
 } as const;
 
 export function PostThumb({
@@ -48,7 +48,7 @@ export function PostThumb({
   emptyLabel?: string;
 }) {
   return (
-    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-border bg-surface sm:h-24 sm:w-24">
+    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:h-24 sm:w-24">
       {cover?.type === "image" && (
         <img
           src={cover.url}
@@ -111,7 +111,7 @@ export default function PostCard({ post, href }: { post: PortalPostCardData; hre
   return (
     <Link
       href={href}
-      className="flex gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:border-border-hover hover:bg-surface"
+      className="panel flex gap-3 p-3 transition-colors hover:border-line-strong sm:p-4"
     >
       <PostThumb
         cover={post.cover}
@@ -120,12 +120,8 @@ export default function PostCard({ post, href }: { post: PortalPostCardData; hre
       />
       <div className="min-w-0 flex-1 space-y-1">
         <KindLabel kind={post.kind} />
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{post.title}</h3>
-          <span className={`shrink-0 text-xs font-medium ${toneClass[tone]}`}>
-            {portalStatusLabel(post.kind, post.status)}
-          </span>
-        </div>
+        <h3 className="line-clamp-2 text-base font-semibold leading-snug">{post.title}</h3>
+        <span className={toneChip[tone]}>{portalStatusLabel(post.kind, post.status)}</span>
         <p className="text-sm">
           <span className="text-muted">{dateLabelFor(post.kind)}: </span>
           {post.publishLabel}
