@@ -4,14 +4,18 @@
  * Every client of the workspace with its services, Metricool brand and
  * networks (clients with social posts, on instances that handle them),
  * reviewers and how many items of the enabled kinds sit in each status.
+ * "Copia link" copies the personal link of the client's first active
+ * reviewer, to send it without opening the client (not for archived ones).
  */
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import CopyButton from "@/components/clients/copy-button";
 import { groupStatusCounts, statusCountEntries, totalPosts, clientInitials } from "@/components/clients/helpers";
 import { contentWords } from "@/components/posts/helpers";
 import { clientServices, listClients } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
+import { getReviewUrl } from "@/lib/reviewers";
 import { NETWORK_LABELS, STATUS_TONES, isNetwork } from "@/lib/domain";
 import { KIND_UI, enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
@@ -43,7 +47,7 @@ export default async function ClientsPage({
   const words = contentWords(kinds);
   const metricoolEnabled = isMetricoolEnabled();
 
-  const [clients, grouped, metricool] = await Promise.all([
+  const [clients, grouped, metricool, firstReviewers] = await Promise.all([
     listClients(context.workspaceId, { includeArchived: showArchived }),
     prisma.post.groupBy({
       by: ["clientId", "status"],
@@ -54,7 +58,23 @@ export default async function ClientsPage({
       where: { id: context.workspaceId },
       select: { metricoolTokenEncrypted: true },
     }),
+    // Oldest active reviewer first: the one "Copia link" copies.
+    prisma.clientReviewer.findMany({
+      where: { active: true, client: { workspaceId: context.workspaceId, archivedAt: null } },
+      orderBy: { createdAt: "asc" },
+      select: { clientId: true, name: true, tokenEncrypted: true },
+    }),
   ]);
+
+  const firstLink = new Map<string, { name: string; url: string }>();
+  for (const reviewer of firstReviewers) {
+    if (firstLink.has(reviewer.clientId)) continue;
+    try {
+      firstLink.set(reviewer.clientId, { name: reviewer.name, url: getReviewUrl(reviewer) });
+    } catch {
+      // Unreadable token (key rotated): the client page offers "Nuovo link".
+    }
+  }
 
   const counts = groupStatusCounts(
     grouped.map((row) => ({ clientId: row.clientId, status: row.status, count: row._count._all }))
@@ -123,10 +143,11 @@ export default async function ClientsPage({
           const services = clientServices(client, kinds);
           const social = metricoolEnabled && services.includes("SOCIAL_POST");
           const networks = social ? client.networks.filter(isNetwork) : [];
+          const link = client.archivedAt ? undefined : firstLink.get(client.id);
           return (
             <div
               key={client.id}
-              className={`panel rounded p-4 transition-colors hover:border-border-hover ${
+              className={`panel p-4 transition-colors hover:border-border-hover ${
                 client.archivedAt ? "opacity-70" : ""
               }`}
             >
@@ -136,10 +157,10 @@ export default async function ClientsPage({
                   <img
                     src={client.logoUrl}
                     alt=""
-                    className="h-12 w-12 shrink-0 rounded border border-border object-cover"
+                    className="h-12 w-12 shrink-0 rounded-xl object-cover"
                   />
                 ) : (
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border bg-background text-sm font-semibold text-muted">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-sm font-semibold text-accent">
                     {clientInitials(client.name)}
                   </div>
                 )}
@@ -208,19 +229,18 @@ export default async function ClientsPage({
                   </div>
                 </div>
 
-                <div className="flex w-full gap-2 sm:w-auto">
+                <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                  {link && (
+                    <span className="flex flex-1 sm:flex-none" title={`Link personale di ${link.name}`} data-testid="client-copy-link">
+                      <CopyButton value={link.url} className="btn btn-sm w-full sm:w-auto" />
+                    </span>
+                  )}
                   {total > 0 && (
-                    <Link
-                      href={`/posts?clientId=${client.id}`}
-                      className="flex-1 rounded border border-border px-3 py-1.5 text-center text-xs font-medium text-muted hover:text-foreground sm:flex-none"
-                    >
+                    <Link href={`/posts?clientId=${client.id}`} className="btn btn-sm btn-quiet flex-1 sm:flex-none">
                       {words.Plural} ({total})
                     </Link>
                   )}
-                  <Link
-                    href={`/clients/${client.id}`}
-                    className="flex-1 rounded border border-border px-3 py-1.5 text-center text-xs font-medium text-muted hover:text-foreground sm:flex-none"
-                  >
+                  <Link href={`/clients/${client.id}`} className="btn btn-sm btn-quiet flex-1 sm:flex-none">
                     Apri
                   </Link>
                 </div>

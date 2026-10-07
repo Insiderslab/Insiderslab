@@ -1,6 +1,9 @@
 /**
  * Client Detail Page
  *
+ * First, "Link per il cliente": the personal link of each active reviewer,
+ * ready to copy or send on WhatsApp (or a quick "Chi approva?" form that
+ * creates one). Then
  * One overview per service of the client (social posts, articles, ads
  * creatives: how many wait for the client, have changes requested, are
  * approved, are scheduled / published / delivered, with links to the
@@ -24,6 +27,7 @@ import {
   serviceOverview,
 } from "@/components/clients/helpers";
 import ReviewerList, { type ReviewerRow } from "@/components/clients/reviewer-list";
+import ClientLinksPanel from "@/components/share/client-links-panel";
 import { buildPostsHref, contentWords, newContentHref } from "@/components/posts/helpers";
 import { KindBadge, KindIcon, KindStatusBadge } from "@/components/posts/kind-badge";
 import { clientServices, getClient } from "@/lib/clients";
@@ -135,6 +139,9 @@ export default async function ClientDetailPage({
     createdLabel: formatDateTime(reviewer.createdAt),
   }));
   const activeReviewers = reviewers.filter((r) => r.active).length;
+  const linkRows = reviewers
+    .filter((r) => r.active)
+    .map(({ id, name, email, reviewUrl, lastSeenLabel }) => ({ id, name, email, reviewUrl, lastSeenLabel }));
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -149,15 +156,15 @@ export default async function ClientDetailPage({
           <img
             src={client.logoUrl}
             alt=""
-            className="h-14 w-14 shrink-0 rounded border border-border object-cover"
+            className="h-14 w-14 shrink-0 rounded-xl object-cover"
           />
         ) : (
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-border bg-surface text-base font-semibold text-muted">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-base font-semibold text-accent">
             {clientInitials(client.name)}
           </div>
         )}
         <div className="min-w-0">
-          <h2 className="truncate text-xl font-semibold">{client.name}</h2>
+          <h2 className="break-words text-2xl font-semibold">{client.name}</h2>
           <p className="text-sm text-muted">
             {client.timezone}
             {social && client.metricoolBlogId ? " · brand Metricool collegato" : ""}
@@ -172,7 +179,7 @@ export default async function ClientDetailPage({
       </div>
 
       {archived && (
-        <div className="panel rounded p-4 text-sm">
+        <div className="panel p-4 text-sm">
           <p className="text-warning">
             Cliente archiviato il {formatDateTime(client.archivedAt!)}: i link dei referenti non funzionano.
           </p>
@@ -181,23 +188,30 @@ export default async function ClientDetailPage({
       )}
 
       {query.nuovo === "1" && !archived && activeReviewers === 0 && (
-        <div className="panel rounded p-4 text-sm">
+        <p className="text-sm">
           <span className="text-success">Cliente creato.</span>{" "}
-          <span className="text-muted">Ora aggiungi chi deve approvare {words.the}.</span>
-        </div>
+          <span className="text-muted">Ora crea il link per chi deve approvare {words.the}.</span>
+        </p>
+      )}
+
+      {/* Links to send to the client (never for archived clients: their links do not work) */}
+      {!archived && (
+        <ClientLinksPanel
+          clientId={client.id}
+          clientName={client.name}
+          reviewers={linkRows}
+          contentsThe={words.the}
+        />
       )}
 
       {/* Services */}
-      <section className="panel rounded p-4 sm:p-6" aria-labelledby="client-services">
+      <section className="panel p-4 sm:p-6" aria-labelledby="client-services">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 id="client-services" className="text-base font-semibold">
+          <h3 id="client-services" className="text-lg font-semibold">
             {kinds.length > 1 ? "Servizi" : words.Plural}
           </h3>
           {total > 0 && (
-            <Link
-              href={`/posts?clientId=${client.id}`}
-              className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
-            >
+            <Link href={`/posts?clientId=${client.id}`} className="btn btn-sm btn-quiet">
               {words.all} ({total})
             </Link>
           )}
@@ -215,7 +229,7 @@ export default async function ClientDetailPage({
               return (
                 <div
                   key={kind}
-                  className="rounded border border-border bg-background p-3 sm:p-4"
+                  className="inset p-3 sm:p-4"
                   data-testid={`service-${kindParam(kind)}`}
                 >
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -226,18 +240,12 @@ export default async function ClientDetailPage({
                     </h4>
                     <div className="flex gap-2">
                       {overview.total > 0 && (
-                        <Link
-                          href={listHref(kind)}
-                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
-                        >
+                        <Link href={listHref(kind)} className="btn btn-sm btn-quiet">
                           Vedi tutti ({overview.total})
                         </Link>
                       )}
                       {active && !archived && (
-                        <Link
-                          href={newContentHref(kind, { clientId: client.id })}
-                          className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
-                        >
+                        <Link href={newContentHref(kind, { clientId: client.id })} className="btn btn-sm">
                           {KIND_UI[kind].newTitle}
                         </Link>
                       )}
@@ -248,10 +256,10 @@ export default async function ClientDetailPage({
                       <Link
                         key={entry.key}
                         href={listHref(kind, entry.status)}
-                        className="rounded border border-border p-2.5 hover:border-border-hover"
+                        className="rounded-lg bg-surface p-2.5 transition-colors hover:bg-surface-hover"
                       >
                         <p className={`text-xs ${toneClass[entry.tone]}`}>{entry.label}</p>
-                        <p className="mt-0.5 text-lg font-semibold">{entry.count}</p>
+                        <p className="tabular mt-0.5 text-lg font-semibold">{entry.count}</p>
                       </Link>
                     ))}
                   </div>
@@ -283,7 +291,7 @@ export default async function ClientDetailPage({
         )}
 
         {recentPosts.length > 0 && (
-          <ul className="divide-y divide-border rounded border border-border bg-background">
+          <ul className="divide-y divide-border">
             {recentPosts.map((post) => {
               const social = post.kind === "SOCIAL_POST";
               const media = social ? parseMediaItems(post.versions[0]?.media) : [];
@@ -294,7 +302,7 @@ export default async function ClientDetailPage({
                 <li key={post.id}>
                   <Link
                     href={`/posts/${post.id}`}
-                    className="flex flex-col gap-1 p-3 hover:bg-surface-hover sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                    className="-mx-2 flex flex-col gap-1 rounded-lg px-2 py-3 hover:bg-surface-hover sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
                     <div className="min-w-0">
                       <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
@@ -321,8 +329,8 @@ export default async function ClientDetailPage({
       </section>
 
       {/* Reviewers */}
-      <section className="panel rounded p-4 sm:p-6">
-        <h3 className="mb-1 text-base font-semibold">Referenti</h3>
+      <section id="referenti" className="panel scroll-mt-4 p-4 sm:p-6">
+        <h3 className="mb-1 text-lg font-semibold">Referenti</h3>
         <p className="mb-4 text-sm text-muted">
           Le persone di {client.name} che rivedono e approvano {words.the} dal proprio link personale.
         </p>
@@ -336,8 +344,8 @@ export default async function ClientDetailPage({
       </section>
 
       {/* Settings */}
-      <section className="panel rounded p-4 sm:p-6">
-        <h3 className="mb-6 text-base font-semibold">Dati del cliente</h3>
+      <section className="panel p-4 sm:p-6">
+        <h3 className="mb-6 text-lg font-semibold">Dati del cliente</h3>
         <ClientForm
           mode="edit"
           clientId={client.id}
@@ -359,8 +367,8 @@ export default async function ClientDetailPage({
       </section>
 
       {/* Archive */}
-      <section className="panel rounded p-4 sm:p-6">
-        <h3 className="mb-1 text-base font-semibold">{archived ? "Ripristina" : "Archivia"}</h3>
+      <section className="panel p-4 sm:p-6">
+        <h3 className="mb-1 text-lg font-semibold">{archived ? "Ripristina" : "Archivia"}</h3>
         <p className="mb-4 text-sm text-muted">
           {archived
             ? "Il cliente torna negli elenchi; i referenti attivi possono di nuovo usare il loro link."

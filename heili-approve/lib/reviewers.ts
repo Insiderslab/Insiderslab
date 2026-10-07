@@ -5,12 +5,16 @@
  * looked up by its SHA-256 hash (a DB leak does not leak working links) and
  * also stored AES-encrypted so the agency can copy or re-send the same link.
  * Rotating the link invalidates the old one immediately.
+ *
+ * The email is optional: it is only used for email notifications. Without it
+ * the agency copies the link and sends it itself (WhatsApp, message…).
  */
 
 import { z } from "zod";
-import type { Client, ClientReviewer } from "@/app/generated/prisma/client";
+import type { Client, ClientReviewer, ContentKind } from "@/app/generated/prisma/client";
 import { Prisma } from "@/app/generated/prisma/client";
 import { decryptSecret, encryptSecret, generateToken, hashToken } from "@/lib/crypto";
+import { clientServices } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
 import { getBaseUrl } from "@/lib/env";
 import { renderEmail, sendEmail } from "@/lib/email";
@@ -19,14 +23,23 @@ import { ConflictError, NotFoundError, ValidationError, parseOrThrow } from "@/l
 /** lastSeenAt is refreshed at most this often, to avoid a write per page view. */
 export const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
 
+/** Said when an email action is asked for a reviewer without email. */
+export const NO_EMAIL_MESSAGE =
+  "Questo referente non ha un'email: copia il link e mandalo tu (WhatsApp, messaggio…).";
+
+/** Optional email: empty or missing → null, otherwise a valid lower-case address. */
+const optionalEmailSchema = z
+  .string()
+  .nullish()
+  .transform((value) => {
+    const email = (value ?? "").trim().toLowerCase();
+    return email === "" ? null : email;
+  })
+  .pipe(z.email("Indirizzo email non valido").max(254, "Indirizzo email troppo lungo").nullable());
+
 export const reviewerInputSchema = z.object({
   name: z.string().trim().min(1, "Inserisci il nome del referente").max(120),
-  email: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .pipe(z.email("Indirizzo email non valido"))
-    .pipe(z.string().max(254)),
+  email: optionalEmailSchema,
 });
 
 export type ReviewerInput = z.input<typeof reviewerInputSchema>;
@@ -64,6 +77,15 @@ export function getReviewUrl(reviewer: Pick<ClientReviewer, "tokenEncrypted">): 
   return buildReviewUrl(decryptSecret(reviewer.tokenEncrypted));
 }
 
+/**
+ * Deep link straight to one item in the reviewer's portal
+ * (/review/<token>/posts/<postId>). Server-side only. The portal page checks
+ * that the item belongs to the reviewer's client and is visible to it.
+ */
+export function getReviewPostUrl(reviewer: Pick<ClientReviewer, "tokenEncrypted">, postId: string): string {
+  return `${getReviewUrl(reviewer)}/posts/${encodeURIComponent(postId)}`;
+}
+
 export async function listReviewers(clientId: string, workspaceId: string): Promise<ClientReviewer[]> {
   await findClientOrThrow(clientId, workspaceId);
   return prisma.clientReviewer.findMany({
@@ -74,7 +96,8 @@ export async function listReviewers(clientId: string, workspaceId: string): Prom
 
 /**
  * Adds a reviewer to a client. Re-adding a deactivated reviewer with the same
- * email reactivates them with a brand new link.
+ * email reactivates them with a brand new link. Without an email a new
+ * reviewer is always created (names are not unique).
  */
 export async function createReviewer(
   clientId: string,
@@ -86,9 +109,11 @@ export async function createReviewer(
   if (client.archivedAt) throw new ValidationError("Il cliente è archiviato");
 
   const issued = issueReviewerToken();
-  const existing = await prisma.clientReviewer.findUnique({
-    where: { clientId_email: { clientId, email: data.email } },
-  });
+  const existing = data.email
+    ? await prisma.clientReviewer.findUnique({
+        where: { clientId_email: { clientId, email: data.email } },
+      })
+    : null;
 
   if (existing?.active) {
     throw new ConflictError("Esiste già un referente con questa email per il cliente");
@@ -134,8 +159,9 @@ export async function updateReviewer(
     return await prisma.clientReviewer.update({
       where: { id: reviewerId },
       data: {
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(input.name !== undefined ? { name: data.name } : {}),
+        // Missing = unchanged; "" or null = remove the email.
+        ...(input.email !== undefined ? { email: data.email ?? null } : {}),
       },
     });
   } catch (error) {
@@ -160,6 +186,21 @@ export async function rotateReviewerLink(
   return { reviewer, reviewUrl: buildReviewUrl(issued.token) };
 }
 
+/** Turns a deactivated reviewer back on, with a brand new link. */
+export async function reactivateReviewer(
+  reviewerId: string,
+  workspaceId: string
+): Promise<{ reviewer: ClientReviewer; reviewUrl: string }> {
+  const existing = await findReviewerOrThrow(reviewerId, workspaceId);
+  if (existing.client.archivedAt) throw new ValidationError("Il cliente è archiviato");
+  const issued = issueReviewerToken();
+  const reviewer = await prisma.clientReviewer.update({
+    where: { id: reviewerId },
+    data: { active: true, tokenHash: issued.tokenHash, tokenEncrypted: issued.tokenEncrypted },
+  });
+  return { reviewer, reviewUrl: buildReviewUrl(issued.token) };
+}
+
 /** Disables the link and stops emails. The row stays for the audit log. */
 export async function deactivateReviewer(reviewerId: string, workspaceId: string): Promise<ClientReviewer> {
   await findReviewerOrThrow(reviewerId, workspaceId);
@@ -168,28 +209,32 @@ export async function deactivateReviewer(reviewerId: string, workspaceId: string
 
 /**
  * Emails the reviewer their personal link ("Reinvia link").
- * Returns false when the email could not be sent.
+ * Returns false when the email could not be sent; throws a ValidationError
+ * (NO_EMAIL_MESSAGE) when the reviewer has no email.
  */
 export async function sendReviewerLink(reviewerId: string, workspaceId: string): Promise<boolean> {
   const reviewer = await findReviewerOrThrow(reviewerId, workspaceId);
   if (!reviewer.active) throw new ValidationError("Il referente è disattivato");
+  if (!reviewer.email) throw new ValidationError(NO_EMAIL_MESSAGE);
 
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },
     select: { name: true },
   });
+  // Worded for what the agency prepares for this client ("i post", "gli articoli", "i contenuti").
+  const words = reviewerContentWords(clientServices(reviewer.client));
   const { html, text } = renderEmail({
-    heading: `Il tuo link per approvare i post di ${reviewer.client.name}`,
+    heading: `Il tuo link per approvare ${words.the} di ${reviewer.client.name}`,
     paragraphs: [
       `Ciao ${reviewer.name},`,
-      `${workspace?.name ?? "L'agenzia"} usa Approve by Heili per farti rivedere i post prima della pubblicazione. Da questo link personale puoi vedere le anteprime, commentare e approvare, senza password.`,
+      `${workspace?.name ?? "L'agenzia"} usa Approve by Heili per farti rivedere ${words.the} prima della pubblicazione. Da questo link personale puoi vedere le anteprime, commentare e approvare, senza password.`,
       "Il link è personale: non inoltrarlo.",
     ],
-    cta: { label: "Apri i post da rivedere", url: getReviewUrl(reviewer) },
+    cta: { label: `Apri ${words.the} da rivedere`, url: getReviewUrl(reviewer) },
   });
   const result = await sendEmail({
     to: reviewer.email,
-    subject: `Link per la revisione dei post di ${reviewer.client.name}`,
+    subject: `Link per la revisione ${words.of} di ${reviewer.client.name}`,
     html,
     text,
   });
@@ -245,4 +290,17 @@ async function findReviewerOrThrow(reviewerId: string, workspaceId: string): Pro
   });
   if (!reviewer) throw new NotFoundError("Referente non trovato");
   return reviewer;
+}
+
+/** "i post" / "gli articoli" / "le creatività" / "i contenuti" for the reviewer email (pure). */
+export function reviewerContentWords(kinds: readonly ContentKind[]): { the: string; of: string } {
+  if (kinds.length !== 1) return { the: "i contenuti", of: "dei contenuti" };
+  switch (kinds[0]) {
+    case "BLOG_ARTICLE":
+      return { the: "gli articoli", of: "degli articoli" };
+    case "AD_CREATIVE":
+      return { the: "le creatività", of: "delle creatività" };
+    default:
+      return { the: "i post", of: "dei post" };
+  }
 }

@@ -187,7 +187,10 @@ model ClientReviewer {
   id             String    @id @default(cuid())
   clientId       String
   name           String
-  email          String
+  /// Facoltativa: serve solo per le notifiche via email. Senza email l'agenzia
+  /// manda il link a mano (WhatsApp, messaggio…). Postgres ammette più NULL
+  /// nell'indice univoco (clientId, email).
+  email          String?
   tokenHash      String    @unique
   /// Stesso token cifrato (lib/crypto.ts), per poter rimandare il link via email.
   tokenEncrypted String

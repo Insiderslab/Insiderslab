@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ContentKind } from "@/app/generated/prisma/client";
 import type { ActionResult, CommentInput, ContentFormInput, PostFormInput } from "@/components/posts/types";
+import { nobodyEmailed, submitFollowUp } from "@/components/share/messages";
 import { userActor } from "@/lib/actor";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, type MediaItem, type Network } from "@/lib/domain";
@@ -98,6 +99,13 @@ function sentMessage(count: number, kinds: ContentKind[]): string {
   const unique = [...new Set(kinds)];
   const subject = unique.length > 1 ? { one: "Contenuto", many: "contenuti" } : KIND_SUBJECT[unique[0] ?? "SOCIAL_POST"];
   return count === 1 ? `${subject.one} inviato in revisione.` : `${count} ${subject.many} inviati in revisione.`;
+}
+
+/** "Post pronto per il cliente." / "3 articoli pronti per il cliente." — when nobody gets an email. */
+function readyMessage(count: number, kinds: ContentKind[]): string {
+  const unique = [...new Set(kinds)];
+  const subject = unique.length > 1 ? { one: "Contenuto", many: "contenuti" } : KIND_SUBJECT[unique[0] ?? "SOCIAL_POST"];
+  return count === 1 ? `${subject.one} pronto per il cliente.` : `${count} ${subject.many} pronti per il cliente.`;
 }
 
 /** Runs `fn` for the signed-in workspace, mapping domain errors to messages. */
@@ -295,14 +303,20 @@ export async function submitForReviewAction(
     revalidatePosts(result.submitted);
 
     const count = result.submitted.length;
-    const kinds = await prisma.post.findMany({
+    const sent = await prisma.post.findMany({
       where: { id: { in: result.submitted }, workspaceId },
-      select: { kind: true },
+      select: { kind: true, clientId: true },
     });
-    let message = sentMessage(count, kinds.map((p) => p.kind));
-    if (result.clientsWithoutReviewers.length > 0) {
-      message += ` Attenzione: ${result.clientsWithoutReviewers.join(", ")} non ha referenti attivi, quindi nessuno riceverà l'email. Aggiungili nella scheda del cliente.`;
-    }
+    const kinds = sent.map((p) => p.kind);
+    const recipients = {
+      clientCount: new Set(sent.map((p) => p.clientId)).size,
+      clientsWithoutReviewers: result.clientsWithoutReviewers,
+      clientsWithoutEmail: result.clientsWithoutEmail,
+    };
+    // Nobody to email (reviewers without an address): the item is ready, the agency shares the link.
+    const linkOnly = result.clientsWithoutReviewers.length === 0 && nobodyEmailed(recipients);
+    const followUp = submitFollowUp(recipients);
+    const message = `${linkOnly ? readyMessage(count, kinds) : sentMessage(count, kinds)}${followUp ? ` ${followUp}` : ""}`;
     return { ok: true, data: { submitted: count }, message };
   });
 }

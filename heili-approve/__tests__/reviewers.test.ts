@@ -3,6 +3,7 @@ import { decryptSecret, hashToken } from "../lib/crypto";
 import {
   LAST_SEEN_THROTTLE_MS,
   buildReviewUrl,
+  getReviewPostUrl,
   getReviewUrl,
   isPlausibleReviewToken,
   issueReviewerToken,
@@ -45,6 +46,17 @@ describe("reviewer link tokens", () => {
     expect(getReviewUrl({ tokenEncrypted: issued.tokenEncrypted })).toBe(buildReviewUrl(issued.token));
   });
 
+  it("deep-links a reviewer straight to one item", () => {
+    const issued = issueReviewerToken();
+    const reviewer = { tokenEncrypted: issued.tokenEncrypted };
+    expect(getReviewPostUrl(reviewer, "cmabc123")).toBe(
+      `https://approve.example.com/review/${issued.token}/posts/cmabc123`
+    );
+    expect(getReviewPostUrl(reviewer, "a/b?c")).toBe(
+      `https://approve.example.com/review/${issued.token}/posts/a%2Fb%3Fc`
+    );
+  });
+
   it("rejects implausible tokens before touching the database", () => {
     expect(isPlausibleReviewToken(issueReviewerToken().token)).toBe(true);
     expect(isPlausibleReviewToken("")).toBe(false);
@@ -74,6 +86,12 @@ describe("reviewer input", () => {
       name: "Giulia",
       email: "giulia@example.com",
     });
+  });
+
+  it("accepts a reviewer without email (empty or missing → null)", () => {
+    for (const email of [undefined, null, "", "   "]) {
+      expect(reviewerInputSchema.parse({ name: "Paolo", email })).toEqual({ name: "Paolo", email: null });
+    }
   });
 
   it("rejects invalid input", () => {

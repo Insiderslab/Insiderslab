@@ -138,10 +138,13 @@ export default function PostActions({
 
       {panel === "submit" && (
         <div className="panel space-y-3 rounded p-4 text-sm">
-          <p>Il cliente riceverà un&apos;email con il link per rivedere e approvare {noun.the}.</p>
+          <p>
+            Il cliente vedrà {noun.the} dal suo link personale. Chi ha un&apos;email riceve un avviso; agli altri
+            mandi tu il link dal riquadro «Condividi con il cliente».
+          </p>
           {activeReviewers === 0 && (
             <p className="text-warning">
-              Il cliente non ha referenti attivi: nessuno riceverà l&apos;email. Aggiungili nella scheda del cliente.
+              Il cliente non ha referenti attivi: nessuno potrà vedere {noun.the}. Aggiungili nella scheda del cliente.
             </p>
           )}
           {issueCount > 0 &&

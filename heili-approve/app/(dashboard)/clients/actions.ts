@@ -22,8 +22,10 @@ import {
 } from "@/lib/clients";
 import { isDomainError, parseOrThrow, publicErrorMessage } from "@/lib/errors";
 import {
+  NO_EMAIL_MESSAGE,
   createReviewer,
   deactivateReviewer,
+  reactivateReviewer,
   rotateReviewerLink,
   sendReviewerLink,
 } from "@/lib/reviewers";
@@ -33,7 +35,8 @@ const idSchema = z.string().trim().min(1).max(64);
 
 const addReviewerSchema = z.object({
   name: z.string(),
-  email: z.string(),
+  /** Optional: without it the agency shares the link itself. */
+  email: z.string().nullish(),
   sendInvite: z.boolean().default(false),
 });
 
@@ -113,12 +116,15 @@ export async function restoreClientAction(clientId: string): Promise<ActionResul
 
 /**
  * Adds a reviewer (or reactivates one with the same email, with a new link)
- * and optionally emails them the link right away.
+ * and optionally emails them the link right away. The email is optional:
+ * without it the link is shown to copy or send on WhatsApp.
  */
 export async function addReviewerAction(
   clientId: string,
-  input: { name: string; email: string; sendInvite?: boolean }
-): Promise<ActionResult<{ reviewerId: string; reviewUrl: string; emailSent: boolean | null }>> {
+  input: { name: string; email?: string | null; sendInvite?: boolean }
+): Promise<
+  ActionResult<{ reviewerId: string; reviewerName: string; reviewUrl: string; emailSent: boolean | null }>
+> {
   return withWorkspace(async ({ workspaceId }) => {
     const id = parseOrThrow(idSchema, clientId);
     const data = parseOrThrow(addReviewerSchema, input);
@@ -128,9 +134,9 @@ export async function addReviewerAction(
     });
 
     let emailSent: boolean | null = null;
-    if (data.sendInvite) {
+    if (data.sendInvite && reviewer.email) {
       emailSent = await sendReviewerLink(reviewer.id, workspaceId).catch((error) => {
-        console.error("[clients] Failed to send reviewer link:", error);
+        console.error("[clients] Failed to send reviewer link:", error instanceof Error ? error.name : "unknown");
         return false;
       });
     }
@@ -138,10 +144,10 @@ export async function addReviewerAction(
     revalidateClient(id);
     return {
       ok: true,
-      data: { reviewerId: reviewer.id, reviewUrl, emailSent },
+      data: { reviewerId: reviewer.id, reviewerName: reviewer.name, reviewUrl, emailSent },
       message:
         emailSent === null
-          ? `Referente aggiunto (${reviewer.name}). Copia il link e mandalo al referente.`
+          ? `Link creato per ${reviewer.name}: copialo o mandalo su WhatsApp.`
           : emailSent
             ? `Referente aggiunto (${reviewer.name}): il link è stato inviato via email.`
             : `Referente aggiunto (${reviewer.name}). ${EMAIL_FAILED}`,
@@ -149,12 +155,20 @@ export async function addReviewerAction(
   });
 }
 
-/** Re-adds a deactivated reviewer: same name and email, brand new link. */
+/** Turns a deactivated reviewer back on: same name and email, brand new link. */
 export async function reactivateReviewerAction(
-  clientId: string,
-  reviewer: { name: string; email: string }
-): Promise<ActionResult<{ reviewerId: string; reviewUrl: string; emailSent: boolean | null }>> {
-  return addReviewerAction(clientId, { ...reviewer, sendInvite: false });
+  reviewerId: string
+): Promise<ActionResult<{ reviewerId: string; reviewUrl: string }>> {
+  return withWorkspace(async ({ workspaceId }) => {
+    const id = parseOrThrow(idSchema, reviewerId);
+    const { reviewer, reviewUrl } = await reactivateReviewer(id, workspaceId);
+    revalidateClient(reviewer.clientId);
+    return {
+      ok: true,
+      data: { reviewerId: reviewer.id, reviewUrl },
+      message: `${reviewer.name} è di nuovo attivo, con un nuovo link: copialo o mandalo su WhatsApp.`,
+    };
+  });
 }
 
 /** New link for the reviewer; the old one stops working immediately. */
@@ -168,7 +182,7 @@ export async function rotateReviewerLinkAction(
     const { reviewer, reviewUrl } = await rotateReviewerLink(id, workspaceId);
 
     let emailSent: boolean | null = null;
-    if (sendEmail && reviewer.active) {
+    if (sendEmail && reviewer.active && reviewer.email) {
       emailSent = await sendReviewerLink(reviewer.id, workspaceId).catch(() => false);
     }
 
@@ -181,7 +195,9 @@ export async function rotateReviewerLinkAction(
           ? `Nuovo link creato: il vecchio non funziona più. ${EMAIL_FAILED}`
           : emailSent
             ? "Nuovo link creato e inviato via email: il vecchio non funziona più."
-            : "Nuovo link creato: il vecchio non funziona più.",
+            : sendEmail && !reviewer.email
+              ? `Nuovo link creato: il vecchio non funziona più. ${NO_EMAIL_MESSAGE}`
+              : "Nuovo link creato: il vecchio non funziona più.",
     };
   });
 }

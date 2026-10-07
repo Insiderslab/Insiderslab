@@ -1419,7 +1419,13 @@ export async function submitForReview(
   workspaceId: string,
   actor: Actor,
   opts: { reviewDueAt?: Date } = {}
-): Promise<{ submitted: string[]; clientsWithoutReviewers: string[] }> {
+): Promise<{
+  submitted: string[];
+  /** Clients with no active reviewer: nobody can see the items yet. */
+  clientsWithoutReviewers: string[];
+  /** Clients whose active reviewers have no email: nobody is notified, the agency shares the link. */
+  clientsWithoutEmail: string[];
+}> {
   const ids = [...new Set(postIds)];
   if (ids.length === 0) throw new ValidationError("Seleziona almeno un post");
   if (ids.length > 200) throw new ValidationError("Puoi inviare al massimo 200 post alla volta");
@@ -1427,7 +1433,7 @@ export async function submitForReview(
     throw new ValidationError("Scadenza di revisione non valida");
   }
 
-  const clientsWithoutReviewers = await prisma.$transaction(async (tx) => {
+  const { clientsWithoutReviewers, clientsWithoutEmail } = await prisma.$transaction(async (tx) => {
     const posts = await tx.post.findMany({
       where: { id: { in: ids }, workspaceId, kind: { in: enabledKinds() } },
       include: {
@@ -1436,7 +1442,7 @@ export async function submitForReview(
             name: true,
             archivedAt: true,
             timezone: true,
-            _count: { select: { reviewers: { where: { active: true } } } },
+            reviewers: { where: { active: true }, select: { email: true } },
           },
         },
         versions: { orderBy: { number: "desc" }, take: 1 },
@@ -1506,13 +1512,17 @@ export async function submitForReview(
       });
     }
 
-    return [
-      ...new Set(posts.filter((p) => p.client._count.reviewers === 0).map((p) => p.client.name)),
+    const clientNames = (keep: (reviewers: Array<{ email: string | null }>) => boolean) => [
+      ...new Set(posts.filter((p) => keep(p.client.reviewers)).map((p) => p.client.name)),
     ];
+    return {
+      clientsWithoutReviewers: clientNames((reviewers) => reviewers.length === 0),
+      clientsWithoutEmail: clientNames((reviewers) => reviewers.length > 0 && reviewers.every((r) => !r.email)),
+    };
   });
 
   await notifyReviewRequested(ids);
-  return { submitted: ids, clientsWithoutReviewers };
+  return { submitted: ids, clientsWithoutReviewers, clientsWithoutEmail };
 }
 
 export async function cancelPost(postId: string, workspaceId: string, actor: Actor): Promise<Post> {

@@ -3,7 +3,8 @@
  *
  * Client side: review requests and reminders go to the client's active
  * reviewers, one email per reviewer listing every post, with their personal
- * link. Agency side: outcomes (changes requested, approved, scheduled,
+ * link (reviewers without an email are skipped: the agency shares their link
+ * by hand). Agency side: outcomes (changes requested, approved, scheduled,
  * failed) go to the workspace OWNER/ADMIN members.
  *
  * Every function catches and logs its own errors: a notification can never
@@ -283,6 +284,8 @@ async function sendReviewEmail(
   posts: ReviewEmailPost[],
   kind: "request" | "reminder"
 ): Promise<boolean> {
+  // No email: the agency shares the link itself (WhatsApp, message…).
+  if (!reviewer.email) return false;
   const notified: NotifiedPost[] = posts.map((p) => ({ ...p, content: p.versions[0]?.content }));
   const copy = reviewEmailCopy(notified, { kind, clientName: client.name, agencyName });
 
@@ -316,7 +319,7 @@ export async function notifyReviewRequested(postIds: string[]): Promise<void> {
       where: { id: { in: postIds }, status: "IN_REVIEW" },
       orderBy: { publishAt: "asc" },
       include: {
-        client: { include: { reviewers: { where: { active: true } } } },
+        client: { include: { reviewers: { where: { active: true, email: { not: null } } } } },
         workspace: { select: { name: true } },
         versions: latestVersionContent,
       },
@@ -358,7 +361,7 @@ export async function notifyReviewReminder(postIds: string[]): Promise<Set<strin
       where: { id: { in: postIds }, status: "IN_REVIEW", client: { archivedAt: null } },
       orderBy: { publishAt: "asc" },
       include: {
-        client: { include: { reviewers: { where: { active: true } } } },
+        client: { include: { reviewers: { where: { active: true, email: { not: null } } } } },
         workspace: { select: { name: true } },
         versions: latestVersionContent,
       },

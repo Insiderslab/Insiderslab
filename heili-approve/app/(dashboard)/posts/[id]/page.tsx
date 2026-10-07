@@ -48,6 +48,7 @@ import PostReview, {
   type ReviewSessionView,
 } from "@/components/posts/post-review";
 import VersionHistory, { type VersionHistoryEntry } from "@/components/posts/version-history";
+import PostSharePanel from "@/components/share/post-share-panel";
 import { AD_PLATFORM_LABELS, coerceAdContent, validateAdsForReview, variantDisplayName } from "@/lib/content/ads";
 import {
   coerceBlogContent,
@@ -230,8 +231,8 @@ export default async function PostDetailPage({
   const notice =
     first(query.inviato) === "1"
       ? kind === "SOCIAL_POST"
-        ? "Post creato e inviato in revisione."
-        : `${noun.It} è stato creato e inviato in revisione.`
+        ? "Post creato e pronto per il cliente: condividi il link qui sotto."
+        : `${noun.It} è stato creato ed è pronto per il cliente: condividi il link qui sotto.`
       : first(query.inviato) === "errore"
         ? "Bozza salvata, ma l'invio al cliente non è riuscito: riprova con Invia in revisione."
         : first(query.salvato) === "1"
@@ -402,6 +403,11 @@ export default async function PostDetailPage({
           kind={kind}
         />
         {notice && <p className="text-sm text-success">{notice}</p>}
+
+        <PostSharePanel
+          post={{ id: post.id, title: post.title, kind, status: post.status }}
+          client={{ id: client.id, name: client.name, archivedAt: client.archivedAt }}
+        />
 
         {internal && post.status !== "CANCELLED" && (blogContent ? hasBeenSubmitted || isApproved : true) && (
           <section className="panel space-y-2 rounded p-4" aria-label="Esporta">
