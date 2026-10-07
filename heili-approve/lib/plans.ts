@@ -360,7 +360,12 @@ export type WorkspacePlan = Awaited<ReturnType<typeof getPlanForWorkspace>>;
 export async function listPlansForWorkspace(workspaceId: string, opts: { clientId?: string | null } = {}) {
   if (!isKindEnabled(PLAN_KIND)) return [];
   const plans = await prisma.contentPlan.findMany({
-    where: { workspaceId, kind: PLAN_KIND, ...(opts.clientId ? { clientId: opts.clientId } : {}) },
+    // One client: all of its plans; all clients: archived clients' plans left out.
+    where: {
+      workspaceId,
+      kind: PLAN_KIND,
+      ...(opts.clientId ? { clientId: opts.clientId } : { client: { archivedAt: null } }),
+    },
     orderBy: [{ month: "desc" }, { createdAt: "desc" }],
     take: 200,
     include: {

@@ -23,7 +23,16 @@ export function getPrisma(): PrismaClient {
   // `prisma generate` (schema change) the generated module is re-evaluated
   // and PrismaClient is a new class: drop the stale instance, which would
   // still validate queries against the old schema.
-  if (globalForPrisma.prisma && globalForPrisma.prismaClass !== PrismaClient) {
+  // Development only: a production build can evaluate the generated module
+  // once per server chunk (route handlers, RSC, SSR), so several identical
+  // PrismaClient classes coexist there; swapping on each would end the
+  // shared pool under queries in flight ("Cannot use a pool after calling
+  // end on the pool"). The schema cannot change under a running build.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    globalForPrisma.prisma &&
+    globalForPrisma.prismaClass !== PrismaClient
+  ) {
     void globalForPrisma.prisma.$disconnect().catch(() => {});
     globalForPrisma.prisma = undefined;
   }
