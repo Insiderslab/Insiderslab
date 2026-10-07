@@ -213,7 +213,9 @@ export default function AdSetEditor({
   }
 
   return (
-    <div className="space-y-6">
+    // inline-size containment: the wide parts (variant tabs, uploads) scroll or
+    // wrap inside instead of widening a parent <fieldset> (min-width: min-content).
+    <div className="min-w-0 space-y-6 [contain:inline-size]">
       {/* ── Campaign ── */}
       <section className="panel space-y-4 p-4" aria-labelledby={`${ids}-campaign`}>
         <h2 id={`${ids}-campaign`} className="text-base font-semibold text-foreground">
@@ -350,7 +352,7 @@ export default function AdSetEditor({
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
             <div className="panel min-w-0 space-y-5 p-4">
               <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-[1_1_14rem]">
                   <label htmlFor={`${ids}-vname`} className={labelClass}>
                     Nome della variante
                   </label>

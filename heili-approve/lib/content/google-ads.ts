@@ -455,22 +455,22 @@ function listChecks(
       label,
       message:
         count === 0
-          ? `${label}: servono almeno ${plural(spec.min, one, many)}.`
-          : `${label}: servono almeno ${plural(spec.min, one, many)}, ne hai ${count}.`,
+          ? `Servono almeno ${plural(spec.min, one, many)}.`
+          : `Servono almeno ${plural(spec.min, one, many)}, ne hai ${count}.`,
     });
   } else if (count > spec.max) {
     push({
       key: `${key}:count`,
       status: "error",
       label,
-      message: `${label}: al massimo ${spec.max}, ne hai ${count}. Togline ${count - spec.max}.`,
+      message: `Al massimo ${spec.max}, ne hai ${count}. Togline ${count - spec.max}.`,
     });
   } else {
     push({
       key: `${key}:count`,
       status: "ok",
       label,
-      message: `${label}: ${count} su ${spec.max}.`,
+      message: `${count} su ${spec.max}.`,
     });
   }
 
@@ -492,7 +492,7 @@ function listChecks(
       key: `${key}:length`,
       status: "ok",
       label,
-      message: `${label}: tutti entro ${spec.chars} caratteri.`,
+      message: `Tutti entro ${spec.chars} caratteri.`,
     });
   }
 
@@ -517,7 +517,7 @@ function listChecks(
       key: `${key}:short`,
       status: "warning",
       label,
-      message: `${label}: aggiungine almeno uno entro ${spec.short} caratteri, per gli spazi più piccoli.`,
+      message: `Aggiungine almeno uno entro ${spec.short} caratteri, per gli spazi più piccoli.`,
     });
   }
 }
@@ -558,7 +558,7 @@ function pathChecks(assets: AdGoogleAssets, max: number, finalUrl: string, push:
       key: "paths:order",
       status: "error",
       label: "Percorso URL",
-      message: "Percorso URL: compila il percorso 1 prima del percorso 2.",
+      message: "Compila il percorso 1 prima del percorso 2.",
     });
   }
   if (!bad) {
@@ -583,7 +583,7 @@ function keywordChecks(assets: AdGoogleAssets, push: (check: CheckInput) => void
       key: "keywords:count",
       status: "error",
       label: "Parole chiave",
-      message: "Parole chiave: aggiungine almeno una, senza l'annuncio di ricerca non compare.",
+      message: "Aggiungine almeno una, senza l'annuncio di ricerca non compare.",
     });
   } else {
     const byMatch = GOOGLE_MATCH_TYPES.map((m) => ({ m, n: keywords.filter((k) => k.match === m).length })).filter(
@@ -593,7 +593,7 @@ function keywordChecks(assets: AdGoogleAssets, push: (check: CheckInput) => void
       key: "keywords:count",
       status: "ok",
       label: "Parole chiave",
-      message: `Parole chiave: ${keywords.length} (${byMatch.map((x) => `${x.n} ${GOOGLE_MATCH_LABELS[x.m]}`).join(", ")}).`,
+      message: `${keywords.length} (${byMatch.map((x) => `${x.n} ${GOOGLE_MATCH_LABELS[x.m]}`).join(", ")}).`,
     });
   }
 
@@ -703,8 +703,8 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
       message: kinds.has(kind)
         ? `Immagine ${spec.name} ${spec.label} presente.`
         : unknown
-          ? `Immagini: verifica che ci sia un'immagine ${spec.name} ${spec.label}, alcune dimensioni non sono note.`
-          : `Immagini: manca un'immagine ${spec.name} ${spec.label} (almeno ${spec.minWidth}×${spec.minHeight}), è obbligatoria.`,
+          ? `Verifica che ci sia un'immagine ${spec.name} ${spec.label}, alcune dimensioni non sono note.`
+          : `Manca un'immagine ${spec.name} ${spec.label} (almeno ${spec.minWidth}×${spec.minHeight}), è obbligatoria.`,
     });
   }
   push({
@@ -713,7 +713,7 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
     label: "Immagini",
     message: kinds.has("portrait")
       ? "Immagine verticale 4:5 presente."
-      : "Immagini: un'immagine verticale 4:5 (almeno 480×600) è facoltativa ma consigliata, per mobile e Discover.",
+      : "Un'immagine verticale 4:5 (almeno 480×600) è facoltativa ma consigliata, per mobile e Discover.",
   });
 
   if (videos.length === 0) {
@@ -722,7 +722,7 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
       status: "warning",
       label: "Video",
       message:
-        "Video: non ce n'è nessuno, quindi Google ne crea uno da solo con immagini e testi. Meglio caricarne uno vostro (almeno 10 s).",
+        "Non c'è: Google ne crea uno da solo con immagini e testi. Meglio caricarne uno vostro (almeno 10 s).",
     });
   } else {
     for (const { item, index } of videos) {
@@ -747,7 +747,7 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
       status: "warning",
       label: "Logo",
       message:
-        "Logo: non c'è. Aggiungi un logo quadrato 1:1 (almeno 128×128), oppure Google userà quello delle linee guida del brand.",
+        "Manca: aggiungi un logo quadrato 1:1 (almeno 128×128), oppure Google userà quello delle linee guida del brand.",
     });
   } else {
     if (logos.length > GOOGLE_SPECS.pmax.maxLogos) {
@@ -755,7 +755,7 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
         key: "pmax:logo:count",
         status: "error",
         label: "Logo",
-        message: `Logo: al massimo ${GOOGLE_SPECS.pmax.maxLogos}, ne hai ${logos.length}.`,
+        message: `Al massimo ${GOOGLE_SPECS.pmax.maxLogos}, ne hai ${logos.length}.`,
       });
     }
     let square = false;
@@ -796,7 +796,7 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
         key: "pmax:logo:square",
         status: square ? "ok" : "error",
         label: "Logo",
-        message: square ? "Logo quadrato 1:1 presente." : "Logo: serve almeno un logo quadrato 1:1.",
+        message: square ? "Logo quadrato 1:1 presente." : "Serve almeno un logo quadrato 1:1.",
       });
     }
   }
@@ -804,8 +804,9 @@ function pmaxMediaChecks(variant: Pick<AdVariant, "media">, assets: AdGoogleAsse
 
 /**
  * Google asset checks of a variant for one placement (google_search or
- * google_pmax), as AdSpecCheck entries of that placement. Messages name
- * their topic: validateAdsForReview shows them without a label.
+ * google_pmax), as AdSpecCheck entries of that placement (field "google",
+ * or "media" for one media). Messages do not repeat the label: the checklist
+ * and validateAdsForReview put it in front.
  */
 export function googleAssetChecks(
   variant: Pick<AdVariant, "google" | "media" | "destinationUrl">,
@@ -867,10 +868,10 @@ export function googleAssetChecks(
     status: !business || charCount(business) > spec.businessNameChars ? "error" : "ok",
     label: "Nome attività",
     message: !business
-      ? "Nome dell'attività: scrivilo (al massimo 25 caratteri)."
+      ? "Scrivilo (al massimo 25 caratteri)."
       : charCount(business) > spec.businessNameChars
-        ? `Nome dell'attività: ${charCount(business)} caratteri, al massimo ${spec.businessNameChars}.`
-        : `Nome dell'attività: ${charCount(business)}/${spec.businessNameChars} caratteri.`,
+        ? `${charCount(business)} caratteri, al massimo ${spec.businessNameChars}.`
+        : `${charCount(business)}/${spec.businessNameChars} caratteri.`,
   });
   if (assets.path1.trim() || assets.path2.trim()) pathChecks(assets, spec.pathChars, variant.destinationUrl, push);
   pmaxMediaChecks(variant, assets, push);

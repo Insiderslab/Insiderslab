@@ -255,14 +255,14 @@ describe("Search (RSA) checks", () => {
     // The Display fields are not required for Search.
     expect(checks.some((c) => c.id === "google:headline")).toBe(false);
     expect(find(checks, ":g:paths")?.message).toBe("URL visualizzato: palestrakinetik.it/prova/gratis.");
-    expect(find(checks, ":g:keywords:count")?.message).toBe("Parole chiave: 3 (1 generica, 1 a frase, 1 esatta).");
+    expect(find(checks, ":g:keywords:count")?.message).toBe("3 (1 generica, 1 a frase, 1 esatta).");
   });
 
   it("counts headlines and descriptions", () => {
     const few = adSpecChecks(searchVariant({}, { headlines: ["Uno", "Due", ""], descriptions: ["Solo una"] }), {
       platform: "google",
     });
-    expect(find(few, ":g:headlines:count")).toMatchObject({ status: "error", message: "Titoli: servono almeno 3 titoli, ne hai 2." });
+    expect(find(few, ":g:headlines:count")).toMatchObject({ status: "error", message: "Servono almeno 3 titoli, ne hai 2." });
     expect(find(few, ":g:descriptions:count")?.status).toBe("error");
 
     const many = adSpecChecks(
@@ -272,7 +272,7 @@ describe("Search (RSA) checks", () => {
       }),
       { platform: "google" }
     );
-    expect(find(many, ":g:headlines:count")?.message).toBe("Titoli: al massimo 15, ne hai 16. Togline 1.");
+    expect(find(many, ":g:headlines:count")?.message).toBe("Al massimo 15, ne hai 16. Togline 1.");
     expect(find(many, ":g:descriptions:count")?.status).toBe("error");
   });
 
@@ -325,8 +325,8 @@ describe("Search (RSA) checks", () => {
   it("blocks sending to the client with readable messages", () => {
     const issues = validateAdsForReview(googleSet([searchVariant({}, { headlines: ["Uno"], keywords: [] })]));
     expect(issues.map((i) => i.message)).toEqual([
-      "Variante A — Ricerca · Google Ricerca (annuncio adattivo): Titoli: servono almeno 3 titoli, ne hai 1.",
-      "Variante A — Ricerca · Google Ricerca (annuncio adattivo): Parole chiave: aggiungine almeno una, senza l'annuncio di ricerca non compare.",
+      "Variante A — Ricerca · Google Ricerca (annuncio adattivo): Titoli: Servono almeno 3 titoli, ne hai 1.",
+      "Variante A — Ricerca · Google Ricerca (annuncio adattivo): Parole chiave: Aggiungine almeno una, senza l'annuncio di ricerca non compare.",
     ]);
     expect(validateAdsForReview(googleSet([searchVariant(), pmaxVariant()]))).toEqual([]);
   });

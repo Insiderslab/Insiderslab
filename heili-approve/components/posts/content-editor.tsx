@@ -229,7 +229,7 @@ export default function ContentEditor({
         </div>
       )}
 
-      <fieldset disabled={disabled} className="space-y-6">
+      <fieldset disabled={disabled} className="min-w-0 space-y-6">
         {/* ── Client, title, date ── */}
         <section className="panel grid gap-4 rounded p-4 sm:p-5 lg:grid-cols-3">
           <div>

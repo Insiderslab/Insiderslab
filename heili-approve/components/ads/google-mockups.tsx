@@ -47,15 +47,18 @@ function CombinationControls({
   step,
   count,
   onNext,
+  what,
 }: {
   step: number;
   count: number;
   onNext: () => void;
+  /** "titoli e descrizioni" (Search) or "titoli, descrizioni e immagini". */
+  what: string;
 }) {
   return (
     <div className="mx-auto flex max-w-[420px] flex-wrap items-center justify-between gap-2">
       <p className="text-xs text-muted">
-        Google combina da solo titoli, descrizioni e immagini: questa è una combinazione possibile
+        Google combina da solo {what}: questa è una combinazione possibile
         {count > 1 ? ` (${(step % count) + 1} di ${count})` : ""}.
       </p>
       {count > 1 ? (
@@ -218,7 +221,7 @@ export function GoogleSearchAd(p: AdMockupProps) {
           <span className="block h-2.5 w-1/2 rounded bg-[#e8eaed]" />
         </div>
       </div>
-      <CombinationControls step={step} count={count} onNext={() => setStep((s) => s + 1)} />
+      <CombinationControls step={step} count={count} onNext={() => setStep((s) => s + 1)} what="titoli e descrizioni" />
     </MockupFrame>
   );
 }
@@ -266,7 +269,7 @@ export function GooglePMaxAd(p: AdMockupProps) {
 
   return (
     <MockupFrame label="Performance Max, gruppo di asset" className="max-w-[420px] space-y-3">
-      <div role="group" aria-label="Dove compare l'annuncio" className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+      <div role="group" aria-label="Dove compare l'annuncio" className="flex flex-wrap gap-1">
         {PMAX_SURFACES.map((s) => (
           <button
             key={s.id}
@@ -395,7 +398,12 @@ export function GooglePMaxAd(p: AdMockupProps) {
         />
       ) : null}
 
-      <CombinationControls step={step} count={count} onNext={() => setStep((s) => s + 1)} />
+      <CombinationControls
+        step={step}
+        count={count}
+        onNext={() => setStep((s) => s + 1)}
+        what="titoli, descrizioni e immagini"
+      />
     </MockupFrame>
   );
 }

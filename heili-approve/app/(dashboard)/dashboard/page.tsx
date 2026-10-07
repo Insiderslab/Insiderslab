@@ -26,7 +26,7 @@ import {
   startOfDayUtc,
   startOfWeek,
 } from "@/components/posts/helpers";
-import { KindBadge, KindIcon, KindStatusBadge } from "@/components/posts/kind-badge";
+import { KindIcon, KindStatusBadge } from "@/components/posts/kind-badge";
 import { getCurrentClientId } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, isNetwork } from "@/lib/domain";

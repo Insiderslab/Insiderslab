@@ -159,7 +159,7 @@ export default function GoogleAssetsList({
         </p>
       </div>
 
-      <div className="inset space-y-4 p-2 sm:p-3">
+      <div className="space-y-4 rounded-lg border border-border bg-surface p-2 sm:p-3">
         {numberedList("headline", "Titoli", headlines, 30)}
         {numberedList("longHeadline", "Titoli lunghi", longHeadlines, 90)}
         {numberedList("description", "Descrizioni", descriptions, 90)}

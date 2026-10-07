@@ -13,6 +13,7 @@
  * (blog-review.tsx) and the ad set review (ad-review.tsx).
  */
 
+import { parseAssetComment } from "@/lib/content/google-ads";
 import { useState, useTransition } from "react";
 import { addCommentAction, resolveCommentsAction } from "@/app/(dashboard)/posts/actions";
 import { formatDateTime, formatMoment, type CommentLike, type CommentThread } from "./helpers";
@@ -188,7 +189,7 @@ export default function ThreadCard({
                 {formatDateTime(comment.createdAt, timezone, { year: false })}
               </time>
             </div>
-            <p className="whitespace-pre-wrap break-words">{comment.body}</p>
+            <CommentBody body={comment.body} />
           </div>
         ))}
       </div>
@@ -233,5 +234,20 @@ export default function ThreadCard({
         </button>
       </div>
     </li>
+  );
+}
+
+/** Comment text; a client's comment on a Google Ads asset ("[Titolo 3] «…» testo") shows the asset as a quote. */
+function CommentBody({ body }: { body: string }) {
+  const asset = parseAssetComment(body);
+  if (!asset) return <p className="whitespace-pre-wrap break-words">{body}</p>;
+  return (
+    <div className="space-y-1.5">
+      <blockquote className="inset px-3 py-2 text-sm">
+        <span className="label-caps block">{asset.name}</span>
+        <span className="break-words">«{asset.quote}»</span>
+      </blockquote>
+      {asset.text && <p className="whitespace-pre-wrap break-words">{asset.text}</p>}
+    </div>
   );
 }

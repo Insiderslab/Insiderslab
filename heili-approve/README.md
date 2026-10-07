@@ -148,6 +148,27 @@ Le regole di versione e di approvazione sono le stesse per tutti i tipi.
   approvate**, rinominati `<cliente>_<campagna>_<variante>_<posizionamenti>.<ext>`,
   `copy.csv` (separatore `;` per Excel in italiano) e `README.txt` con tutte le
   decisioni e le note del cliente, anche delle varianti scartate.
+- **Google Ads:** oltre al Display, i posizionamenti **Ricerca** (annuncio
+  adattivo: 3–15 titoli da 30 caratteri, 2–4 descrizioni da 90, percorsi URL) e
+  **Performance Max** (titoli, titoli lunghi, descrizioni, nome attività,
+  immagini 1,91:1 / 1:1 / 4:5, loghi, video facoltativo). Sezione «Google Ads:
+  titoli, descrizioni e parole chiave» con contatori, **parole chiave** con
+  corrispondenza generica / "a frase" / [esatta] (anche incollate una per riga) e
+  parole escluse. Anteprime Ricerca, Display, YouTube, Gmail e Discover; il
+  cliente commenta il singolo titolo o la singola parola chiave. Nel pacchetto
+  anche `google-ads-rsa.csv`, `google-ads-keywords.csv` e
+  `google-ads-pmax-assets.csv`, da importare in Google Ads Editor.
+
+### Cliente attivo e link per il cliente
+
+- **Cliente attivo:** nel menu principale si sceglie il cliente su cui si lavora;
+  dashboard, elenchi, calendario e «Nuovo contenuto» mostrano solo lui («Tutti i
+  clienti» per vedere tutto). La scelta resta per persona e per workspace.
+- **Link per il cliente:** in cima alla scheda cliente c'è il link personale di
+  ogni referente con «Copia link», «Invia su WhatsApp», «Condividi» (telefono),
+  anteprima e QR. L'**email è facoltativa**: un referente si crea anche solo con
+  il nome e riceve il link da chi gestisce il cliente. Su ogni contenuto in
+  revisione, «Condividi con il cliente» dà il link diretto a quel contenuto.
 
 ### Istanze separate per tipo (facoltativo, avanzato)
 

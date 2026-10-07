@@ -1051,7 +1051,8 @@ export function validateAdsForReview(content: AdContent): AdValidationIssue[] {
     for (const check of adSpecChecks(variant, { platform: content.campaign.platform })) {
       if (check.status !== "error") continue;
       const where = check.placement ? ` · ${PLACEMENT_SPECS[check.placement].label}` : "";
-      const topic = check.placement || check.field === "media" ? "" : `${check.label}: `;
+      // Google asset checks belong to a placement but name a topic ("Titoli: …").
+      const topic = (check.placement && check.field !== "google") || check.field === "media" ? "" : `${check.label}: `;
       issues.push({ variantId: variant.id, field: check.field, message: `${name}${where}: ${topic}${check.message}` });
     }
   }

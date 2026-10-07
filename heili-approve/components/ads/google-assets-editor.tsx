@@ -258,6 +258,8 @@ function AssetList({
   note?: string;
 }) {
   const filledCount = items.filter((i) => i.trim()).length;
+  // Long items (90 characters) wrap on two lines.
+  const long = spec.chars > 30;
   const full = items.length >= spec.max;
   const firstOf = new Map<string, number>();
   items.forEach((item, index) => {
@@ -281,12 +283,12 @@ function AssetList({
   function add() {
     if (!full) onChange([...items, ""]);
     requestAnimationFrame(() => {
-      const inputs = document.querySelectorAll<HTMLInputElement>(`[data-asset-list="${CSS.escape(id)}"] input`);
+      const inputs = document.querySelectorAll<HTMLElement>(`[data-asset-list="${CSS.escape(id)}"] :is(input, textarea)`);
       inputs[inputs.length - 1]?.focus();
     });
   }
   /** Several lines pasted into one field: one item per line. */
-  function paste(index: number, event: ClipboardEvent<HTMLInputElement>) {
+  function paste(index: number, event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const text = event.clipboardData.getData("text");
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length < 2) return;
@@ -325,41 +327,17 @@ function AssetList({
           const duplicateOf = norm ? firstOf.get(norm) : undefined;
           const duplicate = duplicateOf !== undefined && duplicateOf !== index;
           const fieldId = `${id}-${index}`;
-          return (
-            <li key={index} className="space-y-1">
-              <div className="flex items-center gap-2">
-                <label htmlFor={fieldId} className="tabular w-5 shrink-0 text-right text-xs text-muted">
-                  <span className="sr-only">
-                    {label} {index + 1}
-                  </span>
-                  <span aria-hidden="true">{index + 1}</span>
-                </label>
-                <input
-                  id={fieldId}
-                  value={item}
-                  onChange={(e) => update(index, e.target.value)}
-                  onPaste={(e) => paste(index, e)}
-                  maxLength={GOOGLE_STORAGE_LIMITS.itemChars}
-                  disabled={disabled}
-                  placeholder={index === 0 ? placeholder : undefined}
-                  aria-invalid={n > spec.chars || duplicate || undefined}
-                  className={`field min-w-0 flex-1 ${n > spec.chars || duplicate ? "border-error" : ""}`}
-                />
-                <span className={`tabular w-12 shrink-0 text-right text-xs ${counterClass(n, spec.chars)}`}>
-                  {n}/{spec.chars}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2 pl-7">
-                <span className="min-w-0 text-xs text-error">
-                  {duplicate ? `Uguale a ${one} ${(duplicateOf ?? 0) + 1}` : n > spec.chars ? `${n - spec.chars} caratteri di troppo` : ""}
-                </span>
-                <span className="flex shrink-0 gap-1">
+          const invalid = n > spec.chars || duplicate;
+          // Reorder / remove: beside the field on wide screens, under it on phones.
+          const controls = (
+            <>
                   <button
                     type="button"
                     className="btn btn-quiet btn-sm px-2"
                     disabled={disabled || index === 0}
                     onClick={() => move(index, index - 1)}
                     aria-label={`Sposta ${one} ${index + 1} su`}
+                    title="Sposta su"
                   >
                     ↑
                   </button>
@@ -369,6 +347,7 @@ function AssetList({
                     disabled={disabled || index === items.length - 1}
                     onClick={() => move(index, index + 1)}
                     aria-label={`Sposta ${one} ${index + 1} giù`}
+                    title="Sposta giù"
                   >
                     ↓
                   </button>
@@ -378,10 +357,61 @@ function AssetList({
                     disabled={disabled}
                     onClick={() => remove(index)}
                     aria-label={`Togli ${one} ${index + 1}`}
+                    title="Togli"
                   >
-                    Togli
+                    ✕
                   </button>
-                </span>
+            </>
+          );
+          return (
+            <li key={index}>
+              <div className="flex items-start gap-1.5 sm:gap-2">
+                <label htmlFor={fieldId} className="tabular mt-2.5 w-5 shrink-0 text-right text-xs text-muted">
+                  <span className="sr-only">
+                    {label} {index + 1}
+                  </span>
+                  <span aria-hidden="true">{index + 1}</span>
+                </label>
+                <div className="min-w-0 flex-1">
+                  {long ? (
+                    <textarea
+                      id={fieldId}
+                      value={item}
+                      onChange={(e) => update(index, e.target.value.replace(/[\r\n]+/g, " "))}
+                      onPaste={(e) => paste(index, e)}
+                      maxLength={GOOGLE_STORAGE_LIMITS.itemChars}
+                      rows={2}
+                      disabled={disabled}
+                      placeholder={index === 0 ? placeholder : undefined}
+                      aria-invalid={invalid || undefined}
+                      className={`field resize-none [field-sizing:content] ${invalid ? "border-error" : ""}`}
+                    />
+                  ) : (
+                    <input
+                      id={fieldId}
+                      value={item}
+                      onChange={(e) => update(index, e.target.value)}
+                      onPaste={(e) => paste(index, e)}
+                      maxLength={GOOGLE_STORAGE_LIMITS.itemChars}
+                      disabled={disabled}
+                      placeholder={index === 0 ? placeholder : undefined}
+                      aria-invalid={invalid || undefined}
+                      className={`field ${invalid ? "border-error" : ""}`}
+                    />
+                  )}
+                  <div className="mt-0.5 flex items-center justify-between gap-2 text-xs">
+                    <span className="min-w-0 text-error">
+                      {duplicate ? `Uguale a ${one} ${(duplicateOf ?? 0) + 1}` : n > spec.chars ? `${n - spec.chars} caratteri di troppo` : ""}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span className={`tabular ${counterClass(n, spec.chars)}`}>
+                        {n}/{spec.chars}
+                      </span>
+                      <span className="flex sm:hidden">{controls}</span>
+                    </span>
+                  </div>
+                </div>
+                <span className="hidden shrink-0 sm:flex">{controls}</span>
               </div>
             </li>
           );
@@ -487,7 +517,8 @@ function KeywordsEditor({
               value={match}
               onChange={(e) => setMatch(e.target.value as GoogleMatchType)}
               disabled={disabled}
-              className="field w-auto"
+              className="field"
+              style={{ width: "auto" }}
             >
               {GOOGLE_MATCH_TYPES.map((m) => (
                 <option key={m} value={m}>
@@ -529,7 +560,7 @@ function KeywordsEditor({
                       }
                       aria-label={`Parola chiave ${index + 1}`}
                       disabled={disabled}
-                      className={`field min-w-0 flex-[1_1_10rem] ${tooLong ? "border-error" : ""}`}
+                      className={`field min-w-0 flex-[1_1_12rem] ${tooLong ? "border-error" : ""}`}
                     />
                     <select
                       value={keyword.match}
@@ -540,7 +571,8 @@ function KeywordsEditor({
                       }
                       aria-label={`Corrispondenza di ${formatKeyword(keyword)}`}
                       disabled={disabled}
-                      className="field w-auto"
+                      className="field"
+                      style={{ width: "auto" }}
                     >
                       {GOOGLE_MATCH_TYPES.map((m) => (
                         <option key={m} value={m}>
@@ -548,7 +580,6 @@ function KeywordsEditor({
                         </option>
                       ))}
                     </select>
-                    <code className="tabular hidden min-w-0 truncate text-xs text-muted sm:inline">{formatKeyword(keyword)}</code>
                     {repeated ? <span className="chip chip-stale">ripetuta</span> : null}
                     <button
                       type="button"

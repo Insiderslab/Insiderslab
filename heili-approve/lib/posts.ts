@@ -1033,16 +1033,20 @@ async function prepareKindContent(
   }
   if (kind === "AD_CREATIVE") {
     const content = parseKindContent(kind, json);
+    // Variant media and Google Ads logos go through the same ownership and size checks.
     const all = await normalizeMedia(
       db,
       workspaceId,
-      content.variants.flatMap((v) => v.media)
+      content.variants.flatMap((v) => [...v.media, ...(v.google?.logos ?? [])])
     );
     let offset = 0;
     const variants = content.variants.map((variant) => {
       const media = all.slice(offset, offset + variant.media.length);
       offset += variant.media.length;
-      return { ...variant, media };
+      if (!variant.google) return { ...variant, media };
+      const logos = all.slice(offset, offset + variant.google.logos.length);
+      offset += variant.google.logos.length;
+      return { ...variant, media, google: { ...variant.google, logos } };
     });
     return { ...content, variants };
   }
