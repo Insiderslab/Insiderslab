@@ -146,6 +146,9 @@ export function AssistantTranscript({
                     <span>{ACTION_AREA_LABELS[item.area]}</span>
                     {variantId && <span>· {variantNameFor(variantId, labels)}</span>}
                     {item.mediaIndex !== null && <span>· {mediaLabel(item.mediaIndex)}</span>}
+                    {item.pinX !== null && item.pinY !== null && (
+                      <span>· punto {Math.round(item.pinX * 100)}%, {Math.round(item.pinY * 100)}%</span>
+                    )}
                     {time && timeSec !== null && (
                       <TimeChip
                         label={time}
@@ -201,6 +204,35 @@ export function AssistantTranscript({
                     return (
                       <span key={i} className="mx-0.5 inline-block rounded-full border border-border px-2 text-xs italic">
                         Passaggio {shortQuote(segment.quote, 80)}
+                      </span>
+                    );
+                  }
+                  if (segment.type === "point") {
+                    const pointName = segment.variantId
+                      ? (variantNames?.[segment.variantId] ?? `Variante ${segment.variantId}`)
+                      : null;
+                    return (
+                      <span key={i} className="mx-0.5 inline-flex flex-wrap items-center gap-1">
+                        <span className="inline-block rounded-full border border-border px-2 text-xs">
+                          {[pointName, mediaLabel(segment.mediaIndex), `punto ${Math.round(segment.x * 100)}%, ${Math.round(segment.y * 100)}%`]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        {segment.timeSec !== null && (
+                          <TimeChip
+                            label={formatTimecode(segment.timeSec)}
+                            onClick={
+                              onSeek
+                                ? () =>
+                                    onSeek({
+                                      mediaIndex: segment.mediaIndex,
+                                      timeSec: segment.timeSec!,
+                                      variantId: segment.variantId,
+                                    })
+                                : undefined
+                            }
+                          />
+                        )}
                       </span>
                     );
                   }

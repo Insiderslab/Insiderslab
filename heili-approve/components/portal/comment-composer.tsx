@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from "react";
+import DictationButton from "@/components/voice/dictation-button";
 import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
 import { checkMomentInput } from "./helpers";
@@ -60,6 +61,7 @@ export default function CommentComposer({
   const [end, setEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dictating, setDictating] = useState(false);
 
   // Bring the form into view and focus it when it opens on a new spot.
   useEffect(() => {
@@ -71,7 +73,7 @@ export default function CommentComposer({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || dictating) return;
     const text = body.trim();
     if (!text) {
       setError("Scrivi il commento prima di inviarlo.");
@@ -205,6 +207,14 @@ export default function CommentComposer({
         className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
       />
 
+      <DictationButton
+        value={body}
+        onChange={setBody}
+        maxLength={MAX_BODY}
+        disabled={busy}
+        onListeningChange={setDictating}
+      />
+
       {error && (
         <p className="text-sm text-error" role="alert">
           {error}
@@ -222,7 +232,7 @@ export default function CommentComposer({
         </button>
         <button
           type="submit"
-          disabled={busy || body.trim() === ""}
+          disabled={busy || dictating || body.trim() === ""}
           className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {busy ? "Invio…" : "Invia commento"}

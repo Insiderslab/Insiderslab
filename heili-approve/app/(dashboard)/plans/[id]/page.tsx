@@ -88,6 +88,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     inReview: progress.inReview,
     approved: progress.approved,
     outside: plan.outside.filter(sendable).length,
+    outsideTotal: plan.outside.length,
   };
   const tiles: GridTile[] = instagramGridOrder(plan.posts).map((post) => ({
     id: post.id,
@@ -136,11 +137,11 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <Link href={`/calendar?clientId=${plan.client.id}&mese=${plan.month}`} className="btn btn-sm">
+            <Link href={`/calendar?clientId=${plan.client.id}&mese=${plan.month}`} className="btn btn-sm min-h-11">
               Calendario del mese
             </Link>
-            <Link href={newContentHref("SOCIAL_POST", { clientId: plan.client.id, day: newDay })} className="btn btn-sm">
-              Nuovo post
+            <Link href={newContentHref("SOCIAL_POST", { clientId: plan.client.id, day: newDay })} className="btn btn-sm min-h-11">
+              Crea un post del mese
             </Link>
           </div>
         </div>
@@ -165,12 +166,22 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
         )}
       </header>
 
+      <section className="panel p-4 sm:p-5" aria-labelledby="plan-flow-title">
+        <h2 id="plan-flow-title" className="text-base font-semibold">Cosa succede in questo piano</h2>
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+          <p><span className="font-semibold">1. Prepara.</span> Crea o modifica i post del mese. Restano bozze finché non li invii.</p>
+          <p><span className="font-semibold">2. Controlla.</span> Calendario, elenco e griglia mostrano gli stessi post in modi diversi.</p>
+          <p><span className="font-semibold">3. Invia.</span> «Invia il piano» manda insieme solo bozze e correzioni pronte.</p>
+        </div>
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
           <section className="hidden space-y-3 md:block" aria-labelledby="plan-calendar-title">
-            <h2 id="plan-calendar-title" className="text-lg font-semibold capitalize">
-              {planMonthTitle(plan.month)}
-            </h2>
+            <div>
+              <h2 id="plan-calendar-title" className="text-lg font-semibold capitalize">Calendario · {planMonthTitle(plan.month)}</h2>
+              <p className="text-sm text-muted">Vista per data degli stessi post elencati sotto.</p>
+            </div>
             <PlanCalendar month={plan.month} timeZone={zone} posts={calendarPosts} now={now} />
           </section>
 
@@ -193,13 +204,16 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             <section className="space-y-3" aria-labelledby="plan-outside-title">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 id="plan-outside-title" className="text-lg font-semibold">
-                  Altri post di {monthName} ({plan.outside.length})
+                  Post del mese da aggiungere ({plan.outside.length})
                 </h2>
                 {plan.outside.length > 1 && (
                   <AddToPlanButton planId={plan.id} postIds={plan.outside.map((p) => p.id)} label="Aggiungi tutti al piano" />
                 )}
               </div>
-              <p className="text-sm text-muted">Creati dopo l&apos;apertura del piano: aggiungili per mandarli insieme agli altri.</p>
+              <div className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm">
+                Questi post appartengono a {monthName}, ma non sono ancora nel piano. «Invia il piano» li aggiunge
+                automaticamente; puoi aggiungerli ora per controllare subito griglia ed elenco completi.
+              </div>
               <ol className="panel divide-y divide-border overflow-hidden">
                 {plan.outside.map((post) => (
                   <PlanPostRow
@@ -227,14 +241,22 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             sent={Boolean(plan.sentAt)}
           />
 
-          <PlanSharePanel plan={plan} client={plan.client} planName={planName} toReview={progress.inReview} />
+          <PlanSharePanel
+            workspaceId={context.workspaceId}
+            plan={plan}
+            client={plan.client}
+            planName={planName}
+            toReview={progress.inReview}
+          />
 
           <section className="panel space-y-3 p-4 sm:p-5" aria-labelledby="plan-grid-title">
             <div className="space-y-1">
               <h2 id="plan-grid-title" className="text-lg font-semibold">
-                Griglia Instagram
+                Anteprima griglia Instagram
               </h2>
-              <p className="text-sm text-muted">Il profilo come apparirà a fine mese, dal post più recente.</p>
+              <p className="text-sm text-muted">
+                È una vista degli stessi post del piano, ordinati dal più recente. Tocca una casella per aprire quel post.
+              </p>
             </div>
             <InstagramGrid
               tiles={tiles}
@@ -274,7 +296,7 @@ function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: st
   const { cover } = coverOf(post);
   const comments = post._count.comments;
   return (
-    <li className="flex items-center gap-3 p-3" data-testid="plan-post-row">
+    <li className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap" data-testid="plan-post-row">
       <span className="h-14 w-14 shrink-0 overflow-hidden rounded bg-surface-sunken">
         {cover?.type === "image" ? (
           <img src={cover.url} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -298,7 +320,7 @@ function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: st
           )}
         </span>
       </span>
-      {action}
+      {action && <span className="w-full pl-[4.25rem] sm:w-auto sm:pl-0">{action}</span>}
     </li>
   );
 }

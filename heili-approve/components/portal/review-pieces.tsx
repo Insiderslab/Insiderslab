@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import type { ReactNode, RefObject } from "react";
+import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { PortalQueue } from "./types";
 import type { PortalWording } from "./helpers";
 
@@ -122,7 +123,7 @@ export function SuccessPanel({
   );
 }
 
-/** The big "Non sei sicuro? Parlane con l'assistente" toggle and the panel under it. */
+/** Compact assistant action, kept beside the other feedback tools. */
 export function AssistantToggle({
   open,
   onToggle,
@@ -141,18 +142,12 @@ export function AssistantToggle({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 rounded-lg border-2 border-accent bg-background p-4 text-left hover:bg-surface"
+        className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-md border border-accent bg-background px-3 py-1.5 text-left hover:bg-surface"
       >
-        <span className="space-y-0.5">
-          <span className="block text-base font-semibold text-accent">
-            {open ? "Chiudi l'assistente" : "Non sei sicuro? Parlane con l'assistente"}
-          </span>
-          <span className="block text-sm text-muted">
-            Ti aiuta a capire cosa cambiare, anche a voce. La decisione resta sempre tua.
-          </span>
-        </span>
-        <span aria-hidden="true" className="text-xl text-accent">
-          {open ? "−" : "+"}
+        <HeiliAssistantIcon className="h-8 w-8" />
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-accent">{open ? "Chiudi Heili" : "Parla con Heili"}</span>
+          <span className="block truncate text-xs text-muted">Chat o conversazione vocale sul contenuto</span>
         </span>
       </button>
       {open && children}

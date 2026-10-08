@@ -33,6 +33,7 @@ x-app-env: &app-env
 services:
   postgres:
     image: postgres:16
+    networks: [default, media]
     restart: unless-stopped
     environment:
       POSTGRES_DB: approve
@@ -100,6 +101,57 @@ services:
       web:
         condition: service_started
 
+  media-worker:
+    build: .
+    image: heili-approve:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 96
+    networks: [media]
+    command: ["node", "--import", "tsx", "worker/media-worker.ts"]
+    env_file: ${MEDIA_ENV_FILE:-.env.media}
+    environment:
+      NODE_ENV: production
+      UPLOAD_DIR: /data/uploads
+      REDIS_URL: redis://media-redis:6379
+      MEDIA_ANALYSIS_ENABLED: ${MEDIA_ANALYSIS_ENABLED:-false}
+      QWEN_BASE_URL: ${QWEN_BASE_URL:-https://maas.qwencloudapi.com/compatible-mode/v1}
+      QWEN_VISION_MODEL: ${QWEN_VISION_MODEL:-qwen3-vl-flash}
+      MEDIA_TRANSCRIPTION_ENABLED: ${MEDIA_TRANSCRIPTION_ENABLED:-false}
+      MEDIA_ANALYSIS_DAILY_ASSETS: ${MEDIA_ANALYSIS_DAILY_ASSETS:-100}
+      MEDIA_ANALYSIS_DAILY_AUDIO_SECONDS: ${MEDIA_ANALYSIS_DAILY_AUDIO_SECONDS:-3600}
+    volumes:
+      - uploads:/data/uploads:ro
+    tmpfs:
+      - /tmp:size=268435456,mode=1777
+    depends_on:
+      web:
+        condition: service_started
+      media-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const R=require('ioredis');const r=new R(process.env.REDIS_URL);r.get('health:media-analysis:approve').then(x=>{r.disconnect();process.exit(x==='running'?0:1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  media-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [media]
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction", "--save", ""]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   cron:
     build: .
     image: heili-approve:latest
@@ -113,6 +165,9 @@ services:
     depends_on:
       web:
         condition: service_started
+
+networks:
+  media:
 
 volumes:
   pgdata:

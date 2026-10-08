@@ -408,17 +408,11 @@ export default async function PostDetailPage({
         {notice && <p className="text-sm text-success">{notice}</p>}
 
         {showSharePanel && (
-          <details className="rounded-lg border border-border bg-surface" data-testid="post-share-disclosure">
-            <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
-              Link per il cliente
-            </summary>
-            <div className="border-t border-border p-2 sm:p-3">
-              <PostSharePanel
-                post={{ id: post.id, title: post.title, kind, status: post.status }}
-                client={{ id: client.id, name: client.name, archivedAt: client.archivedAt }}
-              />
-            </div>
-          </details>
+          <PostSharePanel
+            workspaceId={workspaceId}
+            post={{ id: post.id, title: post.title, kind, status: post.status }}
+            client={{ id: client.id, name: client.name, archivedAt: client.archivedAt }}
+          />
         )}
 
         {internal && post.status !== "CANCELLED" && (blogContent ? hasBeenSubmitted || isApproved : true) && (

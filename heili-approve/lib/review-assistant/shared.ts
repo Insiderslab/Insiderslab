@@ -58,6 +58,9 @@ export const actionItemSchema = z.object({
   timeSec: z.number().nullable(),
   /** Videos: end of a range ("dal 12 al 15" → 15), else null. */
   timeEndSec: z.number().nullable(),
+  /** Point selected on an image or paused video frame, as relative 0..1 coordinates. */
+  pinX: z.number().nullable(),
+  pinY: z.number().nullable(),
   request: z.string(),
   priority: z.enum(ACTION_PRIORITIES),
   /** Ads: id of the variant the change is about, else null. */
@@ -166,7 +169,7 @@ export function mediaLabel(mediaIndex: number): string {
 /**
  * Reads ReviewSession.actionItems (JSON) defensively: invalid entries are
  * dropped, and fields added later (timeSec, timeEndSec, variantId,
- * anchorQuote) default to null.
+ * anchorQuote, pinX, pinY) default to null.
  */
 export function parseActionItems(value: unknown): ActionItem[] {
   if (!Array.isArray(value)) return [];
@@ -177,6 +180,8 @@ export function parseActionItems(value: unknown): ActionItem[] {
       mediaIndex: null,
       timeSec: null,
       timeEndSec: null,
+      pinX: null,
+      pinY: null,
       variantId: null,
       anchorQuote: null,
       ...entry,
@@ -222,6 +227,9 @@ export function actionItemPlaceTags(item: ActionItem, labels?: ActionItemLabels)
   if (item.mediaIndex !== null) tags.push(mediaLabel(item.mediaIndex));
   const time = formatActionItemTime(item);
   if (time) tags.push(time);
+  if (item.pinX !== null && item.pinY !== null) {
+    tags.push(`Punto ${Math.round(item.pinX * 100)}%, ${Math.round(item.pinY * 100)}%`);
+  }
   return tags;
 }
 
@@ -295,6 +303,31 @@ export interface VariantMarkerInput {
   timeSec?: number | null;
 }
 
+export interface PointMarkerInput {
+  mediaIndex: number;
+  x: number;
+  y: number;
+  variantId?: string | null;
+  timeSec?: number | null;
+}
+
+/**
+ * Machine-readable marker for one selected point. Every part of the target is
+ * kept in the same marker so a later summary cannot combine the point with a
+ * different media, ads variant or video moment.
+ */
+export function pointMarker(input: PointMarkerInput): string {
+  const mediaIndex = Math.max(0, Math.trunc(input.mediaIndex));
+  const x = Math.min(1, Math.max(0, input.x));
+  const y = Math.min(1, Math.max(0, input.y));
+  const variant = input.variantId?.trim() ? encodeURIComponent(input.variantId.trim()) : "-";
+  const time =
+    typeof input.timeSec === "number" && Number.isFinite(input.timeSec) && input.timeSec >= 0
+      ? String(Math.round(input.timeSec * 10) / 10)
+      : "-";
+  return `[punto media=${mediaIndex} x=${x.toFixed(4)} y=${y.toFixed(4)} variante=${variant} tempo=${time}]`;
+}
+
 /**
  * Text the panel inserts when the client taps "Usa la variante e il momento
  * attuali" on an ads set: which variant, in which placement, at which moment.
@@ -318,6 +351,15 @@ export type MarkerSegment =
       placementLabel: string | null;
       timeSec: number | null;
       label: string;
+    }
+  | {
+      type: "point";
+      mediaIndex: number;
+      x: number;
+      y: number;
+      variantId: string | null;
+      timeSec: number | null;
+      label: string;
     };
 
 const MARKER_RE = new RegExp(
@@ -325,6 +367,7 @@ const MARKER_RE = new RegExp(
     String.raw`\[al momento ((?:\d+:)?\d{1,2}:\d{2}) del video\]`,
     String.raw`\[passaggio «([^«»\[\]]{1,500})»\]`,
     String.raw`\[variante ([A-Za-z0-9_-]{1,32})(?: «([^«»\[\]]{1,200})»)?((?: · [^·\[\]]{1,80})*)\]`,
+    String.raw`\[punto media=(\d{1,4}) x=(0(?:\.\d+)?|1(?:\.0+)?) y=(0(?:\.\d+)?|1(?:\.0+)?) variante=([A-Za-z0-9_.~%:-]{1,200}|-) tempo=(\d+(?:\.\d+)?|-)\]`,
   ].join("|"),
   "g"
 );
@@ -361,6 +404,39 @@ export function splitMessageMarkers(text: string): MarkerSegment[] {
         .filter(Boolean)
         .join(" · ");
       segment = { type: "variant", variantId: match[3], variantName, placementLabel, timeSec, label };
+    } else if (match[6] !== undefined) {
+      const mediaIndex = Number(match[6]);
+      const x = Number(match[7]);
+      const y = Number(match[8]);
+      let variantId: string | null = null;
+      if (match[9] !== "-") {
+        try {
+          variantId = decodeURIComponent(match[9]);
+        } catch {
+          variantId = null;
+        }
+      }
+      const timeSec = match[10] === "-" ? null : Number(match[10]);
+      if (
+        Number.isInteger(mediaIndex) &&
+        Number.isFinite(x) &&
+        Number.isFinite(y) &&
+        x >= 0 &&
+        x <= 1 &&
+        y >= 0 &&
+        y <= 1 &&
+        (timeSec === null || (Number.isFinite(timeSec) && timeSec >= 0))
+      ) {
+        const label = [
+          `Punto sul media ${mediaIndex + 1}`,
+          `${Math.round(x * 100)}%, ${Math.round(y * 100)}%`,
+          variantId ? `Variante ${variantId}` : null,
+          timeSec !== null ? formatTimecode(timeSec) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        segment = { type: "point", mediaIndex, x, y, variantId, timeSec, label };
+      }
     }
     if (!segment) continue;
     if (match.index > last) segments.push({ type: "text", value: text.slice(last, match.index) });

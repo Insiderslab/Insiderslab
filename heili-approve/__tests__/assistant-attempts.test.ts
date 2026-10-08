@@ -70,6 +70,7 @@ const reviewerB: AssistantReviewer = { id: "reviewer-b", clientId: "client-1", n
 let sessions: Session[];
 let attempts: Attempt[];
 let transactionTail: Promise<unknown>;
+let currentPostVersion = 1;
 
 function makeSession(reviewerId: string, id = `session-${reviewerId}`): Session {
   const startedAt = new Date(Date.now() - 60_000);
@@ -164,7 +165,7 @@ function attemptMatches(attempt: Attempt, where: AttemptWhere): boolean {
 function installPrismaMock() {
   const tx = {
     $executeRaw: vi.fn(async () => 1),
-    post: { findUnique: vi.fn(async () => ({ workspaceId: "workspace-1" })) },
+    post: { findUnique: vi.fn(async () => ({ workspaceId: "workspace-1", clientId: "client-1", status: "IN_REVIEW", currentVersionNumber: currentPostVersion })) },
     reviewProviderAttempt: {
       findFirst: vi.fn(async ({ where }: { where: AttemptWhere }) => {
         const found = attempts
@@ -246,6 +247,7 @@ function expireCooldown(): void {
 }
 
 beforeEach(() => {
+  currentPostVersion = 1;
   sessions = [makeSession(reviewerA.id)];
   attempts = [];
   transactionTail = Promise.resolve();
@@ -383,5 +385,21 @@ describe("persistent review-assistant provider budgets", () => {
 
     expect(mocks.runTurn).toHaveBeenCalledTimes(1);
     expect(attempts).toHaveLength(1);
+  });
+});
+
+
+describe("fresh review version checks", () => {
+  it("rejects a stale snapshot before spending a provider call", async () => {
+    currentPostVersion = 2;
+    await expect(sendAssistantMessage(reviewerA, { postId: "post-1", versionNumber: 1, inputMode: "TEXT", message: "Cambia colore" })).rejects.toMatchObject({ status: 409 });
+    expect(mocks.runTurn).not.toHaveBeenCalled();
+    expect(attempts).toHaveLength(0);
+  });
+  it("does not store a reply if the agency sends a new version during generation", async () => {
+    mocks.runTurn.mockImplementation(async () => { currentPostVersion = 2; return { reply: "Quale colore?", model: "test-model" }; });
+    await expect(sendAssistantMessage(reviewerA, { postId: "post-1", versionNumber: 1, inputMode: "TEXT", message: "Cambia colore" })).rejects.toMatchObject({ status: 409 });
+    expect(attempts).toHaveLength(1);
+    expect(sessions[0].messages.some(m => m.role === "ASSISTANT")).toBe(false);
   });
 });

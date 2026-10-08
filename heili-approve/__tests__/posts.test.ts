@@ -402,6 +402,8 @@ describe("assistant action items as comments", () => {
       mediaIndex: 1,
       timeSec: 7,
       timeEndSec: 9,
+      pinX: null,
+      pinY: null,
     });
     expect(planActionItemComment(item({ mediaIndex: 0 }), media)).toMatchObject({ mediaIndex: 0, timeSec: null });
   });
@@ -593,6 +595,8 @@ describe("assistant action items per kind", () => {
       mediaIndex: null,
       timeSec: null,
       timeEndSec: null,
+      pinX: null,
+      pinY: null,
       variantId: null,
       anchor,
     });

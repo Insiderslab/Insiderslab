@@ -126,7 +126,7 @@ describe("BlogReview", () => {
     expect(html).toContain("Mostra nel testo");
     expect(html).toContain("Chiedi modifiche");
     expect(html).toContain(">Approva<");
-    expect(html).toContain("Parlane con l&#x27;assistente");
+    expect(html).toContain("Parla con Heili");
     expect(html).toContain("Dettagli per i motori di ricerca");
     expect(html).toContain("Tutti gli articoli");
     expect(html).toContain("Articolo 1 di 2 da approvare");

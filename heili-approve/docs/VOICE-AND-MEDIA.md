@@ -1,0 +1,50 @@
+# Voce, revisione e contesto dei media
+
+Implementazione dell'8 ottobre 2026, richiesta da Stefano.
+
+## Percorso cliente
+
+Il microfono nel commento detta una bozza modificabile; non invia il commento. «Parla con Heili» apre l'assistente del contenuto. Avviare la conversazione abilita ascolto, risposta e lettura vocale; Pausa/Termina interrompono il ciclo. Un errore di riconoscimento conserva il testo senza inviarlo. Approvazioni e richieste finali restano azioni esplicite del cliente.
+
+La voce usa SpeechRecognition e speechSynthesis del browser. Disponibilità, lingua, permessi e trattamento dell'audio dipendono dal browser/dispositivo; quando non disponibili resta la conversazione scritta. Le prove automatiche simulano i dispositivi: non certificano il microfono fisico. Nessun audio del microfono viene salvato dall'app; la trascrizione conversazionale viene conservata nella sessione esistente.
+
+Il punto selezionato mantiene coordinate, media, variante e momento del video insieme, anche nel riepilogo strutturato e nel commento finale. Le sessioni sono vincolate alla versione: un aggiornamento del post durante una risposta impedisce di salvare un feedback sulla versione superata.
+
+## Condivisione e piano
+
+Il link cliente è visibile nella pagina del post, anche cambiando scheda. Dall'elenco «Apri e copia link» porta direttamente al pannello. Con più referenti si sceglie esplicitamente la persona; il link conserva i suoi permessi e apre quel post. Le bozze non diventano visibili per effetto della copia.
+
+Calendario, elenco e griglia sono viste degli stessi contenuti. Il piano distingue post inclusi, esterni e nuovi invii. Salvare non significa inviare. I post esterni già revisionati si aggiungono con «Aggiungi al piano» senza notificare nuovamente.
+
+## Analisi privata per l'assistente
+
+L'analisi parte dopo il salvataggio di un post con media locali, oppure alla prima conversazione su media esistenti. I caricamenti abbandonati non vengono inviati ai provider. Qwen3-VL-Flash descrive immagini e al massimo otto fotogrammi; Whisper trascrive il parlato con tempi. I fotogrammi non garantiscono copertura di ogni scena, né riconoscimento della musica. Risultati mancanti sono dichiarati tali all'assistente, non inventati.
+
+Il server conserva il risultato per asset e revisione dell'analizzatore, senza ripeterlo a ogni conversazione. L'assistente riceve soltanto gli asset presenti nella versione autorizzata del post, filtrati per workspace. I risultati grezzi non sono esportati nel portale, ma l'assistente può usarli nelle risposte. Eliminare l'asset elimina la sua analisi; il registro dei tentativi conserva metadati di consumo fino alla cancellazione del workspace. Le normali immagini possono ancora essere allegate al modello conversazionale.
+
+Limiti iniziali per workspace: 100 tentativi / 24 ore, 3600 secondi di audio / 24 ore; singolo video massimo 600 secondi, file massimo 300 MiB, dimensioni positive fino a 50 milioni di pixel. Anche file non decodificabili consumano un tentativo. Esiti incerti/interrotti non vengono ritentati automaticamente per evitare addebiti duplicati. Una nuova revisione dell'analizzatore può accodare nuovamente gli asset.
+
+Provider: l'endpoint Qwen predefinito riusa il servizio già adottato nella mappatura Heili (`maas.qwencloudapi.com`). Sono ammessi anche gli endpoint Alibaba DashScope indicati nel codice. Audio estratto inviato all'API OpenAI Whisper; conversazioni al provider già configurato nell'istanza. Non promettere residenza UE o assenza di retention dei provider senza verificare il contratto dell'account. Configurazione disabilitata per default; attivazione esplicita tramite variabili server.
+
+## Isolamento e configurazione
+
+Applicare la migrazione `20261008190000_media_analysis` prima di avviare il worker. Creare un ruolo PostgreSQL dedicato `approve_media_analysis`, con password diversa da quella applicativa, senza superuser, creazione ruoli/database o ereditarietà. Dopo la creazione del ruolo:
+
+```sql
+GRANT CONNECT ON DATABASE approve TO approve_media_analysis;
+GRANT USAGE ON SCHEMA public TO approve_media_analysis;
+GRANT SELECT ON "MediaAsset" TO approve_media_analysis;
+GRANT SELECT, INSERT, UPDATE ON "MediaAnalysis", "MediaAnalysisAttempt" TO approve_media_analysis;
+```
+
+Creare `.env.media` (permessi 600, escluso da Git) con `DATABASE_URL` di quel ruolo, `QWEN_API_KEY` e `OPENAI_API_KEY` per la trascrizione. Questo file è passato solo al media-worker: la chiave Qwen e la password del ruolo dedicato non entrano nel web o nel worker di pubblicazione. Nel normale `.env` configurare il flag e le opzioni documentate in `.env.example`. Il servizio media non riceve segreti login, cifratura token o Metricool. Il decoder non eredita neppure le credenziali del worker. La rete `media` collega solo PostgreSQL, media-worker e media-redis; la coda di pubblicazione rimane separata. Verificare i privilegi effettivi e che non esistano concessioni ereditate da PUBLIC.
+
+I rifiuti per quota giornaliera vengono riaccodati dopo 24 ore, poiché non hanno ancora chiamato i provider. Gli altri fallimenti restano terminali. La quota audio viene riservata soltanto quando esiste una chiave di trascrizione; un rifiuto per quota audio rimanda l'intera analisi.
+
+Container non-root, filesystem di sola lettura, upload read-only, tmpfs, capability rimosse, limiti memoria/CPU/processi. Il job persistente nel database consente di ricostruire la coda dopo un guasto Redis. La salute del servizio media è indipendente dall'endpoint principale dell'app.
+
+## Identità dell'icona
+
+`components/heili-assistant-icon.tsx` riprende il nucleo con tre satelliti del materiale Heili interno: `sbp-consenso-team/docs/IDENTITA_HEILI.md` (25 luglio 2026), `DESIGN-SYSTEM-HEILI.md` e `design-tokens.css` (21 agosto 2026), con geometrie dal componente Business Brain. Navy #001F2F, menta #00E1CD, nucleo chiaro. Il materiale indica Heili come prodotto del gruppo 3Runes; non è stato trovato un manuale 3Runes autonomo più recente. L'icona è un adattamento per l'assistente, non un nuovo marchio ufficiale.
+
+Fonti tecniche: [Whisper e timestamp](https://developers.openai.com/api/docs/guides/speech-to-text), [Qwen3-VL-Flash](https://docs.modelstudio.console.alibabacloud.com/en/model-studio/qwen3-vl-flash).

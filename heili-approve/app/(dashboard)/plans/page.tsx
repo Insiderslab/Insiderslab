@@ -62,10 +62,27 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
             Prepara il piano del mese
           </h2>
           <p className="text-sm text-muted">
-            Presenta al cliente tutti i post social del mese insieme: li rivede in una sola pagina, vede la griglia del
-            profilo e li approva anche tutti in una volta.
+            Il piano raccoglie gli stessi post del calendario in un unico percorso di revisione. La griglia è solo una
+            vista del risultato su Instagram: non crea copie e non invia nulla da sola.
           </p>
         </div>
+        <ol className="grid gap-2 sm:grid-cols-3" aria-label="Come funziona il piano del mese">
+          {[
+            ["1", "Apri il mese", "Scegli cliente e mese: trovi i post già preparati."],
+            ["2", "Completa i post", "Crea quelli mancanti e controlla calendario e griglia."],
+            ["3", "Invia al cliente", "Un solo invio apre la revisione di tutti i post pronti."],
+          ].map(([number, title, body]) => (
+            <li key={number} className="inset flex gap-3 p-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+                {number}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{title}</span>
+                <span className="block text-xs leading-relaxed text-muted">{body}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
         <NewPlanForm
           clients={socialClients.map((c) => ({ id: c.id, name: c.name }))}
           clientId={scoped && socialClients.some((c) => c.id === scoped.id) ? scoped.id : ""}
@@ -119,7 +136,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                     </span>
                     <span className="space-y-0.5 text-sm text-muted md:text-right">
                       <span className="block">
-                        {plan.sentAt ? `Inviato ${formatDateTime(plan.sentAt, zone, { year: false })}` : "Non ancora inviato"}
+                        {plan.sentAt ? `Inviato ${formatDateTime(plan.sentAt, zone, { year: false })}` : "Da preparare e inviare"}
                       </span>
                       {plan.reviewDueAt && (
                         <span className="block">Risposta entro {formatDateTime(plan.reviewDueAt, zone, { year: false })}</span>

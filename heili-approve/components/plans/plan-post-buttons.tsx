@@ -15,7 +15,7 @@ export function AddToPlanButton({ planId, postIds, label }: { planId: string; po
       <button
         type="button"
         disabled={pending}
-        className="btn btn-sm"
+        className="btn btn-sm min-h-11"
         onClick={() =>
           startTransition(async () => {
             setError(null);

@@ -20,7 +20,10 @@
  * the chat and tell the model exactly what the client means.
  */
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useSpeechInput } from "@/components/voice/use-speech-input";
+import { useSpeechOutput } from "@/components/voice/use-speech-output";
+import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
 import {
@@ -31,6 +34,7 @@ import {
   VERDICT_LABELS,
   actionItemPlaceTags,
   passageMarker,
+  pointMarker,
   shortQuote,
   splitMessageMarkers,
   variantMarker,
@@ -63,6 +67,14 @@ export interface AssistantPanelProps {
   getContext?: () => AssistantAdsContext | null;
   /** Ads: variant names by id, for the summary's tags. */
   variantNames?: Record<string, string>;
+  /** Point currently selected on an image or paused video frame. */
+  getPointContext?: () => {
+    mediaIndex: number;
+    x: number;
+    y: number;
+    variantId?: string | null;
+    timeSec?: number | null;
+  } | null;
 }
 
 /** How often the chips re-read the player / selection / variant on screen. */
@@ -107,57 +119,6 @@ function adsContextLabel(context: AssistantAdsContext): string {
     .join(" · ");
 }
 
-// ─── Speech recognition (not in every browser, not in TS's DOM lib) ──────────
-
-interface SpeechRecognitionResultLike {
-  isFinal: boolean;
-  0: { transcript: string };
-}
-
-interface SpeechRecognitionEventLike {
-  results: ArrayLike<SpeechRecognitionResultLike>;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-function getSpeechRecognition(): SpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-const noopSubscribe = () => () => {};
-
-function useVoiceSupported(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
-    () => getSpeechRecognition() !== null,
-    () => false
-  );
-}
-
-const VOICE_ERRORS: Record<string, string> = {
-  "not-allowed": "Per dettare devi consentire l'uso del microfono al browser.",
-  "service-not-allowed": "Per dettare devi consentire l'uso del microfono al browser.",
-  "audio-capture": "Non trovo nessun microfono su questo dispositivo.",
-  network: "La dettatura non è disponibile senza connessione.",
-};
-
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
@@ -194,6 +155,7 @@ export function AssistantPanel({
   getSelection,
   getContext,
   variantNames,
+  getPointContext,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const labels: ActionItemLabels = { variantNames };
@@ -212,12 +174,8 @@ export function AssistantPanel({
   const [error, setError] = useState<string | null>(null);
   const [changesDraft, setChangesDraft] = useState<string | null>(null);
   const [done, setDone] = useState<null | "changes" | "approved">(null);
-
-  const [listening, setListening] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const voiceSupported = useVoiceSupported();
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const draftBeforeVoiceRef = useRef("");
+  const [conversationMode, setConversationMode] = useState<"off" | "active" | "paused">("off");
+  const conversationModeRef = useRef<"off" | "active" | "paused">("off");
 
   const [videoTime, setVideoTime] = useState<number | null>(null);
   const selection = usePolled(getSelection, (anchor) => `${anchor.blockIndex}|${anchor.prefix}|${anchor.quote}`);
@@ -225,8 +183,33 @@ export function AssistantPanel({
     getContext,
     (c) => `${c.variantId}|${c.placement}|${c.timeSec === null ? "" : Math.floor(c.timeSec)}|${c.variantName}`
   );
+  const pointContext = usePolled(
+    getPointContext,
+    (point) =>
+      `${point.variantId ?? ""}|${point.mediaIndex}|${point.x.toFixed(4)}|${point.y.toFixed(4)}|${point.timeSec ?? ""}`
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const draftRef = useRef(draft);
+  const contextRef = useRef({ videoTime, selection, adsContext, pointContext });
+  const speechInput = useSpeechInput({
+    value: draft,
+    onChange: (value) => {
+      draftRef.current = value;
+      setDraft(value);
+      setDictated(true);
+    },
+    onConversationTurn: sendConversationTurn,
+    maxLength: MAX_CLIENT_MESSAGE_LENGTH,
+  });
+  const speechOutput = useSpeechOutput();
+  const cancelSpeechInput = speechInput.cancel;
+  const cancelSpeechOutput = speechOutput.cancel;
+
+  useEffect(() => {
+    draftRef.current = draft;
+    contextRef.current = { videoTime, selection, adsContext, pointContext };
+  }, [adsContext, draft, pointContext, selection, videoTime]);
 
   const applyState = useCallback((state: AssistantStateResponse) => {
     setSession(state.session);
@@ -277,8 +260,16 @@ export function AssistantPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [session?.messages.length, pendingMessage, busy]);
 
-  // Stop dictation when the panel goes away.
-  useEffect(() => () => recognitionRef.current?.abort(), []);
+  // The parent keys this panel by post/version. Cleanup makes sure a route or
+  // version change never leaves the microphone or a spoken reply running.
+  useEffect(
+    () => () => {
+      conversationModeRef.current = "off";
+      cancelSpeechInput();
+      cancelSpeechOutput();
+    },
+    [cancelSpeechInput, cancelSpeechOutput, postId, versionNumber]
+  );
 
   const messages = session?.messages ?? [];
   const lastMessage = messages.at(-1);
@@ -289,47 +280,94 @@ export function AssistantPanel({
   const messagesLeft = session ? session.clientMessagesLeft : null;
   const outOfSessions = !session && sessionsLeft === 0;
   const composerDisabled = !canChat || done !== null || busy !== null || outOfSessions || messagesLeft === 0;
+  const composerDisabledRef = useRef(composerDisabled);
+
+  useEffect(() => {
+    composerDisabledRef.current = composerDisabled;
+  }, [composerDisabled]);
 
   // ─── Voice ─────────────────────────────────────────────────────────────────
 
-  function startListening() {
-    const Recognition = getSpeechRecognition();
-    if (!Recognition) return;
-    setVoiceError(null);
-    const recognition = new Recognition();
-    recognition.lang = "it-IT";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    draftBeforeVoiceRef.current = draft.trimEnd();
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
-      const base = draftBeforeVoiceRef.current;
-      const spoken = transcript.trim();
-      setDraft((base && spoken ? `${base} ${spoken}` : base || spoken).slice(0, MAX_CLIENT_MESSAGE_LENGTH));
-      if (spoken) setDictated(true);
-    };
-    recognition.onerror = (event) => {
-      if (event.error !== "aborted" && event.error !== "no-speech") {
-        setVoiceError(VOICE_ERRORS[event.error] ?? "La dettatura si è interrotta. Riprova o scrivi il messaggio.");
-      }
-    };
-    recognition.onend = () => {
-      setListening(false);
-      recognitionRef.current = null;
-    };
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setListening(true);
-    } catch {
-      recognitionRef.current = null;
-      setVoiceError("Non riesco ad avviare la dettatura. Riprova o scrivi il messaggio.");
-    }
+  function setVoiceMode(mode: "off" | "active" | "paused") {
+    conversationModeRef.current = mode;
+    setConversationMode(mode);
   }
 
-  function stopListening() {
-    recognitionRef.current?.stop();
+  function currentContextMarker(): string {
+    const {
+      adsContext: currentAdsContext,
+      selection: currentSelection,
+      videoTime: currentVideoTime,
+      pointContext: currentPointContext,
+    } = contextRef.current;
+    const markers: string[] = [];
+    if (currentAdsContext) {
+      markers.push(
+        variantMarker({
+          variantId: currentAdsContext.variantId,
+          variantName: currentAdsContext.variantName,
+          placementLabel: currentAdsContext.placementLabel,
+          timeSec: currentAdsContext.timeSec,
+        })
+      );
+    }
+    if (currentSelection) markers.push(passageMarker(currentSelection.quote));
+    if (currentPointContext) {
+      markers.push(pointMarker(currentPointContext));
+    } else if (!currentAdsContext && currentVideoTime !== null) {
+      markers.push(videoMomentMarker(currentVideoTime));
+    }
+    return markers.join(" ");
+  }
+
+  function contextualVoiceDraft(): string {
+    const current = draftRef.current.trim();
+    const marker = currentContextMarker();
+    if (!marker || current.includes(marker)) return current;
+    return current ? `${marker} ${current}` : `${marker} `;
+  }
+
+  function startVoiceTurn() {
+    if (conversationModeRef.current !== "active" || composerDisabledRef.current) {
+      if (conversationModeRef.current === "active") setVoiceMode("paused");
+      return;
+    }
+    speechOutput.cancel();
+    speechInput.start({ baseText: contextualVoiceDraft(), continuous: false, submitOnEnd: true });
+  }
+
+  function sendConversationTurn(message: string) {
+    if (conversationModeRef.current !== "active") return;
+    void sendMessage(false, { message, inputMode: "VOICE", conversation: true });
+  }
+
+  function startConversation() {
+    if (!speechInput.supported || !speechOutput.supported || composerDisabled) return;
+    speechInput.cancel();
+    speechOutput.cancel();
+    setVoiceMode("active");
+    speechOutput.speak(
+      `${copy.intro} Quando hai finito di parlare, ti rispondo e poi torno ad ascoltare.`,
+      startVoiceTurn
+    );
+  }
+
+  function pauseConversation() {
+    speechInput.cancel();
+    speechOutput.cancel();
+    setVoiceMode("paused");
+  }
+
+  function resumeConversation() {
+    if (composerDisabled) return;
+    setVoiceMode("active");
+    window.setTimeout(startVoiceTurn, 0);
+  }
+
+  function endConversation() {
+    speechInput.cancel();
+    speechOutput.cancel();
+    setVoiceMode("off");
   }
 
   // ─── Actions ───────────────────────────────────────────────────────────────
@@ -363,11 +401,19 @@ export function AssistantPanel({
     );
   }
 
-  async function sendMessage(retry = false) {
-    const message = draft.trim();
+  function insertPointContext() {
+    if (!pointContext) return;
+    insertMarker(pointMarker(pointContext));
+  }
+
+  async function sendMessage(
+    retry = false,
+    voiceTurn?: { message: string; inputMode: ReviewInputModeValue; conversation: boolean }
+  ) {
+    const message = (voiceTurn?.message ?? draft).trim();
     if (busy || (!retry && !message)) return;
-    stopListening();
-    const inputMode: ReviewInputModeValue = dictated ? "VOICE" : "TEXT";
+    speechInput.cancel();
+    const inputMode: ReviewInputModeValue = voiceTurn?.inputMode ?? (dictated ? "VOICE" : "TEXT");
 
     setBusy("send");
     setError(null);
@@ -387,8 +433,19 @@ export function AssistantPanel({
       setSessionsLeft(turn.sessionsLeft);
       setReadiness(turn.readiness);
       setChangesDraft(null);
+      if (voiceTurn?.conversation && conversationModeRef.current === "active") {
+        const reply = [...turn.session.messages].reverse().find((item) => item.role === "ASSISTANT");
+        if (reply) {
+          speechOutput.speak(reply.content, () => {
+            if (conversationModeRef.current === "active") startVoiceTurn();
+          });
+        } else {
+          setVoiceMode("paused");
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "L'assistente non è riuscito a rispondere. Riprova.");
+      if (voiceTurn?.conversation) setVoiceMode("paused");
       // The message may have been stored before the engine failed: show what
       // the server has, and give the text back only if it was not saved.
       try {
@@ -419,7 +476,7 @@ export function AssistantPanel({
 
   async function prepareSummary() {
     if (busy) return;
-    stopListening();
+    endConversation();
     setBusy("finalize");
     setError(null);
     try {
@@ -452,7 +509,7 @@ export function AssistantPanel({
 
   async function approve() {
     if (busy) return;
-    stopListening();
+    endConversation();
     setBusy("approve");
     setError(null);
     try {
@@ -476,11 +533,14 @@ export function AssistantPanel({
 
   return (
     <section className="panel rounded-lg p-4 space-y-3" aria-label="Assistente di revisione">
-      <header className="space-y-1">
-        <h2 className="text-sm font-semibold">Assistente di revisione</h2>
-        <p className="text-xs text-muted">
-          Ti aiuta a spiegare all&apos;agenzia cosa cambiare. Non approva e non invia nulla al posto tuo.
-        </p>
+      <header className="flex items-start gap-3">
+        <HeiliAssistantIcon className="h-9 w-9" />
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-sm font-semibold">Assistente di revisione</h2>
+          <p className="text-xs text-muted">
+            Ti aiuta a spiegare all&apos;agenzia cosa cambiare. Non approva e non invia nulla al posto tuo.
+          </p>
+        </div>
       </header>
 
       <div
@@ -544,7 +604,7 @@ export function AssistantPanel({
           )}
 
           <div className="space-y-2">
-            {(videoTime !== null || selection || adsContext) && (
+            {(videoTime !== null || selection || adsContext || pointContext) && (
               <div className="flex flex-wrap gap-2">
                 {videoTime !== null && (
                   <Chip onClick={insertVideoMoment} disabled={composerDisabled}>
@@ -563,15 +623,25 @@ export function AssistantPanel({
                     <span className="text-muted">({adsContextLabel(adsContext)})</span>
                   </Chip>
                 )}
+                {pointContext && (
+                  <Chip onClick={insertPointContext} disabled={composerDisabled}>
+                    Usa il punto selezionato ({Math.round(pointContext.x * 100)}%, {Math.round(pointContext.y * 100)}%)
+                  </Chip>
+                )}
               </div>
             )}
             <textarea
               ref={textareaRef}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                draftRef.current = e.target.value;
+                setDraft(e.target.value);
+                setDictated(false);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
+                  if (conversationMode === "active") pauseConversation();
                   void sendMessage();
                 }
               }}
@@ -580,34 +650,127 @@ export function AssistantPanel({
               disabled={composerDisabled}
               placeholder={completed ? "Vuoi aggiungere qualcosa? Scrivilo qui…" : copy.placeholder}
               aria-label="Messaggio per l'assistente"
-              className="w-full resize-y rounded border border-border bg-background p-3 text-sm outline-none focus:border-accent disabled:opacity-60"
+              className="w-full resize-y rounded border border-border bg-background p-3 text-base outline-none focus:border-accent disabled:opacity-60"
             />
-            {listening && <p className="text-xs text-accent">Ti ascolto… tocca «Stop» quando hai finito.</p>}
-            {voiceError && <p className="text-xs text-error">{voiceError}</p>}
+            {speechInput.error && (
+              <p className="text-xs text-error" role="alert">
+                {speechInput.error}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              {voiceSupported && (
+              {speechInput.supported && conversationMode === "off" && (
                 <button
                   type="button"
-                  onClick={listening ? stopListening : startListening}
-                  disabled={!listening && composerDisabled}
-                  aria-pressed={listening}
-                  className={`rounded border px-3 py-2 text-sm disabled:opacity-50 ${
-                    listening ? "border-accent text-accent" : "border-border hover:border-border-hover"
+                  onClick={() =>
+                    speechInput.listening
+                      ? speechInput.stop()
+                      : speechInput.start({ continuous: true, submitOnEnd: false })
+                  }
+                  disabled={!speechInput.listening && composerDisabled}
+                  aria-pressed={speechInput.listening}
+                  className={`min-h-11 rounded border px-3 text-sm disabled:opacity-50 ${
+                    speechInput.listening ? "border-accent text-accent" : "border-border hover:border-border-hover"
                   }`}
                 >
-                  {listening ? "Stop" : "Detta a voce"}
+                  {speechInput.listening ? "Ferma dettatura" : "Detta il messaggio"}
                 </button>
               )}
               <button
                 type="button"
-                onClick={() => sendMessage()}
+                onClick={() => {
+                  if (conversationMode === "active") pauseConversation();
+                  void sendMessage();
+                }}
                 disabled={composerDisabled || !draft.trim()}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                className="min-h-11 rounded bg-accent px-4 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {busy === "send" ? "Invio…" : "Invia"}
               </button>
               {messagesLeft !== null && messagesLeft <= 5 && messagesLeft > 0 && (
                 <span className="text-xs text-muted">Messaggi rimasti: {messagesLeft}</span>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-semibold">Parla con Heili</p>
+                <p className="text-xs text-muted">
+                  Conversazione vocale sul contenuto che stai guardando. Heili ascolta un turno, risponde a voce e
+                  prepara il feedback; non approva e non invia modifiche.
+                </p>
+              </div>
+              {!speechInput.supported || !speechOutput.supported ? (
+                <p className="text-xs text-muted">
+                  La conversazione vocale non è disponibile in questo browser. La chat scritta resta sempre utilizzabile.
+                </p>
+              ) : conversationMode === "off" ? (
+                <button
+                  type="button"
+                  onClick={startConversation}
+                  disabled={composerDisabled}
+                  className="min-h-11 rounded-md border border-accent bg-background px-4 text-sm font-semibold text-accent hover:bg-surface disabled:opacity-50"
+                >
+                  Inizia conversazione vocale
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm" aria-live="polite">
+                    {conversationMode === "paused"
+                      ? "Conversazione in pausa."
+                      : speechInput.listening
+                        ? "Ti ascolto…"
+                        : speechOutput.speaking
+                          ? "Heili sta rispondendo…"
+                          : busy === "send"
+                            ? "Heili sta preparando la risposta…"
+                            : "Conversazione attiva. Puoi iniziare il prossimo turno."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {conversationMode === "active" && speechInput.listening && (
+                      <button
+                        type="button"
+                        onClick={speechInput.stop}
+                        className="min-h-11 rounded-md bg-accent px-3 text-sm font-semibold text-white hover:bg-accent-hover"
+                      >
+                        Ho finito, rispondi
+                      </button>
+                    )}
+                    {conversationMode === "active" && !speechInput.listening && !speechOutput.speaking && !busy && (
+                      <button
+                        type="button"
+                        onClick={startVoiceTurn}
+                        className="min-h-11 rounded-md bg-accent px-3 text-sm font-semibold text-white hover:bg-accent-hover"
+                      >
+                        Parla ora
+                      </button>
+                    )}
+                    {conversationMode === "active" ? (
+                      <button
+                        type="button"
+                        onClick={pauseConversation}
+                        className="min-h-11 rounded-md border border-border bg-background px-3 text-sm hover:border-border-hover"
+                      >
+                        Pausa
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={resumeConversation}
+                        disabled={composerDisabled}
+                        className="min-h-11 rounded-md border border-accent bg-background px-3 text-sm font-medium text-accent disabled:opacity-50"
+                      >
+                        Riprendi
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={endConversation}
+                      className="min-h-11 rounded-md border border-border bg-background px-3 text-sm hover:border-border-hover"
+                    >
+                      Termina
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -646,7 +809,7 @@ function Chip({ onClick, disabled, children }: { onClick: () => void; disabled: 
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="max-w-full truncate rounded-full border border-border px-3 py-1 text-left text-xs hover:border-border-hover disabled:opacity-50"
+      className="min-h-11 max-w-full truncate rounded-full border border-border px-3 py-1 text-left text-xs hover:border-border-hover disabled:opacity-50"
     >
       {children}
     </button>
@@ -671,6 +834,13 @@ function MessageText({ content }: { content: string }) {
           return (
             <span key={i} className={`${chip} italic`} title={segment.quote}>
               Passaggio {shortQuote(segment.quote, 60)}
+            </span>
+          );
+        }
+        if (segment.type === "point") {
+          return (
+            <span key={i} className={chip}>
+              {segment.label}
             </span>
           );
         }
@@ -759,7 +929,7 @@ function SummaryCard({
           rows={5}
           maxLength={5000}
           disabled={disabled}
-          className="w-full resize-y rounded border border-border bg-background p-2 text-sm outline-none focus:border-accent disabled:opacity-60"
+          className="w-full resize-y rounded border border-border bg-background p-2 text-base outline-none focus:border-accent disabled:opacity-60"
         />
       </label>
     </div>
@@ -789,7 +959,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded border px-4 py-2 text-sm font-medium disabled:opacity-50 ${tone}`}
+      className={`min-h-11 rounded border px-4 py-2 text-sm font-medium disabled:opacity-50 ${tone}`}
     >
       {children}
     </button>

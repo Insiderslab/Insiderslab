@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { mockPrisma, sendEmail } = vi.hoisted(() => ({
   mockPrisma: {
     client: { findFirst: vi.fn() },
-    clientReviewer: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    clientReviewer: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     workspace: { findUnique: vi.fn() },
     post: { findMany: vi.fn() },
   },
@@ -26,6 +26,7 @@ import {
   submitFollowUp,
   whatsappHref,
 } from "../components/share/messages";
+import PostSharePanel from "../components/share/post-share-panel";
 import { issueReviewerToken } from "../lib/reviewers";
 import { notifyReviewReminder, notifyReviewRequested } from "../lib/notifications";
 import { NO_EMAIL_MESSAGE, createReviewer, reactivateReviewer, sendReviewerLink } from "../lib/reviewers";
@@ -97,6 +98,22 @@ describe("share messages", () => {
 
     expect(submitFollowUp({ clientCount: 1, clientsWithoutReviewers: ["Aurora"], clientsWithoutEmail: [] })).toContain(
       "Aurora non ha referenti attivi"
+    );
+  });
+});
+
+describe("post share panel scope", () => {
+  it("loads personal links only through the post client's workspace", async () => {
+    mockPrisma.clientReviewer.findMany.mockResolvedValue([]);
+
+    await PostSharePanel({
+      workspaceId: "w1",
+      post: { id: "p1", title: "Post", kind: "SOCIAL_POST", status: "IN_REVIEW" },
+      client: { id: "c1", name: "Le Querce", archivedAt: null },
+    });
+
+    expect(mockPrisma.clientReviewer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { clientId: "c1", active: true, client: { workspaceId: "w1" } } })
     );
   });
 });

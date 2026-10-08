@@ -362,20 +362,6 @@ export default function BlogReview({
         </p>
       )}
 
-      {canAct && assistantEnabled && (
-        <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-          <AssistantPanel
-            token={token}
-            postId={post.id}
-            versionNumber={post.versionNumber}
-            onSubmitChanges={submitFromAssistant}
-            onApprove={approveFromAssistant}
-            kind="BLOG_ARTICLE"
-            getSelection={getSelection}
-          />
-        </AssistantToggle>
-      )}
-
       <section className="space-y-3" aria-labelledby="comments-title">
         <div className="flex items-center justify-between gap-3">
           <h2 id="comments-title" className="text-base font-semibold">
@@ -391,6 +377,20 @@ export default function BlogReview({
             </button>
           )}
         </div>
+        {canAct && assistantEnabled && (
+          <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+            <AssistantPanel
+              key={`${post.id}-${post.versionNumber}`}
+              token={token}
+              postId={post.id}
+              versionNumber={post.versionNumber}
+              onSubmitChanges={submitFromAssistant}
+              onApprove={approveFromAssistant}
+              kind="BLOG_ARTICLE"
+              getSelection={getSelection}
+            />
+          </AssistantToggle>
+        )}
         {draft?.kind === "general" && canComment && (
           <CommentComposer
             key={draftKey}

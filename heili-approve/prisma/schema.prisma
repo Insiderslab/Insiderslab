@@ -101,6 +101,7 @@ model Workspace {
   plans       ContentPlan[]
   automationTokens AutomationToken[]
   automationUploads AutomationUploadReservation[]
+  mediaAnalysisAttempts MediaAnalysisAttempt[]
 
   @@index([ownerId])
 }
@@ -430,6 +431,8 @@ model MediaAsset {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  analysis MediaAnalysis?
+
   @@index([workspaceId])
 }
 
@@ -503,6 +506,34 @@ model AutomationUploadReservation {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, expiresAt])
+}
+
+/// Internal evidence for the assistant. Never returned by public media/post APIs.
+model MediaAnalysis {
+  assetId String @id
+  revision String
+  status String @default("PENDING")
+  result Json?
+  failureCode String?
+  startedAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+/// Charged before provider calls; failures and uncertain requests consume budget.
+model MediaAnalysisAttempt {
+  id String @id @default(cuid())
+  workspaceId String
+  assetId String
+  audioSeconds Int @default(0)
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
 
 model AutomationToken {

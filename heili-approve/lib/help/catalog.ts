@@ -98,7 +98,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Scegli cliente e tipo", body: "Apri «Nuovo contenuto» e seleziona un servizio attivo per il cliente. Compila data e contenuti richiesti." },
       { title: "Verifica l’anteprima", body: "Controlla testo, media e anteprime. Correggi gli avvisi prima di inviare." },
-      { title: "Invia in revisione", body: "Salva la bozza, apri la scheda del contenuto e usa «Invia in revisione». Il cliente riceve sempre la versione esatta che hai inviato." },
+      { title: "Invia e condividi", body: "Salva la bozza e usa «Invia in revisione». Nella stessa scheda compare subito «Link diretto per il cliente»: scegli il referente, copia il link oppure aprilo come cliente." },
     ],
   },
   {
@@ -165,9 +165,9 @@ const TOPICS: HelpTopic[] = [
     kinds: ["SOCIAL_POST"],
     routes: [/\/plans(?:\/|$)/],
     steps: [
-      { title: "Apri il mese del cliente", body: "Da «Piani» scegli cliente e mese. Il servizio Post social deve essere attivo per quel cliente." },
-      { title: "Controlla cosa comprende", body: "Verifica i post inclusi, il calendario e la griglia. Aggiungi il messaggio introduttivo e la scadenza di revisione." },
-      { title: "Invia il piano", body: "Usa «Invia il piano al cliente». Il pannello del link ti permette poi di copiarlo o preparare il messaggio WhatsApp." },
+      { title: "Apri il mese del cliente", body: "Da «Piani» scegli cliente e mese. Aprire il piano non invia nulla: raccoglie i post social già preparati per quel mese." },
+      { title: "Controlla gli stessi post", body: "Elenco, calendario e griglia sono tre viste degli stessi contenuti. I post creati dopo compaiono come «da aggiungere» e vengono inclusi automaticamente al prossimo invio." },
+      { title: "Invia e copia il link", body: "Usa «Controlla e invia il piano», conferma i post e poi scegli il referente nel riquadro «Link diretto del piano» per copiarlo, aprirlo o preparare WhatsApp." },
     ],
   },
   {
@@ -176,11 +176,11 @@ const TOPICS: HelpTopic[] = [
     title: "Gestire i link dei referenti cliente",
     summary: "Crea, copia, rinnova o disattiva un accesso personale al portale.",
     searchTerms: ["link cliente", "referente", "accesso cliente", "copia link", "nuovo link", "whatsapp"],
-    routes: [/\/clients(?:\/|$)/],
+    routes: [/\/clients(?:\/|$)/, /\/posts\/[^/]+(?:\/|$)/, /\/plans\/[^/]+(?:\/|$)/],
     steps: [
-      { title: "Apri il cliente", body: "Vai in «Clienti», apri la scheda interessata e raggiungi la sezione «Referenti»." },
+      { title: "Trova il link dove lavori", body: "Nel post o nel piano già inviato trovi il link diretto sempre visibile. La scheda cliente raccoglie invece tutti i referenti e i relativi accessi generali." },
       { title: "Aggiungi la persona", body: "Inserisci il nome del referente. L’email è facoltativa: serve soltanto se vuoi inviare il link e le notifiche anche via email." },
-      { title: "Condividi con attenzione", body: "Dopo aver aggiunto il referente, copia il link mostrato oppure abilita l’invio via email quando compili il campo email. Il link è una chiave di accesso: se non deve più funzionare, disattivalo o generane uno nuovo." },
+      { title: "Scegli il referente", body: "Se ce n’è più di uno, scegli la persona prima di copiare o aprire il link. Il link è una chiave personale: se non deve più funzionare, disattivalo o generane uno nuovo." },
     ],
   },
   {

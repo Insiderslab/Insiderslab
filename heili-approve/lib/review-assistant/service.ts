@@ -30,6 +30,7 @@ import { getPostForReviewer, type ReviewerPost } from "@/lib/posts";
 import { itemLabelsFor, itemTargetFor } from "./content";
 import { AssistantError, getAssistantProvider, runAssistantFinalize, runAssistantTurn } from "./provider";
 import { buildPostContext } from "./prompt";
+import { attachMediaEvidence } from "@/lib/media-analysis/context";
 import {
   checkMessageLimits,
   pickSessionForVersion,
@@ -176,6 +177,15 @@ async function workspaceIdForPost(tx: Prisma.TransactionClient, postId: string):
   return row.workspaceId;
 }
 
+async function assertFreshReview(tx: Prisma.TransactionClient, postId: string, clientId: string, versionNumber: number): Promise<void> {
+  // Serialize against an agency edit/submit until this short transaction ends.
+  await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${postId} FOR UPDATE`;
+  const row = await tx.post.findUnique({ where: { id: postId }, select: { clientId: true, status: true, currentVersionNumber: true } });
+  if (!row || row.clientId !== clientId) throw new AssistantError("Post non trovato", 404);
+  if (row.status !== "IN_REVIEW") throw new AssistantError(NOT_ACTIONABLE_MESSAGE, 409);
+  if (row.currentVersionNumber !== versionNumber) throw new AssistantError(STALE_VERSION_MESSAGE, 409);
+}
+
 /**
  * Checks the rolling budgets and records the provider call before it happens.
  * All callers hold workspace + reviewer locks, so counts and the insert are
@@ -272,6 +282,7 @@ export async function sendAssistantMessage(
   const claim = await prisma.$transaction(async (tx) => {
     const workspaceId = await workspaceIdForPost(tx, post.id);
     await lockAssistantBudget(tx, workspaceId, reviewer.id);
+    await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
     const now = new Date();
     const sessions = await tx.reviewSession.findMany({
       where: { postId: post.id, reviewerId: reviewer.id },
@@ -295,7 +306,7 @@ export async function sendAssistantMessage(
         now,
       });
       await tx.reviewSession.update({ where: { id: existing.id }, data: { turnStartedAt: now } });
-      return { sessionId: existing.id, claimedAt: now, sessionsOnPost: sessions.length };
+      return { sessionId: existing.id, workspaceId, claimedAt: now, sessionsOnPost: sessions.length };
     }
 
     const limitError = checkMessageLimits({
@@ -337,21 +348,23 @@ export async function sendAssistantMessage(
       data: { sessionId, role: "CLIENT", content: message, inputMode: input.inputMode },
     });
     await chargeProviderAttempt(tx, { sessionId, reviewerId: reviewer.id, workspaceId, now });
-    return { sessionId, claimedAt: now, sessionsOnPost: sessions.length + (existing ? 0 : 1) };
+    return { sessionId, workspaceId, claimedAt: now, sessionsOnPost: sessions.length + (existing ? 0 : 1) };
   });
 
   const { sessionId } = claim;
   try {
     const session = await loadSession(sessionId);
     const ctx = buildPostContext(post, reviewer.name, input.versionNumber);
+    await attachMediaEvidence(ctx, claim.workspaceId).catch(() => {});
     const result = await runAssistantTurn(ctx, toHistory(sortMessages(session.messages)), provider);
 
-    await prisma.$transaction([
-      prisma.reviewMessage.create({
+    await prisma.$transaction(async tx => {
+      await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
+      await tx.reviewMessage.create({
         data: { sessionId, role: "ASSISTANT", content: result.reply, inputMode: "TEXT" },
-      }),
-      prisma.reviewSession.update({ where: { id: sessionId }, data: { model: result.model } }),
-    ]);
+      });
+      await tx.reviewSession.update({ where: { id: sessionId }, data: { model: result.model } });
+    });
 
     return {
       session: toSessionView(await releaseAndLoad(sessionId, claim.claimedAt), labelsFor(post, input.versionNumber)),
@@ -401,6 +414,7 @@ export async function finalizeSession(
   const claim = await prisma.$transaction(async (tx) => {
     const workspaceId = await workspaceIdForPost(tx, post.id);
     await lockAssistantBudget(tx, workspaceId, reviewer.id);
+    await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
     const now = new Date();
     const fresh = await tx.reviewSession.findUnique({
       where: { id: session.id },
@@ -421,7 +435,7 @@ export async function finalizeSession(
       now,
     });
     await tx.reviewSession.update({ where: { id: fresh.id }, data: { turnStartedAt: now } });
-    return { claimedAt: now, messages };
+    return { claimedAt: now, workspaceId, messages };
   });
   // Summarised by a concurrent request in the meantime.
   if (!claim) return finalizeResponse(await loadSession(session.id), labels);
@@ -429,6 +443,7 @@ export async function finalizeSession(
   try {
     const version = post.versions.find((v) => v.number === input.versionNumber);
     const ctx = buildPostContext(post, reviewer.name, input.versionNumber);
+    await attachMediaEvidence(ctx, claim.workspaceId).catch(() => {});
     const result = await runAssistantFinalize(ctx, toHistory(claim.messages), provider);
     // Kind-aware clean-up: social media/moments, blog passages that really
     // are in the article, ads variants (and their media/moments).
@@ -439,16 +454,19 @@ export async function finalizeSession(
     const summary = result.summary.trim() || "Riepilogo non disponibile.";
 
     // Guarded on OPEN so a double click cannot overwrite a newer summary.
-    await prisma.reviewSession.updateMany({
-      where: { id: session.id, status: "OPEN" },
-      data: {
-        status: "COMPLETED",
-        verdict: result.verdict,
-        summary,
-        actionItems,
-        model: result.model,
-        completedAt: new Date(),
-      },
+    await prisma.$transaction(async tx => {
+      await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
+      await tx.reviewSession.updateMany({
+        where: { id: session.id, status: "OPEN" },
+        data: {
+          status: "COMPLETED",
+          verdict: result.verdict,
+          summary,
+          actionItems,
+          model: result.model,
+          completedAt: new Date(),
+        },
+      });
     });
 
     return finalizeResponse(await releaseAndLoad(session.id, claim.claimedAt), labels);

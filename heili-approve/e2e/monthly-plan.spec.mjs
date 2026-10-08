@@ -86,7 +86,7 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
   await expect(link).toHaveText(`Prepara il piano di ${state.monthName}`);
   await link.click();
   await page.waitForURL(/\/plans\?/);
-  await page.getByRole("button", { name: "Apri il piano del mese" }).click();
+  await page.getByRole("button", { name: "Apri e prepara il piano" }).click();
   await page.waitForURL(/\/plans\/[a-z0-9]+$/, { timeout: 30_000 });
   state.planId = new URL(page.url()).pathname.split("/").pop();
 
@@ -101,7 +101,7 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
 
   await page.getByLabel(/Messaggio per/).fill("Ciao Chiara! Questo mese raccontiamo la cucina e il team. Un post a settimana.");
   await page.getByTestId("plan-send").click();
-  await expect(page.getByText(/Invii 4 post a Piano e2e/)).toBeVisible();
+  await expect(page.getByText(/Stai per inviare 4 post a Piano e2e/)).toBeVisible();
   await page.getByTestId("plan-send-confirm").click();
   await expect(page.getByTestId("plan-notice")).toContainText("Piano inviato: 4 post da rivedere");
 

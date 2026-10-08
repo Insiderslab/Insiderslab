@@ -242,6 +242,8 @@ export interface RequestChangesActionItem {
   mediaIndex: number | null;
   timeSec: number | null;
   timeEndSec: number | null;
+  pinX?: number | null;
+  pinY?: number | null;
   request: string;
   priority: string;
   /** Ads: the variant the item is about (mediaIndex/time then refer to its media). */
@@ -257,6 +259,8 @@ const actionItemsSchema = z
       mediaIndex: z.number().nullable(),
       timeSec: z.number().nullable(),
       timeEndSec: z.number().nullable(),
+      pinX: z.number().min(0).max(1).nullish().catch(null),
+      pinY: z.number().min(0).max(1).nullish().catch(null),
       request: z.string().max(MAX_COMMENT_LENGTH),
       priority: z.string().max(20),
       // Best effort like the rest of the item: an invalid value is dropped.
@@ -442,7 +446,14 @@ export function checkCommentTime(
 export function planActionItemComment(
   item: RequestChangesActionItem,
   media: MediaItem[]
-): { body: string; mediaIndex: number; timeSec: number | null; timeEndSec: number | null } | null {
+): {
+  body: string;
+  mediaIndex: number;
+  timeSec: number | null;
+  timeEndSec: number | null;
+  pinX: number | null;
+  pinY: number | null;
+} | null {
   const body = item.request.trim();
   if (!body) return null;
 
@@ -458,12 +469,16 @@ export function planActionItemComment(
   }
   if (mediaIndex === null) return null;
 
-  if (timeSec === null) return { body, mediaIndex, timeSec: null, timeEndSec: null };
+  const pinX = typeof item.pinX === "number" && Number.isFinite(item.pinX) && item.pinX >= 0 && item.pinX <= 1 ? item.pinX : null;
+  const pinY = typeof item.pinY === "number" && Number.isFinite(item.pinY) && item.pinY >= 0 && item.pinY <= 1 ? item.pinY : null;
+  const pin = pinX !== null && pinY !== null ? { pinX, pinY } : { pinX: null, pinY: null };
+
+  if (timeSec === null) return { body, mediaIndex, timeSec: null, timeEndSec: null, ...pin };
   const timeEndSec = validTime(item.timeEndSec);
   const checked =
     checkCommentTime(media[mediaIndex], timeSec, timeEndSec !== null && timeEndSec > timeSec ? timeEndSec : undefined);
-  if ("error" in checked) return { body, mediaIndex, timeSec: null, timeEndSec: null };
-  return { body, mediaIndex, ...checked };
+  if ("error" in checked) return { body, mediaIndex, timeSec: null, timeEndSec: null, ...pin };
+  return { body, mediaIndex, ...checked, ...pin };
 }
 
 /** What an assistant action item can point at, per content kind. */
@@ -477,6 +492,8 @@ export interface PlannedActionComment {
   mediaIndex: number | null;
   timeSec: number | null;
   timeEndSec: number | null;
+  pinX: number | null;
+  pinY: number | null;
   variantId: string | null;
   anchor: BlogAnchor | null;
 }
@@ -493,7 +510,7 @@ export function planActionItemCommentFor(
 ): PlannedActionComment | null {
   const body = item.request.trim();
   if (!body) return null;
-  const none = { mediaIndex: null, timeSec: null, timeEndSec: null, variantId: null, anchor: null };
+  const none = { mediaIndex: null, timeSec: null, timeEndSec: null, pinX: null, pinY: null, variantId: null, anchor: null };
   switch (target.kind) {
     case "SOCIAL_POST": {
       const planned = planActionItemComment(item, target.media);
@@ -1193,6 +1210,29 @@ export async function validatePostDraft(workspaceId: string, input: PostInput) {
   };
 }
 
+/** Analyze only saved post media, never abandoned upload drafts. */
+async function analyzeSavedPost(post: Post) {
+  if (process.env.MEDIA_ANALYSIS_ENABLED !== "true") return;
+  try {
+    const version = await prisma.postVersion.findUnique({ where: { postId_number: { postId: post.id, number: post.currentVersionNumber } } });
+    if (!version) return;
+    let media = parseMediaItems(version.media);
+    if (post.kind === "AD_CREATIVE") media = parseAdContent(version.content).variants.flatMap(v => v.media);
+    if (post.kind === "BLOG_ARTICLE") {
+      const cover = parseBlogContent(version.content).featuredImage;
+      media = cover ? [cover] : [];
+    }
+    const keys = media.map(m => storageKeyFromMediaUrl(m.url)).filter((key): key is string => !!key);
+    if (!keys.length) return;
+    const assets = await prisma.mediaAsset.findMany({ where: { workspaceId: post.workspaceId, storageKey: { in: keys } }, select: { id: true } });
+    const { queueAssetAnalysis } = await import("@/lib/media-analysis/queue");
+    for (const asset of assets) await queueAssetAnalysis({ assetId: asset.id, workspaceId: post.workspaceId });
+  } catch {
+    // The authorized assistant request can retry this enqueue; saved work is safe.
+    console.warn("[media-analysis] Post saved; analysis enqueue unavailable");
+  }
+}
+
 export async function createPost(
   workspaceId: string,
   input: PostInput,
@@ -1202,7 +1242,7 @@ export async function createPost(
   // Reject invalid input / disabled products before opening a DB transaction.
   assertKindEnabled(parseOrThrow(postInputSchema, input).kind ?? "SOCIAL_POST");
 
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     const { data, kind, internal, client, networks, networkOptions, media, videoCoverMs, content } =
       await preparePostCreation(tx, workspaceId, input);
     if (imported) {
@@ -1249,6 +1289,8 @@ export async function createPost(
     });
     return post;
   });
+  await analyzeSavedPost(saved);
+  return saved;
 }
 
 export async function updatePost(
@@ -1259,7 +1301,7 @@ export async function updatePost(
 ): Promise<Post> {
   const parsed = parseOrThrow(postUpdateSchema, input);
 
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     const post = await tx.post.findFirst({
       where: { id: postId, workspaceId, kind: { in: enabledKinds() } },
       include: { client: true },
@@ -1454,6 +1496,8 @@ export async function updatePost(
 
     return tx.post.findUniqueOrThrow({ where: { id: postId } });
   });
+  await analyzeSavedPost(saved);
+  return saved;
 }
 
 export async function submitForReview(
@@ -1825,6 +1869,8 @@ export async function requestChanges(
             mediaIndex: planned.mediaIndex,
             timeSec: planned.timeSec,
             timeEndSec: planned.timeEndSec,
+            pinX: planned.pinX,
+            pinY: planned.pinY,
             variantId: planned.variantId,
             ...(planned.anchor ? { anchor: toJson(planned.anchor) } : {}),
           },

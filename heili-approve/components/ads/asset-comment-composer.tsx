@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from "react";
+import DictationButton from "@/components/voice/dictation-button";
 import { GOOGLE_ASSET_LABELS, formatAssetComment, googleAssetName, type GoogleAssetRef } from "@/lib/content/google-ads";
 
 const MAX_BODY = 4500;
@@ -27,6 +28,7 @@ export default function AssetCommentComposer({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dictating, setDictating] = useState(false);
 
   useEffect(() => {
     const el = textRef.current;
@@ -37,7 +39,7 @@ export default function AssetCommentComposer({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || dictating) return;
     const text = body.trim();
     if (!text) {
       setError("Scrivi il commento prima di inviarlo.");
@@ -70,6 +72,13 @@ export default function AssetCommentComposer({
         placeholder="Cosa cambieresti? Per esempio: troppo generico, direi «Prima settimana gratis»."
         className="field resize-y text-base"
       />
+      <DictationButton
+        value={body}
+        onChange={setBody}
+        maxLength={MAX_BODY}
+        disabled={busy}
+        onListeningChange={setDictating}
+      />
       {error ? (
         <p className="text-sm text-error" role="alert">
           {error}
@@ -79,7 +88,7 @@ export default function AssetCommentComposer({
         <button type="button" className="btn" disabled={busy} onClick={onCancel}>
           Annulla
         </button>
-        <button type="submit" className="btn btn-primary" disabled={busy || !body.trim()}>
+        <button type="submit" className="btn btn-primary" disabled={busy || dictating || !body.trim()}>
           {busy ? "Invio…" : "Invia commento"}
         </button>
       </div>

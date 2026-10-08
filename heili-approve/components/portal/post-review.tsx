@@ -160,6 +160,17 @@ export default function PostReview({
     return get ? get() : null;
   }, []);
 
+  const getPointContext = useCallback(() => {
+    if (!draft || (draft.kind !== "pin" && draft.kind !== "moment")) return null;
+    if (draft.kind === "moment" && (draft.x === undefined || draft.y === undefined)) return null;
+    return {
+      mediaIndex: draft.mediaIndex,
+      x: draft.kind === "pin" ? draft.x : (draft.x ?? 0),
+      y: draft.kind === "pin" ? draft.y : (draft.y ?? 0),
+      timeSec: draft.kind === "moment" ? draft.timeSec : null,
+    };
+  }, [draft]);
+
   function seekTo(comment: PortalComment) {
     if (comment.timeSec === null) return;
     setSeek({ timeSec: comment.timeSec, nonce: Date.now(), mediaIndex: comment.mediaIndex ?? undefined });
@@ -443,19 +454,6 @@ export default function PostReview({
         </p>
       )}
 
-      {canAct && assistantEnabled && (
-        <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-          <AssistantPanel
-            token={token}
-            postId={post.id}
-            versionNumber={post.versionNumber}
-            onSubmitChanges={submitFromAssistant}
-            onApprove={approveFromAssistant}
-            getVideoTime={hasVideo ? getVideoTime : undefined}
-          />
-        </AssistantToggle>
-      )}
-
       <section className="space-y-3" aria-labelledby="comments-title">
         <div className="flex items-center justify-between gap-3">
           <h2 id="comments-title" className="text-base font-semibold">
@@ -471,6 +469,20 @@ export default function PostReview({
             </button>
           )}
         </div>
+        {canAct && assistantEnabled && (
+          <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+            <AssistantPanel
+              key={`${post.id}-${post.versionNumber}`}
+              token={token}
+              postId={post.id}
+              versionNumber={post.versionNumber}
+              onSubmitChanges={submitFromAssistant}
+              onApprove={approveFromAssistant}
+              getVideoTime={hasVideo ? getVideoTime : undefined}
+              getPointContext={getPointContext}
+            />
+          </AssistantToggle>
+        )}
         <CommentList
           comments={post.comments}
           media={post.media}

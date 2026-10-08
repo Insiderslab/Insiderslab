@@ -33,7 +33,7 @@ ENV UPLOAD_DIR=/data/uploads
 
 # wget for scripts/cron.sh and the compose healthcheck; openssl for Prisma.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends wget ca-certificates openssl \
+ && apt-get install -y --no-install-recommends wget ca-certificates openssl ffmpeg \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /data/uploads
 

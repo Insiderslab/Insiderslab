@@ -194,6 +194,19 @@ export default function AdsReview({
     };
   }, [variants]);
 
+  const getPointContext = useCallback(() => {
+    const current = draft?.draft;
+    if (!current || (current.kind !== "pin" && current.kind !== "moment")) return null;
+    if (current.kind === "moment" && (current.x === undefined || current.y === undefined)) return null;
+    return {
+      mediaIndex: current.mediaIndex,
+      x: current.kind === "pin" ? current.x : (current.x ?? 0),
+      y: current.kind === "pin" ? current.y : (current.y ?? 0),
+      variantId: draft?.variantId ?? null,
+      timeSec: current.kind === "moment" ? current.timeSec : null,
+    };
+  }, [draft]);
+
   function jumpTo(variantId: string) {
     activeVariant.current = variantId;
     document.getElementById(variantAnchorId(variantId))?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -591,22 +604,7 @@ export default function AdsReview({
         </div>
       ))}
 
-      {canAct && assistantEnabled && (
-        <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-          <AssistantPanel
-            token={token}
-            postId={post.id}
-            versionNumber={post.versionNumber}
-            onSubmitChanges={submitFromAssistant}
-            onApprove={sendFromAssistant}
-            kind="AD_CREATIVE"
-            getContext={getContext}
-            variantNames={variantNames}
-          />
-        </AssistantToggle>
-      )}
-
-      {(setComments.length > 0 || canComment) && (
+      {(setComments.length > 0 || canComment || (canAct && assistantEnabled)) && (
         <section className="space-y-3" aria-labelledby="set-comments-title">
           <div className="flex items-center justify-between gap-3">
             <h2 id="set-comments-title" className="text-base font-semibold">
@@ -622,6 +620,22 @@ export default function AdsReview({
               </button>
             )}
           </div>
+          {canAct && assistantEnabled && (
+            <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+              <AssistantPanel
+                key={`${post.id}-${post.versionNumber}`}
+                token={token}
+                postId={post.id}
+                versionNumber={post.versionNumber}
+                onSubmitChanges={submitFromAssistant}
+                onApprove={sendFromAssistant}
+                kind="AD_CREATIVE"
+                getContext={getContext}
+                variantNames={variantNames}
+                getPointContext={getPointContext}
+              />
+            </AssistantToggle>
+          )}
           {draft?.variantId === "" && canComment && (
             <CommentComposer
               key={draftKey}
