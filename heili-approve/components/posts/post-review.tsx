@@ -132,6 +132,17 @@ export default function PostReview({
       timeEndSec: t.root.timeEndSec,
     }));
 
+  if (target?.pinX !== undefined && target.pinY !== undefined) {
+    pins.push({
+      id: "draft",
+      mediaIndex: target.mediaIndex,
+      x: target.pinX,
+      y: target.pinY,
+      label: "+",
+      timeSec: target.timeSec,
+    });
+  }
+
   const markers: PreviewVideoMarker[] = [
     ...visibleThreads
       .filter((t) => t.root.timeSec !== null)

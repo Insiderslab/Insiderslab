@@ -38,10 +38,10 @@ import {
   seekBy,
   stepFrame,
   withStartFragment,
-  badgeText,
   type MarkerInput,
 } from "./helpers";
 import { PauseIcon, PlayIcon } from "./icons";
+import CommentPin from "./comment-pin";
 
 export type VideoPlayerMarker = MarkerInput;
 
@@ -372,15 +372,13 @@ function VideoPlayerInstance({
 
         {/* Pins last: visible over the play button, never catching taps. */}
         {visiblePins.map((pin, index) => (
-          <span
+          <CommentPin
             key={pin.id}
-            title={pin.label}
-            className="pointer-events-none absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-accent text-xs font-semibold text-white"
-            style={{ left: `${pin.x * 100}%`, top: `${pin.y * 100}%` }}
-          >
-            <span aria-hidden="true">{badgeText(pin.label, index)}</span>
-            <span className="sr-only">Commento {pin.label}</span>
-          </span>
+            x={pin.x}
+            y={pin.y}
+            label={pin.label}
+            index={index}
+          />
         ))}
 
       </div>

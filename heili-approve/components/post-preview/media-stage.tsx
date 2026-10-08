@@ -14,7 +14,8 @@
 
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode, type TouchEvent } from "react";
 import type { MediaItem } from "@/lib/domain";
-import { badgeText, clampRatio, mediaAlt, relativePoint } from "./helpers";
+import { clampRatio, mediaAlt, relativePoint } from "./helpers";
+import CommentPin from "./comment-pin";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import type { MediaClickPoint, PreviewPin, VideoReviewProps } from "./types";
 import VideoPlayer from "./video-player";
@@ -387,15 +388,13 @@ function ImageSurface({
         />
       ) : null}
       {pins.map((pin, i) => (
-        <span
-          key={pin.id}
-          title={pin.label}
-          className="pointer-events-none absolute z-10 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-accent text-xs font-semibold text-white"
-          style={{ left: `${pin.x * 100}%`, top: `${pin.y * 100}%` }}
-        >
-          <span aria-hidden="true">{badgeText(pin.label, i)}</span>
-          <span className="sr-only">Commento {pin.label}</span>
-        </span>
+          <CommentPin
+            key={pin.id}
+            x={pin.x}
+            y={pin.y}
+            label={pin.label}
+            index={i}
+          />
       ))}
     </>
   );

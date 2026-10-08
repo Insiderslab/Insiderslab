@@ -102,3 +102,9 @@ Controlli reali via HTTPS, PostgreSQL e storage di produzione con utente/workspa
 Verificati health pubblico 200, header di sicurezza, rifiuto delle API senza chiave e servizi web/worker/cron stabili senza riavvii automatici. Il controllo sul server ha intercettato CRLF nello script cron esportato da Windows: aggiunto `.gitattributes` per preservare LF negli script shell, verificato l'archivio e ricostruita l'immagine. Il cron è stato avviato dopo che il web era pronto e la chiamata promemoria ha risposto correttamente. Per i rilasci successivi attendere il health positivo di web/worker prima di avviare il cron, perché il Compose esistente usa `service_started`.
 
 Build finale di produzione e TypeScript superati. ESLint: nessun errore e il solo warning già descritto. Le modifiche alla documentazione successive al commit dell'immagine non richiedono una nuova build.
+
+## Precisazione del titolare: marcatore dei commenti sulle immagini
+
+La «freccia» indicata dal titolare era il marcatore del commento su un punto della foto. Aggiornato il componente condiviso: piccolo bersaglio vuoto sul punto esatto, collegamento sottile e numero spostato verso l'interno dell'immagine, con contrasto su fondi chiari e scuri. Il nuovo commento usa un badge pieno con «+», i commenti salvati un numero su fondo bianco. Coordinate e associazione al commento restano identiche; i marcatori non intercettano i tocchi. Stessa resa sui fotogrammi video e punto provvisorio visibile anche nella revisione dell'agenzia.
+
+Verifica browser: 29/29 controlli a 1440, 390 e 360 px, inclusi quattro bordi, precisione delle coordinate, distinzione del punto provvisorio, annullamento, assenza di overflow e nessuna richiesta di scrittura. I 27 test mirati sulle anteprime e sul portale passano; TypeScript e revisione indipendente non rilevano problemi. Le fixture sono state rimosse prima della build.
