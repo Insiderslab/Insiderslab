@@ -61,7 +61,7 @@ La suite E2E completa richiede PostgreSQL, Redis, worker e seed; questi servizi 
 
 Anche il server della build di produzione è stato avviato e fermato: gli header risultano corretti sulla pagina con link invalido, sull'endpoint assistant con token invalido (404) e su una API inesistente (404), tutti con `no-store`. Revisione indipendente del diff conclusa senza regressioni bloccanti nelle modifiche implementate; i rischi residui sopra restano aperti.
 
-Prima del rilascio: backup DB, applicazione migration, nuova build Node 24, avvio web/worker/cron e smoke test con workspace e client di prova. La migration è additiva: un rollback del codice può lasciare colonne nullable e indice senza eliminarli. Verificare email e login dopo l'aggiornamento Auth/Nodemailer. Non è stato eseguito alcun push, deploy o migration su produzione.
+Prima del rilascio: backup DB, applicazione migration, nuova build Node 24, avvio web/worker/cron e smoke test con workspace e client di prova. La migration è additiva: un rollback del codice può lasciare colonne nullable e indice senza eliminarli. Alla conclusione di questa prima fase non erano stati eseguiti push, deploy o migration su produzione; l'esito del rilascio successivamente autorizzato è riportato in fondo.
 
 ## Secondo intervento: importazione per Codex e Claude
 
@@ -81,7 +81,7 @@ Implementato:
 
 La suite complessiva passa a 591 test TypeScript/Vitest; 13 test Python passano. Il test di contratto avvia realmente Python da una cartella diversa e chiama gli endpoint reali via HTTP con Prisma simulato: CSV → dry-run senza scritture → bozza → replay → conflitto. I controlli della nuova UI verificano mobile/desktop, input a 16 px, target da 44 px, nessun overflow e nessuna mutazione durante la prova. Build Next e TypeScript passano; ESLint conserva il solo warning già descritto. Il server di produzione locale rifiuta gli accessi API senza chiave con 401 e no-store.
 
-La nuova migration `20261008170000_automation_and_reliability` è additiva e richiede applicazione prima del rilascio. Non è stata applicata a un DB reale. Le verifiche con database simulato non attestano il funzionamento end-to-end di PostgreSQL, Redis, SMTP o Metricool in produzione.
+La nuova migration `20261008170000_automation_and_reliability` è additiva e richiede applicazione prima del rilascio. Al termine della fase locale non era stata applicata a un DB reale. Le verifiche con database simulato non attestano il funzionamento end-to-end di PostgreSQL, Redis, SMTP o Metricool in produzione; i controlli reali successivi sono riportati nella sezione di rilascio.
 
 Restano aperti: risposte dell'agenzia sul piano, batch recuperabili di approvazione, dashboard operativa, scadenze dei link cliente da concordare, quote degli upload manuali, revoca/cache dei media, raccolta degli asset orfani, rate limit HTTP all'ingresso e avvisi npm residui. Il canale v1 importa post social; non importa blog/ads e non modifica automaticamente post esistenti. Un'interruzione tra accettazione di un media e scrittura del manifest può lasciare un asset duplicato/orfano, pur senza duplicare la bozza. Il conteggio AI registra tentativi applicativi: i retry interni degli SDK possono generare più richieste HTTP per tentativo.
 
@@ -93,4 +93,12 @@ Su richiesta del titolare, la revisione desktop usa ora due colonne: anteprima p
 
 Verifica browser su componenti reali con dati sintetici: 104/104 controlli a 1440, 1024, 390 e 360 px, nessun errore runtime o richiesta di modifica dei dati. Confermati feed desktop da 560 px, assenza di overflow, carosello, conferma esplicita di approvazione, ricerca, passaggi, focus e conservazione del modulo. Suite complessiva: 595/595 test. Il test cooldown da 1 ms ora usa un orologio fermo per evitare dipendenza dal carico CPU. Revisione indipendente completata; corretti ricerca conversazionale, annunci dei passaggi e testi su email facoltativa/scadenza delle chiavi. Le fixture browser sono state rimosse prima della build.
 
-Pubblicazione autorizzata dal titolare. Preparati backup verificato del database, archivio degli upload e immagine precedente per rollback sul VPS; esito del rilascio da registrare a conclusione delle verifiche online.
+## Rilascio verificato — 8 ottobre 2026
+
+Pubblicazione autorizzata dal titolare e completata su `https://approve.heili.cloud`. Immagine `approve-app:547219a`, codice `547219a307186fa787c0d20f465fb9c9a03e84ae`. Conservati backup del database verificato con `pg_restore --list`, archivio degli upload, configurazione precedente e immagine di rollback. Entrambe le nuove migration applicate correttamente; nessuna migration pendente.
+
+Controlli reali via HTTPS, PostgreSQL e storage di produzione con utente/workspace/cliente sintetici: impostazioni autenticate con guida e controlli automazione, portale cliente con guida, isolamento elenco clienti, validazione senza scritture, upload PNG e rilascio della prenotazione, creazione di sola bozza con versione/audit, replay senza duplicazione, conflitto 409, lettura e revoca della chiave con 401. Dati, sessioni, chiavi e upload di prova rimossi a fine controllo. Nessun invio email o programmazione Metricool reali eseguiti come test.
+
+Verificati health pubblico 200, header di sicurezza, rifiuto delle API senza chiave e servizi web/worker/cron stabili senza riavvii automatici. Il controllo sul server ha intercettato CRLF nello script cron esportato da Windows: aggiunto `.gitattributes` per preservare LF negli script shell, verificato l'archivio e ricostruita l'immagine. Il cron è stato avviato dopo che il web era pronto e la chiamata promemoria ha risposto correttamente. Per i rilasci successivi attendere il health positivo di web/worker prima di avviare il cron, perché il Compose esistente usa `service_started`.
+
+Build finale di produzione e TypeScript superati. ESLint: nessun errore e il solo warning già descritto. Le modifiche alla documentazione successive al commit dell'immagine non richiedono una nuova build.
