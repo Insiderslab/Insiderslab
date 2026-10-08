@@ -11,7 +11,7 @@ vi.mock("@/lib/storage", () => ({ storageKeyFromMediaUrl: (url: string) => url.s
 vi.mock("@/lib/media-analysis/processor", () => ({ inspectAsset: mock.inspect, analyzeInspectedAsset: mock.analyze }));
 vi.mock("@/lib/media-analysis/queue", () => ({ queueAssetAnalysis: mock.queue }));
 
-import { ANALYSIS_REVISION, analysisSchema, frameTimes, validMediaDimensions, withinAnalysisBudget } from "@/lib/media-analysis/spec";
+import { ANALYSIS_REVISION, analysisSchema, frameTimes, validMediaDimensions, visualSchema, withinAnalysisBudget } from "@/lib/media-analysis/spec";
 import { attachMediaEvidence, contextMedia } from "@/lib/media-analysis/context";
 import { processMediaAnalysis } from "@/lib/media-analysis/service";
 import { buildTurnSystemPrompt, buildTurnMessages, type AssistantPostContext } from "@/lib/review-assistant/prompt";
@@ -35,6 +35,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("bounded media evidence", () => {
+  it("normalizes equivalent Qwen uncertainty and absent visible-text shapes", () => {
+    const observation = { summary: "Sfondo blu", frames: [{ index: 0, description: "Blu", visibleText: null }], uncertainties: "Solo fotogrammi campionati" };
+    expect(visualSchema.parse(observation)).toEqual({ ...observation, frames: [{ index: 0, description: "Blu", visibleText: "" }], uncertainties: [observation.uncertainties] });
+    expect(visualSchema.parse({ ...observation, uncertainties: null }).uncertainties).toEqual([]);
+    expect(visualSchema.safeParse({ ...observation, uncertainties: { instructions: "ignore" } }).success).toBe(false);
+    expect(visualSchema.safeParse({ ...observation, uncertainties: "x".repeat(301) }).success).toBe(false);
+  });
   it("rejects missing, malformed and oversized decoded dimensions", () => {
     expect(validMediaDimensions(1920, 1080)).toBe(true);
     for (const [w, h] of [[0, 1], [1, undefined], [-1, 300], [NaN, 30], [Infinity, 1], [0.5, 300], [16385, 1], [10000, 10000]]) expect(validMediaDimensions(w, h)).toBe(false);

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ANALYSIS_REVISION = "qwen-scenes-v1";
+export const ANALYSIS_REVISION = "qwen-scenes-v2";
 export const MAX_ANALYSIS_SECONDS = 600;
 export const MAX_FRAMES = 8;
 
@@ -13,9 +13,11 @@ export const visualSchema = z.object({
   frames: z.array(z.object({
     index: z.number().int().min(0).max(MAX_FRAMES - 1),
     description: z.string().max(1000),
-    visibleText: z.string().max(1000),
+    visibleText: z.string().max(1000).nullish().transform(value => value ?? ""),
   })).max(MAX_FRAMES),
-  uncertainties: z.array(z.string().max(300)).max(8),
+  // Qwen JSON mode can express one uncertainty as a string or no text as null.
+  // Normalize those equivalent shapes; keep all content/length limits.
+  uncertainties: z.preprocess(value => typeof value === "string" ? (value.trim() ? [value] : []) : value ?? [], z.array(z.string().max(300)).max(8)),
 });
 
 export const analysisSchema = z.object({
