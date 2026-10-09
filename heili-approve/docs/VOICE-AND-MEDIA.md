@@ -71,6 +71,20 @@ Documentazione vocale: [GPT-Live](https://developers.openai.com/api/docs/guides/
 
 ## Verifica del rilascio del 9 ottobre 2026
 
+### Aggiornamento: disponibilità del contesto visivo
+
+Correzione pubblicata con immagine `approve-app:b68e447`, commit `b68e4470e46d97583d3d2f74100acd9d384fa206`, su entrambi i branch. Nessuna migrazione aggiuntiva. Backup in `/docker/approve/backups/pre-b68e447`; salute pubblica OK.
+
+- Suite completa: 692/692 test; TypeScript, lint dei file modificati e build di produzione superati. Revisione indipendente conclusa senza rilievi residui sul cambiamento.
+- Browser: 21 verifiche del ciclo vocale, comprese preparazione, annullamento e risposta tardiva; 19 verifiche di regressione del flusso di feedback.
+- Prova finale in produzione con immagine nuova, Qwen e chiamata OpenAI reali: 5/5 verifiche. La preparazione è passata da `pending` a `ready` prima della chiamata; alla domanda pronunciata con audio sintetico la voce ha riconosciuto un cerchio rosso, informazione assente da titolo e copy. Trascrizione persistita e nessun errore runtime del browser.
+- Verificate le schermate a 1440 e 390 px. Questa prova conferma il passaggio del contesto visivo, non la precisione universale dell'analisi né la qualità di un microfono fisico.
+- Chiamate chiuse e fixture sintetica rimossa dopo il test, senza inviare approvazioni o notifiche ai clienti.
+
+Le analisi dei caroselli vengono distribuite nel budget del contesto senza eliminare in blocco gli ultimi media; il media selezionato ha priorità. Sono inclusi anche i loghi delle varianti Google Ads. I test coprono riferimenti a 30 media, limiti di lunghezza e selezione esatta del media.
+
+### Rilascio vocale precedente
+
 Rilasciato su `approve.heili.cloud` con immagine `approve-app:a03a5f9` (commit `a03a5f9d31807dcbd6aeabbed257de4f05cbebdd`). Entrambi i branch `claude/bold-lovelace-xdiiw9` e `codex/approve-review-improvements` contengono le modifiche.
 
 - Suite completa prima della rifinitura della trascrizione: 643/643 test; rifinitura verificata con 9/9 test vocali, compreso il caso di frammenti intercalati nel mezzo di una parola. Build, TypeScript e lint superati; resta un warning preesistente in `invitation-accept-card.tsx`.
