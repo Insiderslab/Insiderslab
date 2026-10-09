@@ -95,27 +95,31 @@ export function groupLiveTranscriptFragments(
   }>
 ): GroupedSegment[] {
   const segments: GroupedSegment[] = [];
+  // Full-duplex transcript deltas interleave, sometimes in the middle of a
+  // word. Keep each speaker's current phrase independent of the other stream.
+  const latest = new Map<GroupedSegment["speaker"], GroupedSegment>();
   for (const fragment of fragments) {
     if (!fragment.delta) continue;
     const speaker = fragment.speaker === "user" ? "user" : "assistant";
     const contextMarker = speaker === "user" ? fragment.contextMarker : null;
-    const previous = segments.at(-1);
+    const previous = latest.get(speaker);
     if (
       previous &&
-      previous.speaker === speaker &&
       previous.contextMarker === contextMarker &&
       fragment.startMs - previous.endMs <= 2_000
     ) {
       previous.text += fragment.delta;
       previous.endMs = Math.max(previous.endMs, fragment.endMs);
     } else {
-      segments.push({
+      const segment: GroupedSegment = {
         speaker,
         text: fragment.delta,
         startMs: fragment.startMs,
         endMs: fragment.endMs,
         contextMarker,
-      });
+      };
+      segments.push(segment);
+      latest.set(speaker, segment);
     }
   }
   return segments.filter((segment) => segment.text.trim().length > 0);

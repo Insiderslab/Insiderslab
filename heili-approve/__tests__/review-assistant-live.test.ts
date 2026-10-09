@@ -111,6 +111,19 @@ describe("Live visual context validation", () => {
 });
 
 describe("trusted Live transcript projection", () => {
+  it("keeps phrases readable when full-duplex streams interleave inside words", () => {
+    const grouped = groupLiveTranscriptFragments([
+      { speaker: "user", delta: "Dimmi cosa hai ", startMs: 100, endMs: 450, contextMarker: null },
+      { speaker: "assistant", delta: "Hai chi", startMs: 300, endMs: 500, contextMarker: null },
+      { speaker: "user", delta: "capito", startMs: 470, endMs: 700, contextMarker: null },
+      { speaker: "assistant", delta: "esto di cambiare il titolo.", startMs: 520, endMs: 1200, contextMarker: null },
+      { speaker: "user", delta: "Un'altra cosa.", startMs: 5000, endMs: 5500, contextMarker: null },
+    ]);
+    expect(grouped.map((segment) => segment.text)).toEqual([
+      "Dimmi cosa hai capito", "Hai chiesto di cambiare il titolo.", "Un'altra cosa.",
+    ]);
+  });
+
   it("splits client speech when the selected point changes and never creates marker-only turns", () => {
     const first = "[punto media=0 x=0.1000 y=0.2000 variante=- tempo=-]";
     const second = "[punto media=0 x=0.8000 y=0.7000 variante=- tempo=-]";
