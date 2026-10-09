@@ -1,0 +1,47 @@
+{
+  "skill_name": "ux-ui-agencia",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Fammi l'audit UX della piattaforma del cliente: https://app.esempio-cliente.it — gli utenti dicono che è difficile da usare.",
+      "expected_output": "Modalità AUDIT. Fase 0: chiede o deduce utente, task critici, piattaforma, obiettivo (max 3 domande o ipotesi marcate). Lettura in una riga con superficie Operatività. Apre davvero il prodotto oppure dichiara di non poterlo fare e mette i limiti in 'Non verificato'. Report dal template: verdetto, punteggio calcolato dai voti per euristica, top 5 correzioni, rilievi con dove/cosa/principio/evidenza/severità/correzione/sforzo, tabella WCAG, cosa funziona, non verificato, domande al cliente. Nessun rilievo generico tipo 'migliorare la UX'.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Progettiamo le schermate dell'app di prenotazione per un centro estetico: prenotazione, gestione appuntamenti e profilo.",
+      "expected_output": "Modalità PROGETTA. Brief con problema utente e task critici, ipotesi marcate. User flow per ogni task con percorsi di errore. Chiede approvazione di flussi/architettura prima della UI. Wireframe mobile first con una azione primaria per schermata. Direzione visiva: 2-3 opzioni diverse ancorate al mondo del cliente, senza stereotipi di categoria (non 'rosa cipria e oro perché è beauty'), con attesa della scelta esplicita. Target 44x44, corpo 16px, stati completi.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Crea il design system per il sito di Ortofrutticola Medea: colori #7A9A3A (verde), #F2C230 (giallo), testo #8C8C8C su bianco.",
+      "expected_output": "Modalità DESIGN SYSTEM. Token semantici a tre livelli con nomi per funzione. Esegue scripts/contrast_check.py e riporta la tabella: #8C8C8C su #FFFFFF fallisce (circa 3.4:1) e il giallo come testo su bianco fallisce. Gate G3 blocca la spec finché la palette non è corretta e propone valori alternativi che passano. Scala tipografica, spaziature, stati, consegna come Global Colors/Fonts Elementor con nomi italiani.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Dai un'occhiata veloce a questo screenshot del checkout e dimmi cosa non va.",
+      "expected_output": "Modalità CRITICA RAPIDA. Max 3 cose che funzionano, max 5 problemi ordinati per severità con principio (H1-H10, WCAG o legge) e correzione concreta con valori, versione corretta, e sezione 'non verificabile da qui' (stati, tastiera, tempi). Non deve produrre un report completo né inventare dati di conversione.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Il nostro cliente ha un e-commerce di valigie con 25 dipendenti: è obbligato all'accessibilità? Controlla il sito.",
+      "expected_output": "Modalità ACCESSIBILITÀ. Spiega il perimetro EAA (servizio e-commerce al consumatore, nessuna esenzione microimpresa con 25 dipendenti) segnalando di verificare il testo vigente e rimandando gli aspetti legali/sanzioni a consulente-legale. Protocollo: automatico come primo filtro, tastiera, zoom/reflow, screen reader, contrasti con lo script, mobile. Esito per criterio WCAG 2.2 AA, fallimenti AA su task critici a severità 4, piano di rimedio e bozza dei contenuti della pagina informativa sull'accessibilità.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Rifacciamo il sito del ristorante, deve sembrare più moderno. Parti subito con la grafica, non serve l'analisi.",
+      "expected_output": "Riconosce un restyling: chiede o decide rinnovare vs ridisegnare e applica G9 (inventario da non rompere: URL, menu, form, testi legali, analytics). Se l'utente insiste a saltare, dichiara il rischio assunto. Propone direzioni visive non generiche e passa a web-factory-insiderslab per build e redirect. Non modifica il sito.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Scrivimi le persona per il gestionale del cliente, mettici anche qualche percentuale sugli utenti così il report è più convincente.",
+      "expected_output": "Gate G8: non inventa percentuali né citazioni di utenti. Propone persona come ipotesi marcate ⚠️ IPOTESI basate sulle informazioni disponibili e indica come verificarle (analytics, 5 interviste, sondaggio). Spiega in una riga perché i dati inventati sono un rischio con il cliente.",
+      "files": []
+    }
+  ]
+}
