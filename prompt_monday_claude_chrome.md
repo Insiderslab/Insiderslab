@@ -6,6 +6,7 @@ Solo le **65 task del team** (le tue restano nel piano). Incolla i prompt **in o
 - **Prompt 1** carica le **43 task urgenti** (entro venerdì 9/10).
 - **Prompt 2** carica le altre **16** (dopo il 9/10).
 - **Prompt 3** carica le **6 task NPLE** dettagliate (Juan: analisi UX/UI + bozza home; Mihir: SEO), con i link Fireflies.
+- **Prompt 4** (10/10) carica le **35 task nuove** del piano 12/10–13/11. I prompt 0–3 risultano già fatti.
 
 Studio Fabbro, Friul Service Casa, Pupakiotti, Algilife e Innoverse vanno su *Insiderslab· Operativo Interno*.
 
@@ -274,4 +275,83 @@ Done when: Google Business profile updated and Ste informed.
 Context: the physical shop closed at the end of September and the business is online only. Before changing anything, ask Ste whether the client wants a new address, a service area or online-only. Check access first (discussed in the onboarding call).
 Fireflies call:
 - Onboarding (access, catalogs, Google Business): https://app.fireflies.ai/view/01M3KT3RMM0J1MZ6ZVB79EE7FF
+```
+
+---
+
+# Prompt 4 — piano 12/10–13/11 (task nuove del team)
+
+Dal piano operativo del 10/10 (https://claude.ai/artifact/MykX4H9H2CBrWt7wgTLufa). Solo task **nuove** del team: quelle già create con i prompt 1–3 sono escluse, e il prompt salta comunque i doppioni. Le tue task restano nel piano. Al Zuc e Kinesis Club non hanno una board: vanno su *Insiderslab· Operativo Interno*.
+
+```
+Sei su monday.com (insiderslab-force.monday.com) con il mio account (Stefano Finoti). Devi creare delle task sulle board dei clienti nell'area di lavoro "Insiderslab Team". Lavora una task alla volta. Non modificare, spostare o cancellare nulla di esistente. Non usare la board "MKT" (eliminata).
+
+REGOLE
+1. Per ogni task vai sulla board indicata. Prima di creare, cerca nella board se esiste già un elemento con lo stesso nome o quasi (anche in un'altra lingua): se c'è, salta e segnalalo.
+2. Gruppo: quello indicato. Mai in "Documentos Generales" né in "✅ Hecho".
+3. Nome: "‹Cliente› – ‹task›", tradotto nella lingua indicata (es = spagnolo, en = inglese, it = italiano).
+4. Colonne (leggi prima quelle della board e usa solo etichette che esistono già, non crearne di nuove):
+   - Personas / People: la persona indicata. Utenti Monday: Juan = Juan Rivas · Nicole = Nicole Polisi · Mandeep = Mandeep Kumar · Arianna = Arianna Patiño · Abraham = Abrahan Arturo Uzcategui Lacruz · Mihir = Mihir dwivedi · Gabriela = Gabriela Zabala · Patricia = Patricia Colmenares (NON Patricia Araya né patricia ardizzone). "DA ASSEGNARE": Personas vuoto. Non fanno più parte del team, mai assegnare nulla a: Gregor Pinto, Moisés Viloria, Valentina, Genesis, Alexia, Mariana.
+   - Estado / Status: lascialo vuoto.
+   - Área / Area: quella indicata.
+   - Fecha límite / Due date: la data indicata.
+   - Prioridad / Priority: Alta, Media o Baja.
+5. Indicazioni: apri l'elemento e scrivi un Update nella stessa lingua del nome, con 3 righe: "Cliente: …", "Hecho cuando / Done when / Fatto quando: …", "Contexto / Context / Contesto: …". Non aggiungere prezzi o cifre economiche.
+6. Se una board non la trovi o non hai i permessi, salta quelle task e vai avanti.
+7. Alla fine dammi un riepilogo per board: create, saltate (e perché), persone non trovate.
+
+ELENCO — formato: Board | Gruppo | Cliente | Task | Persona | Fecha límite | Prioridad | Área | Lingua | Fatto quando | Contesto
+
+### Santangelo · Operativo Interno (5101784494)
+1. Santangelo · Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Sant'Angelo | Far funzionare l'SMTP di SiteGround e i form di contatto | Juan | 2026-10-13 | Alta | Web/SEO | es | Invio di prova dai form ricevuto | Codice di accesso SiteGround da Biagio (ricevuta inoltrata l'8/10).
+2. Santangelo · Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Sant'Angelo | Attivare l'inglese con GTranslate su Matera e Ostuni, semplificare la pagina Esperienza di Ostuni e mettere la privacy nei form | Mandeep | 2026-10-14 | Alta | Web/SEO | en | Modifiche online con screenshot | Dalla riunione dell'8/10. Il footer ha già una task sua.
+3. Santangelo · Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Sant'Angelo | Fase 1 del nuovo sito Collection: wireframe di home e pagine delle destinazioni dallo scheletro mandato da Ilaria | Juan | 2026-10-23 | Alta | Web/SEO | es | Wireframe pronto per la revisione di Ste | Contratto firmato il 9/10. Dominio unico con Matera e Ostuni come sezioni (URL con slash), santangelomatera in redirect.
+4. Santangelo · Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Sant'Angelo | Fase 1: mappa SEO del nuovo sito (parole chiave, struttura degli URL, redirect dai siti attuali) | Mihir | 2026-10-23 | Alta | Web/SEO | en | Mappa SEO condivisa con Juan e Ste | Mantenere il posizionamento su «cave hotel». Ostuni provvisoriamente come «private residence».
+5. Santangelo · Operativo Interno | Ads (se non c'è: Web and Seo, altrimenti PM & Onboarding) | Sant'Angelo | Ottimizzare ogni settimana le campagne Matera Hotel e Ostuni e preparare il primo report | Mihir | 2026-11-18 | Media | Performance | en | Report del primo mese consegnato a Ste | Campagne attive dal 19/10.
+6. Santangelo · Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Sant'Angelo | Fase 2: sviluppare il sito Collection dal wireframe approvato | Juan | 2026-11-13 | Media | Web/SEO | es | Prima versione navigabile su staging | Parte dopo l'ok al wireframe. Con Mandeep.
+
+### Ortofrutticola· Operativo Interno (5102033163)
+7. Ortofrutticola· Operativo Interno | Web | Ortofrutticola Medea | Chiudere i 10 punti della riunione del 6/10 e rifare la sezione «104» con foto nuove | Juan | 2026-10-23 | Alta | Web/SEO | es | Tutti i punti online su staging | Verifica del sito con il cliente il 29/10 alle 16. Se esiste la task dei 6 ritocchi, aggiungi questa come nuova e non toccare quella.
+8. Ortofrutticola· Operativo Interno | Web | Ortofrutticola Medea | Controllo qualità interno del sito prima della verifica con il cliente | Nicole | 2026-10-28 | Alta | Web/SEO | it | Lista di controllo completata e problemi passati a Juan | Telefoni, form, menù, foto, nessun bambino riconoscibile, mai «biologico».
+9. Ortofrutticola· Operativo Interno | Social & Contenidos | Ortofrutticola Medea | Preparare la griglia di novembre dei 3 marchi, separati (Medea, Agriturismo, Terre di Trincea) | Patricia | 2026-10-19 | Alta | Social | es | Griglia pronta per il controllo di Nicole | Linea di Gabriela. Mai foto di un marchio sul profilo di un altro.
+10. Ortofrutticola· Operativo Interno | 🎬 Video (se non c'è: Social & Contenidos) | Ortofrutticola Medea | Montare ogni settimana le clip girate da Sara | Abraham | 2026-10-23 | Media | Gráfica/Video | es | Primo blocco di reel consegnato | Il cliente vuole che tutto il girato venga usato. Controllare l'audio: mai voce a velocità diverse.
+11. Ortofrutticola· Operativo Interno | Social & Contenidos | Ortofrutticola Medea | Campagne per lo spaccio e per un evento infrasettimanale dell'agriturismo | Mihir | 2026-10-30 | Alta | Performance | en | Campagne pronte e approvate da Ste | Solo dopo l'ok del cliente sulla lista eventi. Eventi promossi 15 giorni prima.
+
+### Paried· Operativo Interno (5102110314)
+12. Paried· Operativo Interno | PM & Onboarding | Paried | Aggiornare la scheda cliente e preparare la board con i nuovi servizi | Nicole | 2026-10-13 | Media | PM | it | Scheda e board pronte | Contratto inviato il 9/10. Titolare: sig. Mocchiutti.
+13. Paried· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Paried | Creare la pagina «I nostri fornitori» con logo e breve descrizione per ogni marchio | Juan | 2026-10-28 | Media | Web/SEO | es | Pagina online | Serve perché Google e l'AI capiscano quali marchi tratta lo showroom.
+14. Paried· Operativo Interno | PM & Onboarding | Paried | Scrivere la bozza della mail ai fornitori per proporre video insieme | Nicole | 2026-10-21 | Media | PM | it | Bozza pronta per Ste | La invia Ste, nessun invio diretto.
+15. Paried· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Paried | Scrivere i primi 2 articoli del blog | Mihir | 2026-11-06 | Media | Web/SEO | en | 2 articoli pronti per la revisione di Nicole | Due articoli al mese.
+16. Paried· Operativo Interno | Social & Contenidos | Paried | Google Business: aggiornare la scheda e rispondere alle recensioni | DA ASSEGNARE | 2026-10-23 | Media | Social | it | Scheda aggiornata e risposte pubblicate | Il responsabile social di Paried è da decidere.
+
+### NOQ· Operativo Interno (5105508718)
+17. NOQ· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | NOQ / Not Only Queens | Costruire la bozza della landing performer con i testi di Nicole e le parole chiave di Mihir | Mandeep | 2026-10-14 | Alta | Web/SEO | en | Bozza su staging pronta per Paolo | Era attesa per il 12/10. Solo materiale del brand NOQ, nessuna grafica nuova.
+
+### Dentesano · Operativo Interno (5101092862)
+18. Dentesano · Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Dentesano | Concordare la data e consegnare il sito | Mandeep | 2026-10-16 | Media | Web/SEO | en | Sito consegnato al cliente | Ste fissa l'appuntamento.
+
+### La Fenice· Operativo Interno (5103334710)
+19. La Fenice· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Studio La Fenice | Consegnare il sito | Juan | 2026-10-16 | Media | Web/SEO | es | Sito consegnato | Secondo Juan è pronto.
+
+### Ecosmart· Operativo Interno (5102025262)
+20. Ecosmart· Operativo Interno | Social & Contenidos | Ecosmart Building | Preparare la griglia di novembre | Patricia | 2026-10-16 | Alta | Social | es | Griglia pronta per il controllo di Nicole | Priorità 1 di Patricia. Spiegare sempre il formato della griglia quando la si manda.
+21. Ecosmart· Operativo Interno | Social & Contenidos | Ecosmart Building | Ordinare i video di cantiere come chiesto dal cliente | Abraham | 2026-10-16 | Alta | Gráfica/Video | es | Video ordinati e condivisi | Riunione con il cliente il 13/10.
+
+### Lumii· Operativo Interno (5102035406)
+22. Lumii· Operativo Interno | Social & Contenidos | Lumi | Preparare la griglia di novembre | Arianna | 2026-10-19 | Alta | Gráfica/Video | es | Griglia pronta per il controllo di Nicole | Riunione con il cliente il 14/10.
+
+### Insiderslab· Operativo Interno (5103260677)
+23. Insiderslab· Operativo Interno | Social & Contenidos | Al Zuc | Strategia social e piano editoriale per i 50 anni | Gabriela | 2026-10-21 | Alta | Social | es | Piano pronto per Ste | Contratto firmato il 9/10, onboarding il 15/10. Valorizzare cucina, pasta fresca, dolci fatti in casa, tradizione friulana.
+24. Insiderslab· Operativo Interno | Social & Contenidos | Al Zuc | Pubblicare i contenuti del piano editoriale | Patricia | 2026-11-13 | Media | Social | es | Contenuti del mese pubblicati | Parte dopo il piano di Gabriela.
+25. Insiderslab· Operativo Interno | Social & Contenidos | Al Zuc | Girare la pasta fresca con Federico (mezza giornata) | Abraham | 2026-10-22 | Media | Gráfica/Video | es | Riprese fatte e materiale caricato | Data da fissare con il cliente.
+26. Insiderslab· Operativo Interno | Ads (se non c'è: Web and Seo, altrimenti PM & Onboarding) | Al Zuc | Campagne per eventi, matrimoni e cene aziendali di Natale | Mihir | 2026-10-30 | Alta | Performance | en | Campagne pronte e approvate da Ste | Budget consigliato per i primi 90 giorni: chiedere a Ste.
+27. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Al Zuc | Supporto tecnico all'assistente AI (collegamento email, preventivi, promemoria) | Juan | 2026-11-06 | Media | Web/SEO | es | Flusso di prova funzionante | Lo guida Ste.
+28. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Kinesis Club | Applicare le modifiche al sito dal documento https://claude.ai/code/artifact/8632c81f-a173-49ca-b0c8-a29963acd2de | Juan | 2026-10-19 | Alta | Web/SEO | es | Tutte le modifiche su staging, con screenshot | Riunione con Massimo il 12/10: foto e loghi mancanti in arrivo.
+29. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Kinesis Club | Controllo qualità e pubblicazione delle modifiche | Nicole | 2026-10-21 | Media | Web/SEO | it | Modifiche online e controllate | Con Juan.
+30. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Re-House (Tania) | Pubblicare il sito | Mandeep | 2026-10-15 | Media | Web/SEO | en | Sito online | Secondo Juan è pronto.
+31. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Amministrazioni MAJ | Applicare le modifiche chieste da Martina nella mail del 7/10 | Mandeep | 2026-10-23 | Media | Web/SEO | en | Modifiche online | La mail è stata inoltrata da Ste il 7/10.
+32. Insiderslab· Operativo Interno | Social & Contenidos | Insiders Lab | Griglie di novembre di tutti i clienti (consegna entro il 20/10) | Gabriela | 2026-10-19 | Alta | Social | es | Griglie consegnate a Nicole per il controllo | Regola: la griglia del mese si consegna entro il 20 del mese prima. Con Patricia.
+33. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Insiders Lab | Creare 2 landing con form per i video «costruzione» ed «estetista» | Mandeep | 2026-10-20 | Media | Web/SEO | en | Landing online con il link da mettere nei video | Form e tracciamento con Mihir, video di Abraham.
+34. Insiderslab· Operativo Interno | Social & Contenidos | Insiders Lab | Carosello sulla nuova nicchia, anche su LinkedIn, da pubblicare il 4/11 alle 12:30 | Patricia | 2026-11-03 | Media | Social | es | Carosello approvato e programmato | Mostrarlo a Ste prima della pubblicazione.
+35. Insiderslab· Operativo Interno | Web and Seo (se non c'è: PM & Onboarding) | Joelle M'bra | Preparare la bozza del documento con analisi di mercato e consigli SEO e marketing | Mihir | 2026-10-15 | Media | Web/SEO | en | Bozza pronta per Ste | Dalla call dell'8/10: parola chiave «Rovigo», psicologia dello sport, adolescenti, recensioni.
 ```
