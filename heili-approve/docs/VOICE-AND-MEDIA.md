@@ -1,14 +1,24 @@
 # Voce, revisione e contesto dei media
 
-Implementazione dell'8 ottobre 2026, richiesta da Stefano.
+Implementazione dell'8 ottobre 2026, aggiornata il 9 ottobre 2026 su richiesta di Stefano.
 
 ## Percorso cliente
 
-Il microfono nel commento detta una bozza modificabile; non invia il commento. «Parla con Heili» apre l'assistente del contenuto. Avviare la conversazione abilita ascolto, risposta e lettura vocale; Pausa/Termina interrompono il ciclo. Un errore di riconoscimento conserva il testo senza inviarlo. Approvazioni e richieste finali restano azioni esplicite del cliente.
+Il microfono nel commento detta una bozza modificabile; non invia il commento. «Chiedi modifiche» invia direttamente i commenti già salvati dal revisore sulla versione corrente, senza chiedere un secondo testo e senza duplicarli. Se non ci sono commenti validi, mostra un avviso; se c’è una bozza non salvata, invita prima a inviarla o annullarla. Commenti dell’agenzia, di un altro revisore, risolti o appartenenti a versioni precedenti non vengono usati per questa azione. Le conferme di richiesta modifiche e approvazione restano visibili dopo il refresh. Per le creatività Ads rimane il percorso «Invia le mie decisioni» con le regole delle varianti.
 
-La voce usa SpeechRecognition e speechSynthesis del browser. Disponibilità, lingua, permessi e trattamento dell'audio dipendono dal browser/dispositivo; quando non disponibili resta la conversazione scritta. Le prove automatiche simulano i dispositivi: non certificano il microfono fisico. Nessun audio del microfono viene salvato dall'app; la trascrizione conversazionale viene conservata nella sessione esistente.
+«Parla con Heili» usa GPT-Live (`gpt-live-1`, voce `marin`) tramite WebRTC: microfono e voce dell’assistente funzionano contemporaneamente, così il cliente può intervenire mentre Heili parla. L’utente avvia esplicitamente la chiamata, può disattivare il microfono, riattivarlo e terminare. Il browser deve consentire microfono e riproduzione audio; un eventuale blocco dell’audio mostra «Attiva audio». La chat scritta resta disponibile. Non viene usata la sintesi vocale del sistema per la conversazione; la sola dettatura del testo mantiene SpeechRecognition del browser.
+
+La trascrizione in diretta aiuta a seguire il dialogo. Il server riceve gli eventi autentici del provider, li conserva nella sessione di revisione e li rende disponibili al normale riepilogo. «Prepara il riepilogo» termina prima la chiamata e attende il salvataggio. Approvazioni e invio delle modifiche restano azioni esplicite del cliente. L’app non conserva registrazioni audio; GPT-Live è configurato con `store: false`. Questa impostazione non costituisce una promessa di Zero Data Retention del provider. Le prove browser con dispositivi simulati non certificano la resa del microfono e degli altoparlanti fisici.
 
 Il punto selezionato mantiene coordinate, media, variante e momento del video insieme, anche nel riepilogo strutturato e nel commento finale. Le sessioni sono vincolate alla versione: un aggiornamento del post durante una risposta impedisce di salvare un feedback sulla versione superata.
+
+## Limiti e gestione delle chiamate
+
+Una chiamata dura al massimo 180 secondi per default; sono consentiti 6 avvii ogni 24 ore per revisore e 100 per workspace, con almeno 10 secondi tra due avvii. I tentativi falliti contano. Le variabili `REVIEW_ASSISTANT_VOICE_*` sono documentate in `.env.example`; la durata configurabile è limitata a 600 secondi. I limiti vocali sono indipendenti da quelli della chat. Durante la chiamata il server impedisce invii testuali e finalizzazioni concorrenti della stessa sessione.
+
+La nuova migrazione `20261009133000_review_voice_calls` conserva chiamate, frammenti di trascrizione e collegamenti idempotenti ai messaggi della revisione. Il canale di controllo autenticato riceve la trascrizione direttamente da OpenAI; il browser non può caricare trascrizioni attribuite all’assistente né cambiare modello, istruzioni o strumenti. Il browser non riceve gli eventi di avvio/chiusura che contengono copie del prompt interno.
+
+Il timer del server chiude la chiamata alla scadenza. `/api/cron/voice`, protetto dal segreto cron, recupera le chiamate rimaste aperte dopo riavvii e ricontrolla link revocati, clienti archiviati e versioni superate. La chiusura confermata dal provider precede il riepilogo. Un esito incerto resta da recuperare e non viene presentato come salvataggio concluso. Applicare la migrazione e aggiornare anche il container cron con il nuovo script.
 
 ## Condivisione e piano
 
@@ -48,3 +58,5 @@ Container non-root, filesystem di sola lettura, upload read-only, tmpfs, capabil
 `components/heili-assistant-icon.tsx` riprende il nucleo con tre satelliti del materiale Heili interno: `sbp-consenso-team/docs/IDENTITA_HEILI.md` (25 luglio 2026), `DESIGN-SYSTEM-HEILI.md` e `design-tokens.css` (21 agosto 2026), con geometrie dal componente Business Brain. Navy #001F2F, menta #00E1CD, nucleo chiaro. Il materiale indica Heili come prodotto del gruppo 3Runes; non è stato trovato un manuale 3Runes autonomo più recente. L'icona è un adattamento per l'assistente, non un nuovo marchio ufficiale.
 
 Fonti tecniche: [Whisper e timestamp](https://developers.openai.com/api/docs/guides/speech-to-text), [Qwen3-VL-Flash](https://docs.modelstudio.console.alibabacloud.com/en/model-studio/qwen3-vl-flash).
+
+Documentazione vocale: [GPT-Live](https://developers.openai.com/api/docs/guides/live), [WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc), [controlli server e trascrizione](https://developers.openai.com/api/docs/guides/voice-server-controls).

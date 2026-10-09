@@ -64,6 +64,7 @@ import {
   SheetError,
   StaleBanner,
   SuccessPanel,
+  savedFeedbackBlocker,
 } from "./review-pieces";
 import type { PortalAdsPost, PortalQueue, PortalVariantDecision } from "./types";
 
@@ -132,10 +133,10 @@ export default function AdsReview({
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
 
-  const [sheet, setSheet] = useState<null | "send" | "changes">(null);
+  const [sheet, setSheet] = useState<null | "send">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
-  const [changesMessage, setChangesMessage] = useState("");
+  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
@@ -156,6 +157,7 @@ export default function AdsReview({
   };
   const variantNames = Object.fromEntries(variants.map((v) => [v.id, variantDisplayName(v)]));
   const setComments = post.comments.filter((c) => c.variantId === null);
+  const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved).length;
 
   // ─── Variant on screen ─────────────────────────────────────────────────────
 
@@ -249,6 +251,7 @@ export default function AdsReview({
     }
     setDraft(null);
     setAssetDraft(null);
+    setDecisionError(null);
     setNotice("Commento inviato: lo vedrà l'agenzia.");
     return null;
   }
@@ -286,12 +289,14 @@ export default function AdsReview({
     setOutcome(next);
     setDraft(null);
     setAssetDraft(null);
+    setDecisionError(null);
     setSheet(null);
     setAssistantOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function openSheet(kind: "send" | "changes") {
+  function openSheet(kind: "send") {
+    setDecisionError(null);
     setSheetError(null);
     setSheet(kind);
   }
@@ -331,19 +336,26 @@ export default function AdsReview({
     });
   }
 
-  async function confirmChanges() {
-    const message = changesMessage.trim();
-    if (sheetBusy || !message) return;
+  async function requestSavedChanges() {
+    if (sheetBusy) return;
+    setDecisionError(null);
+    const blocker = savedFeedbackBlocker(draft !== null || assetDraft !== null, myOpenComments);
+    if (blocker) {
+      setDecisionError(blocker);
+      return;
+    }
     setSheetBusy(true);
-    setSheetError(null);
-    const result = await requestChangesAction(token, { postId: ref.id, versionNumber: ref.versionNumber, message });
+    const result = await requestChangesAction(token, {
+      postId: ref.id,
+      versionNumber: ref.versionNumber,
+      feedback: "saved-comments",
+    });
     setSheetBusy(false);
     if (!result.ok) {
       if (result.stale) setStale(true);
-      setSheetError(result.error);
+      setDecisionError(result.error);
       return;
     }
-    setChangesMessage("");
     finish({ kind: "changes" });
   }
 
@@ -369,6 +381,7 @@ export default function AdsReview({
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
+      feedback: "assistant",
       message: input.message,
       reviewSessionId: input.reviewSessionId,
     });
@@ -389,6 +402,7 @@ export default function AdsReview({
 
   function reload() {
     setStale(false);
+    setDecisionError(null);
     setSheet(null);
     setDraft(null);
     setAssetDraft(null);
@@ -416,7 +430,7 @@ export default function AdsReview({
 
       {outcome && (
         <SuccessPanel
-          title={outcome.kind === "decisions" ? "Decisioni inviate all'agenzia." : "Richiesta inviata all'agenzia."}
+          title={outcome.kind === "decisions" ? "Decisioni inviate all'agenzia." : "Modifiche inviate all'agenzia."}
           nextHref={nextHref}
           homeHref={homeHref}
           remaining={Math.max(0, queue.toReviewCount - (queue.position !== null ? 1 : 0))}
@@ -664,18 +678,24 @@ export default function AdsReview({
                 ? ` · manca ${count.missing.map(nameOf).join(", ")}`
                 : ""}
             </p>
+            {decisionError && (
+              <div className="rounded-md border border-error/40 bg-surface p-3 text-sm text-error" role="alert" aria-live="polite">
+                {decisionError}
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => openSheet("changes")}
-                className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface"
+                onClick={requestSavedChanges}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface disabled:opacity-50"
               >
-                Chiedi modifiche
+                {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
               <button
                 type="button"
                 onClick={() => openSheet("send")}
-                disabled={count.missing.length > 0}
+                disabled={sheetBusy || count.missing.length > 0}
                 className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 Invia le mie decisioni
@@ -708,34 +728,6 @@ export default function AdsReview({
         />
       </BottomSheet>
 
-      <BottomSheet open={sheet === "changes"} title="Cosa vorresti cambiare?" onClose={closeSheet} busy={sheetBusy}>
-        <label className="block space-y-2">
-          <span className="block text-sm text-muted">
-            Scrivi all&apos;agenzia cosa non ti convince: preparerà una nuova versione delle creatività da rivedere.
-          </span>
-          <textarea
-            value={changesMessage}
-            onChange={(e) => setChangesMessage(e.target.value.slice(0, 5000))}
-            rows={5}
-            placeholder="Per esempio: nella variante B userei la foto del negozio e un testo più corto."
-            className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
-          />
-        </label>
-        {count.decided > 0 && (
-          <p className="text-sm text-muted">
-            Le decisioni che hai già preso sulle varianti arriveranno all&apos;agenzia insieme a questo messaggio.
-          </p>
-        )}
-        <SheetError error={sheetError} stale={stale} onReload={reload} />
-        <SheetButtons
-          busy={sheetBusy}
-          disabled={changesMessage.trim() === ""}
-          onCancel={closeSheet}
-          onConfirm={confirmChanges}
-          confirmLabel={sheetBusy ? "Invio…" : "Invia la richiesta"}
-          confirmClass="bg-foreground text-background hover:opacity-90"
-        />
-      </BottomSheet>
     </div>
   );
 }
@@ -903,7 +895,7 @@ function AdsStatusNotice({ post }: { post: PortalAdsPost }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text =
-      "Hai chiesto delle modifiche: l'agenzia sta preparando una nuova versione delle creatività e ti scriverà quando sarà pronta. Se ti viene in mente altro, aggiungi pure un commento.";
+      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando le nuove creatività saranno pronte.";
   } else if (post.status === "DELIVERED") {
     text = "Le creatività approvate sono state consegnate per la campagna. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {
@@ -911,5 +903,5 @@ function AdsStatusNotice({ post }: { post: PortalAdsPost }) {
   } else {
     text = `${post.approvedLabel ? `Hai inviato le tue decisioni ${post.approvedLabel}. ` : "Le creatività sono approvate. "}L'agenzia preparerà la campagna (inizio ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
   }
-  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed">{text}</p>;
+  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }

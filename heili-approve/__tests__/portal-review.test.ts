@@ -17,6 +17,7 @@ import AdsReview from "@/components/portal/ads-review";
 import BlogReview from "@/components/portal/blog-review";
 import PostCard from "@/components/portal/post-card";
 import PostReview from "@/components/portal/post-review";
+import { savedFeedbackBlocker } from "@/components/portal/review-pieces";
 import type { PortalAdsPost, PortalBlogPost, PortalPost, PortalQueue } from "@/components/portal/types";
 import { emptyAdContent } from "@/lib/content/ads";
 import { emptyBlogContent, renderMarkdownSafe } from "@/lib/content/blog";
@@ -307,5 +308,69 @@ describe("PostCard", () => {
     expect(social).toContain("Post social");
     expect(social).toContain("Instagram · Facebook · Versione 1");
     expect(social).toContain("Pubblicazione: </span>");
+  });
+});
+
+describe("saved feedback submission", () => {
+  it("guides an unsaved draft before checking stored comments", () => {
+    expect(savedFeedbackBlocker(true, 2)).toContain("commento ancora da inviare");
+  });
+
+  it("blocks an empty request and allows saved feedback", () => {
+    expect(savedFeedbackBlocker(false, 0)).toContain("Non hai ancora indicato modifiche");
+    expect(savedFeedbackBlocker(false, 1)).toBeNull();
+  });
+
+  it("keeps the change-request confirmation visible after refresh", () => {
+    const socialPost: PortalPost = {
+      ...base,
+      status: "CHANGES_REQUESTED",
+      canAct: false,
+      networks: ["instagram"],
+      networkOptions: {},
+      text: "La nuova colomba!",
+      firstCommentText: null,
+      media: [],
+      publishAt: now,
+      comments: [],
+    };
+    const social = renderToStaticMarkup(
+      createElement(PostReview, {
+        token: "tok",
+        post: socialPost,
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        queue: { ...queue, position: null },
+        assistantEnabled: false,
+        publishInPast: false,
+      })
+    );
+    const blog = renderToStaticMarkup(
+      createElement(BlogReview, {
+        token: "tok",
+        post: blogPost({ status: "CHANGES_REQUESTED", canAct: false }),
+        queue: { ...queue, position: null },
+        listKinds: ["BLOG_ARTICLE"],
+        assistantEnabled: false,
+      })
+    );
+    const ads = renderToStaticMarkup(
+      createElement(AdsReview, {
+        token: "tok",
+        post: adsPost({ status: "CHANGES_REQUESTED", canAct: false }),
+        client: { name: "Rossi Srl", logoUrl: null },
+        queue: { ...queue, position: null },
+        listKinds: ["AD_CREATIVE"],
+        assistantEnabled: false,
+      })
+    );
+
+    expect(social).toContain("Modifiche inviate all&#x27;agenzia");
+    expect(blog).toContain("Modifiche inviate all&#x27;agenzia");
+    expect(ads).toContain("Modifiche inviate all&#x27;agenzia");
+    expect(social).toContain('role="status"');
+    expect(blog).toContain('role="status"');
+    expect(ads).toContain('role="status"');
+    expect(blog).not.toContain("Cosa vorresti cambiare?");
+    expect(ads).not.toContain("Cosa vorresti cambiare?");
   });
 });

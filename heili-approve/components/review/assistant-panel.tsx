@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSpeechInput } from "@/components/voice/use-speech-input";
-import { useSpeechOutput } from "@/components/voice/use-speech-output";
+import { useLiveConversation } from "@/components/voice/use-live-conversation";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
@@ -174,8 +174,6 @@ export function AssistantPanel({
   const [error, setError] = useState<string | null>(null);
   const [changesDraft, setChangesDraft] = useState<string | null>(null);
   const [done, setDone] = useState<null | "changes" | "approved">(null);
-  const [conversationMode, setConversationMode] = useState<"off" | "active" | "paused">("off");
-  const conversationModeRef = useRef<"off" | "active" | "paused">("off");
 
   const [videoTime, setVideoTime] = useState<number | null>(null);
   const selection = usePolled(getSelection, (anchor) => `${anchor.blockIndex}|${anchor.prefix}|${anchor.quote}`);
@@ -199,12 +197,9 @@ export function AssistantPanel({
       setDraft(value);
       setDictated(true);
     },
-    onConversationTurn: sendConversationTurn,
     maxLength: MAX_CLIENT_MESSAGE_LENGTH,
   });
-  const speechOutput = useSpeechOutput();
   const cancelSpeechInput = speechInput.cancel;
-  const cancelSpeechOutput = speechOutput.cancel;
 
   useEffect(() => {
     draftRef.current = draft;
@@ -264,13 +259,13 @@ export function AssistantPanel({
   // version change never leaves the microphone or a spoken reply running.
   useEffect(
     () => () => {
-      conversationModeRef.current = "off";
       cancelSpeechInput();
-      cancelSpeechOutput();
     },
-    [cancelSpeechInput, cancelSpeechOutput, postId, versionNumber]
+    [cancelSpeechInput, postId, versionNumber]
   );
 
+  const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reload });
+  const voiceBusy = live.phase !== "idle";
   const messages = session?.messages ?? [];
   const lastMessage = messages.at(-1);
   const hasClientMessages = messages.some((m) => m.role === "CLIENT");
@@ -279,29 +274,16 @@ export function AssistantPanel({
     !busy && session?.status === "OPEN" && lastMessage?.role === "CLIENT" && pendingMessage === null;
   const messagesLeft = session ? session.clientMessagesLeft : null;
   const outOfSessions = !session && sessionsLeft === 0;
-  const composerDisabled = !canChat || done !== null || busy !== null || outOfSessions || messagesLeft === 0;
-  const composerDisabledRef = useRef(composerDisabled);
-
-  useEffect(() => {
-    composerDisabledRef.current = composerDisabled;
-  }, [composerDisabled]);
-
-  // ─── Voice ─────────────────────────────────────────────────────────────────
-
-  function setVoiceMode(mode: "off" | "active" | "paused") {
-    conversationModeRef.current = mode;
-    setConversationMode(mode);
-  }
-
-  function currentContextMarker(): string {
+  const composerDisabled = voiceBusy || !canChat || done !== null || busy !== null || outOfSessions || messagesLeft === 0;
+  function currentContextMarker(context = contextRef.current): string {
     const {
       adsContext: currentAdsContext,
       selection: currentSelection,
       videoTime: currentVideoTime,
       pointContext: currentPointContext,
-    } = contextRef.current;
+    } = context;
     const markers: string[] = [];
-    if (currentAdsContext) {
+    if (currentAdsContext && !currentPointContext) {
       markers.push(
         variantMarker({
           variantId: currentAdsContext.variantId,
@@ -320,54 +302,24 @@ export function AssistantPanel({
     return markers.join(" ");
   }
 
-  function contextualVoiceDraft(): string {
-    const current = draftRef.current.trim();
-    const marker = currentContextMarker();
-    if (!marker || current.includes(marker)) return current;
-    return current ? `${marker} ${current}` : `${marker} `;
-  }
-
-  function startVoiceTurn() {
-    if (conversationModeRef.current !== "active" || composerDisabledRef.current) {
-      if (conversationModeRef.current === "active") setVoiceMode("paused");
-      return;
-    }
-    speechOutput.cancel();
-    speechInput.start({ baseText: contextualVoiceDraft(), continuous: false, submitOnEnd: true });
-  }
-
-  function sendConversationTurn(message: string) {
-    if (conversationModeRef.current !== "active") return;
-    void sendMessage(false, { message, inputMode: "VOICE", conversation: true });
-  }
+  const selectedContextMarker = currentContextMarker({ adsContext, selection, videoTime, pointContext });
+  const updateVoiceContext = live.updateContext;
+  useEffect(() => {
+    if (live.phase !== "active") return;
+    const timer = window.setTimeout(() => { void updateVoiceContext(selectedContextMarker); }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [live.phase, selectedContextMarker, updateVoiceContext]);
 
   function startConversation() {
-    if (!speechInput.supported || !speechOutput.supported || composerDisabled) return;
-    speechInput.cancel();
-    speechOutput.cancel();
-    setVoiceMode("active");
-    speechOutput.speak(
-      `${copy.intro} Quando hai finito di parlare, ti rispondo e poi torno ad ascoltare.`,
-      startVoiceTurn
-    );
-  }
-
-  function pauseConversation() {
-    speechInput.cancel();
-    speechOutput.cancel();
-    setVoiceMode("paused");
-  }
-
-  function resumeConversation() {
     if (composerDisabled) return;
-    setVoiceMode("active");
-    window.setTimeout(startVoiceTurn, 0);
-  }
-
-  function endConversation() {
+    if (draft.trim()) {
+      setError("Invia prima il messaggio scritto oppure svuotalo, poi avvia la conversazione vocale.");
+      textareaRef.current?.focus();
+      return;
+    }
     speechInput.cancel();
-    speechOutput.cancel();
-    setVoiceMode("off");
+    setError(null);
+    void live.start(currentContextMarker());
   }
 
   // ─── Actions ───────────────────────────────────────────────────────────────
@@ -408,12 +360,11 @@ export function AssistantPanel({
 
   async function sendMessage(
     retry = false,
-    voiceTurn?: { message: string; inputMode: ReviewInputModeValue; conversation: boolean }
   ) {
-    const message = (voiceTurn?.message ?? draft).trim();
-    if (busy || (!retry && !message)) return;
+    const message = draft.trim();
+    if (busy || voiceBusy || (!retry && !message)) return;
     speechInput.cancel();
-    const inputMode: ReviewInputModeValue = voiceTurn?.inputMode ?? (dictated ? "VOICE" : "TEXT");
+    const inputMode: ReviewInputModeValue = dictated ? "VOICE" : "TEXT";
 
     setBusy("send");
     setError(null);
@@ -433,19 +384,8 @@ export function AssistantPanel({
       setSessionsLeft(turn.sessionsLeft);
       setReadiness(turn.readiness);
       setChangesDraft(null);
-      if (voiceTurn?.conversation && conversationModeRef.current === "active") {
-        const reply = [...turn.session.messages].reverse().find((item) => item.role === "ASSISTANT");
-        if (reply) {
-          speechOutput.speak(reply.content, () => {
-            if (conversationModeRef.current === "active") startVoiceTurn();
-          });
-        } else {
-          setVoiceMode("paused");
-        }
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "L'assistente non è riuscito a rispondere. Riprova.");
-      if (voiceTurn?.conversation) setVoiceMode("paused");
       // The message may have been stored before the engine failed: show what
       // the server has, and give the text back only if it was not saved.
       try {
@@ -476,10 +416,10 @@ export function AssistantPanel({
 
   async function prepareSummary() {
     if (busy) return;
-    endConversation();
     setBusy("finalize");
     setError(null);
     try {
+      await live.stop();
       await finalize();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Non sono riuscito a preparare il riepilogo. Riprova.");
@@ -509,10 +449,10 @@ export function AssistantPanel({
 
   async function approve() {
     if (busy) return;
-    endConversation();
     setBusy("approve");
     setError(null);
     try {
+      await live.stop();
       // Best effort: leave the agency a summary of the conversation too.
       if (session?.status === "OPEN" && hasClientMessages) {
         await finalize().catch(() => undefined);
@@ -641,7 +581,6 @@ export function AssistantPanel({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  if (conversationMode === "active") pauseConversation();
                   void sendMessage();
                 }
               }}
@@ -658,7 +597,7 @@ export function AssistantPanel({
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              {speechInput.supported && conversationMode === "off" && (
+              {speechInput.supported && !voiceBusy && (
                 <button
                   type="button"
                   onClick={() =>
@@ -678,7 +617,6 @@ export function AssistantPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (conversationMode === "active") pauseConversation();
                   void sendMessage();
                 }}
                 disabled={composerDisabled || !draft.trim()}
@@ -691,106 +629,76 @@ export function AssistantPanel({
               )}
             </div>
 
-            <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold">Parla con Heili</p>
-                <p className="text-xs text-muted">
-                  Conversazione vocale sul contenuto che stai guardando. Heili ascolta un turno, risponde a voce e
-                  prepara il feedback; non approva e non invia modifiche.
-                </p>
+            <div className="space-y-3 rounded-lg border border-accent/30 bg-surface p-4">
+              <div className="flex items-start gap-3">
+                <HeiliAssistantIcon className="h-8 w-8 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Parla con Heili</p>
+                  <p className="text-xs text-muted">
+                    Una conversazione naturale sul post: puoi interrompere Heili parlando, anche mentre risponde.
+                    La voce è generata dall’AI. Scegli tu quando inviare il feedback.
+                  </p>
+                </div>
               </div>
-              {!speechInput.supported || !speechOutput.supported ? (
-                <p className="text-xs text-muted">
-                  La conversazione vocale non è disponibile in questo browser. La chat scritta resta sempre utilizzabile.
-                </p>
-              ) : conversationMode === "off" ? (
-                <button
-                  type="button"
-                  onClick={startConversation}
-                  disabled={composerDisabled}
-                  className="min-h-11 rounded-md border border-accent bg-background px-4 text-sm font-semibold text-accent hover:bg-surface disabled:opacity-50"
-                >
+              {live.error && <p className="text-sm text-error" role="alert">{live.error}</p>}
+              {!live.supported ? (
+                <p className="text-xs text-muted">La chiamata richiede un browser con microfono e una connessione sicura. Puoi sempre usare la chat.</p>
+              ) : !voiceBusy ? (
+                <button type="button" onClick={startConversation} disabled={composerDisabled}
+                  className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50">
                   Inizia conversazione vocale
                 </button>
               ) : (
-                <div className="space-y-2">
-                  <p className="text-sm" aria-live="polite">
-                    {conversationMode === "paused"
-                      ? "Conversazione in pausa."
-                      : speechInput.listening
-                        ? "Ti ascolto…"
-                        : speechOutput.speaking
-                          ? "Heili sta rispondendo…"
-                          : busy === "send"
-                            ? "Heili sta preparando la risposta…"
-                            : "Conversazione attiva. Puoi iniziare il prossimo turno."}
+                <>
+                  <p className="text-sm font-medium" role="status">
+                    {live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {conversationMode === "active" && speechInput.listening && (
-                      <button
-                        type="button"
-                        onClick={speechInput.stop}
-                        className="min-h-11 rounded-md bg-accent px-3 text-sm font-semibold text-white hover:bg-accent-hover"
-                      >
-                        Ho finito, rispondi
+                    {live.phase === "active" && (
+                      <button type="button" onClick={live.toggleMicrophone} aria-pressed={live.muted}
+                        className="min-h-11 rounded-md border border-border bg-background px-3 text-sm">
+                        {live.muted ? "Riattiva microfono" : "Disattiva microfono"}
                       </button>
                     )}
-                    {conversationMode === "active" && !speechInput.listening && !speechOutput.speaking && !busy && (
-                      <button
-                        type="button"
-                        onClick={startVoiceTurn}
-                        className="min-h-11 rounded-md bg-accent px-3 text-sm font-semibold text-white hover:bg-accent-hover"
-                      >
-                        Parla ora
-                      </button>
+                    {live.playbackBlocked && (
+                      <button type="button" onClick={() => void live.enablePlayback()} className="min-h-11 rounded-md border border-accent px-3 text-sm text-accent">Attiva audio</button>
                     )}
-                    {conversationMode === "active" ? (
-                      <button
-                        type="button"
-                        onClick={pauseConversation}
-                        className="min-h-11 rounded-md border border-border bg-background px-3 text-sm hover:border-border-hover"
-                      >
-                        Pausa
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={resumeConversation}
-                        disabled={composerDisabled}
-                        className="min-h-11 rounded-md border border-accent bg-background px-3 text-sm font-medium text-accent disabled:opacity-50"
-                      >
-                        Riprendi
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={endConversation}
-                      className="min-h-11 rounded-md border border-border bg-background px-3 text-sm hover:border-border-hover"
-                    >
-                      Termina
+                    <button type="button" onClick={() => void live.stop().catch(() => {})} disabled={live.phase === "closing"}
+                      className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50">
+                      {live.phase === "connecting" ? "Annulla collegamento" : "Termina conversazione"}
                     </button>
                   </div>
-                </div>
+                  <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l’agenzia.</p>
+                </>
+              )}
+              {(live.clientText || live.assistantText) && (
+                <details className="text-sm" open>
+                  <summary className="cursor-pointer text-xs text-muted">Trascrizione in diretta</summary>
+                  <div className="mt-2 max-h-60 space-y-2 overflow-y-auto" aria-live="off">
+                    {live.clientText && <p><strong>Tu: </strong>{live.clientText}</p>}
+                    {live.assistantText && <p><strong>Heili: </strong>{live.assistantText}</p>}
+                  </div>
+                </details>
               )}
             </div>
           </div>
 
-          {(hasClientMessages || completed) && (
+          {(hasClientMessages || completed || live.clientText) && (
             <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:flex-wrap">
               {completed ? (
-                <ActionButton onClick={submitChanges} disabled={busy !== null} primary={sendHighlighted}>
+                <ActionButton onClick={submitChanges} disabled={busy !== null || voiceBusy} primary={sendHighlighted}>
                   {busy === "submit" ? "Invio…" : "Invia le modifiche all'agenzia"}
                 </ActionButton>
               ) : (
                 <ActionButton
                   onClick={prepareSummary}
-                  disabled={busy !== null || session?.status !== "OPEN"}
+                  disabled={busy !== null || live.phase === "connecting" || live.phase === "closing" || (!voiceBusy && session?.status !== "OPEN")}
                   primary={readiness === "ready_changes"}
                 >
                   {busy === "finalize" ? "Preparo il riepilogo…" : "Prepara il riepilogo per l'agenzia"}
                 </ActionButton>
               )}
-              <ActionButton onClick={approve} disabled={busy !== null} primary={approveHighlighted} success>
+              <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
                 {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
               </ActionButton>
             </div>

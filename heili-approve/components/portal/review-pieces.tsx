@@ -167,6 +167,17 @@ export function DecisionBar({ children }: { children: ReactNode }) {
   );
 }
 
+/** Why the saved-feedback decision cannot run yet. */
+export function savedFeedbackBlocker(hasUnsavedDraft: boolean, savedCommentCount: number): string | null {
+  if (hasUnsavedDraft) {
+    return "Hai un commento ancora da inviare. Premi «Invia commento» oppure annullalo prima di chiedere le modifiche.";
+  }
+  if (savedCommentCount < 1) {
+    return "Non hai ancora indicato modifiche. Aggiungi e invia almeno un commento prima di continuare.";
+  }
+  return null;
+}
+
 export function SheetError({ error, stale, onReload }: { error: string | null; stale: boolean; onReload: () => void }) {
   if (!error) return null;
   return (

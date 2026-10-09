@@ -31,6 +31,7 @@ import { itemLabelsFor, itemTargetFor } from "./content";
 import { AssistantError, getAssistantProvider, runAssistantFinalize, runAssistantTurn } from "./provider";
 import { buildPostContext } from "./prompt";
 import { attachMediaEvidence } from "@/lib/media-analysis/context";
+import { assertNoActiveLiveCall } from "./live-service";
 import {
   checkMessageLimits,
   pickSessionForVersion,
@@ -284,6 +285,7 @@ export async function sendAssistantMessage(
     await lockAssistantBudget(tx, workspaceId, reviewer.id);
     await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
     const now = new Date();
+    await assertNoActiveLiveCall(tx, reviewer.id);
     const sessions = await tx.reviewSession.findMany({
       where: { postId: post.id, reviewerId: reviewer.id },
       include: { messages: { orderBy: { createdAt: "asc" } } },
@@ -416,6 +418,7 @@ export async function finalizeSession(
     await lockAssistantBudget(tx, workspaceId, reviewer.id);
     await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
     const now = new Date();
+    await assertNoActiveLiveCall(tx, reviewer.id);
     const fresh = await tx.reviewSession.findUnique({
       where: { id: session.id },
       include: { messages: { orderBy: { createdAt: "asc" } } },

@@ -48,12 +48,24 @@ const versionSchema = z.number().int().min(1).max(100_000);
 
 const approveSchema = z.object({ postId: idSchema, versionNumber: versionSchema });
 
-const changesSchema = z.object({
-  postId: idSchema,
-  versionNumber: versionSchema,
-  message: z.string().max(10_000),
-  reviewSessionId: idSchema.optional(),
-});
+const changesSchema = z.discriminatedUnion("feedback", [
+  z
+    .object({
+      postId: idSchema,
+      versionNumber: versionSchema,
+      feedback: z.literal("saved-comments"),
+    })
+    .strict(),
+  z
+    .object({
+      postId: idSchema,
+      versionNumber: versionSchema,
+      feedback: z.literal("assistant"),
+      message: z.string().max(10_000),
+      reviewSessionId: idSchema,
+    })
+    .strict(),
+]);
 
 // Shape only: lib/posts validates the passage (blogAnchorSchema) and checks
 // that it is used on an article.
@@ -170,21 +182,30 @@ export async function requestChangesAction(
   input: RequestChangesInput
 ): Promise<PortalActionResult> {
   const result = await asReviewer(token, async (reviewer) => {
-    const { postId, versionNumber, message, reviewSessionId } = parseOrThrow(changesSchema, input);
+    const data = parseOrThrow(changesSchema, input);
+    const { postId, versionNumber } = data;
 
-    let actionItems: RequestChangesActionItem[] | undefined;
-    if (reviewSessionId) {
-      const session = await prisma.reviewSession.findFirst({
-        where: { id: reviewSessionId, postId, reviewerId: reviewer.id, versionNumber },
-        select: { actionItems: true },
-      });
-      if (!session) throw new NotFoundError("Conversazione con l'assistente non trovata");
-      // Ownership + visibility (throws NotFoundError); requestChanges re-checks the version.
-      const post = await getPostForReviewer(postId, reviewer);
-      const version = post.versions.find((v) => v.number === versionNumber);
-      if (!version) throw new ConflictError(STALE_VERSION);
-      actionItems = toRequestChangesItems(post.kind, version, parseActionItems(session.actionItems));
+    if (data.feedback === "saved-comments") {
+      await requestChanges(postId, reviewer, versionNumber, null, { useSavedComments: true });
+      return undefined;
     }
+
+    const { message, reviewSessionId } = data;
+
+    const session = await prisma.reviewSession.findFirst({
+      where: { id: reviewSessionId, postId, reviewerId: reviewer.id, versionNumber },
+      select: { actionItems: true },
+    });
+    if (!session) throw new NotFoundError("Conversazione con l'assistente non trovata");
+    // Ownership + visibility (throws NotFoundError); requestChanges re-checks the version.
+    const post = await getPostForReviewer(postId, reviewer);
+    const version = post.versions.find((v) => v.number === versionNumber);
+    if (!version) throw new ConflictError(STALE_VERSION);
+    const actionItems: RequestChangesActionItem[] = toRequestChangesItems(
+      post.kind,
+      version,
+      parseActionItems(session.actionItems)
+    );
 
     await requestChanges(postId, reviewer, versionNumber, message, { reviewSessionId, actionItems });
     return undefined;

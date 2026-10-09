@@ -31,6 +31,7 @@ import {
   SheetError,
   StaleBanner,
   SuccessPanel,
+  savedFeedbackBlocker,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
 
@@ -106,10 +107,10 @@ export default function BlogReview({
   const [stale, setStale] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
 
-  const [sheet, setSheet] = useState<null | "approve" | "changes">(null);
+  const [sheet, setSheet] = useState<null | "approve">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
-  const [changesMessage, setChangesMessage] = useState("");
+  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
@@ -181,6 +182,7 @@ export default function BlogReview({
       return result.error;
     }
     setDraft(null);
+    setDecisionError(null);
     setNotice("Commento inviato: lo vedrà l'agenzia.");
     return null;
   }
@@ -190,12 +192,14 @@ export default function BlogReview({
   function finish(result: Outcome) {
     setOutcome(result);
     setDraft(null);
+    setDecisionError(null);
     setSheet(null);
     setAssistantOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function openSheet(kind: "approve" | "changes") {
+  function openSheet(kind: "approve") {
+    setDecisionError(null);
     setSheetError(null);
     setSheet(kind);
   }
@@ -230,19 +234,26 @@ export default function BlogReview({
     finish("approved");
   }
 
-  async function confirmChanges() {
-    const message = changesMessage.trim();
-    if (sheetBusy || !message) return;
+  async function requestSavedChanges() {
+    if (sheetBusy) return;
+    setDecisionError(null);
+    const blocker = savedFeedbackBlocker(draft !== null, myOpenComments);
+    if (blocker) {
+      setDecisionError(blocker);
+      return;
+    }
     setSheetBusy(true);
-    setSheetError(null);
-    const result = await requestChangesAction(token, { postId: ref.id, versionNumber: ref.versionNumber, message });
+    const result = await requestChangesAction(token, {
+      postId: ref.id,
+      versionNumber: ref.versionNumber,
+      feedback: "saved-comments",
+    });
     setSheetBusy(false);
     if (!result.ok) {
       if (result.stale) setStale(true);
-      setSheetError(result.error);
+      setDecisionError(result.error);
       return;
     }
-    setChangesMessage("");
     finish("changes");
   }
 
@@ -261,6 +272,7 @@ export default function BlogReview({
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
+      feedback: "assistant",
       message: input.message,
       reviewSessionId: input.reviewSessionId,
     });
@@ -281,6 +293,7 @@ export default function BlogReview({
 
   function reload() {
     setStale(false);
+    setDecisionError(null);
     setSheet(null);
     setDraft(null);
     router.refresh();
@@ -298,7 +311,7 @@ export default function BlogReview({
 
       {outcome && (
         <SuccessPanel
-          title={outcome === "approved" ? "Fatto! Articolo approvato." : "Richiesta inviata all'agenzia."}
+          title={outcome === "approved" ? "Fatto! Articolo approvato." : "Modifiche inviate all'agenzia."}
           nextHref={nextHref}
           homeHref={homeHref}
           remaining={Math.max(0, queue.toReviewCount - (queue.position !== null ? 1 : 0))}
@@ -417,21 +430,30 @@ export default function BlogReview({
 
       {canAct && (
         <DecisionBar>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => openSheet("changes")}
-              className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface"
-            >
-              Chiedi modifiche
-            </button>
-            <button
-              type="button"
-              onClick={() => openSheet("approve")}
-              className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90"
-            >
-              Approva
-            </button>
+          <div className="space-y-2">
+            {decisionError && (
+              <div className="rounded-md border border-error/40 bg-surface p-3 text-sm text-error" role="alert" aria-live="polite">
+                {decisionError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={requestSavedChanges}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface disabled:opacity-50"
+              >
+                {sheetBusy ? "Invio…" : "Chiedi modifiche"}
+              </button>
+              <button
+                type="button"
+                onClick={() => openSheet("approve")}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                Approva
+              </button>
+            </div>
           </div>
         </DecisionBar>
       )}
@@ -475,36 +497,6 @@ export default function BlogReview({
         />
       </BottomSheet>
 
-      <BottomSheet open={sheet === "changes"} title="Cosa vorresti cambiare?" onClose={closeSheet} busy={sheetBusy}>
-        <label className="block space-y-2">
-          <span className="block text-sm text-muted">
-            Scrivi all&apos;agenzia cosa non ti convince: preparerà una nuova versione da rivedere.
-          </span>
-          <textarea
-            value={changesMessage}
-            onChange={(e) => setChangesMessage(e.target.value.slice(0, 5000))}
-            rows={5}
-            placeholder="Per esempio: accorcerei l'introduzione e userei un tono più diretto."
-            className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
-          />
-        </label>
-        {myOpenComments > 0 && (
-          <p className="text-sm text-muted">
-            {myOpenComments === 1
-              ? "Il commento che hai lasciato sull'articolo arriverà all'agenzia insieme a questo messaggio."
-              : `I ${myOpenComments} commenti che hai lasciato sull'articolo arriveranno all'agenzia insieme a questo messaggio.`}
-          </p>
-        )}
-        <SheetError error={sheetError} stale={stale} onReload={reload} />
-        <SheetButtons
-          busy={sheetBusy}
-          disabled={changesMessage.trim() === ""}
-          onCancel={closeSheet}
-          onConfirm={confirmChanges}
-          confirmLabel={sheetBusy ? "Invio…" : "Invia la richiesta"}
-          confirmClass="bg-foreground text-background hover:opacity-90"
-        />
-      </BottomSheet>
     </div>
   );
 }
@@ -515,7 +507,7 @@ function BlogStatusNotice({ post }: { post: PortalBlogPost }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text =
-      "Hai chiesto delle modifiche: l'agenzia sta preparando una nuova versione e ti scriverà quando sarà pronta. Se ti viene in mente altro, aggiungi pure un commento.";
+      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando la nuova versione dell'articolo sarà pronta.";
   } else if (post.status === "DELIVERED") {
     text = "L'articolo è stato pubblicato sul sito. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {
@@ -523,7 +515,7 @@ function BlogStatusNotice({ post }: { post: PortalBlogPost }) {
   } else {
     text = `${post.approvedLabel ? `Hai approvato questo articolo ${post.approvedLabel}. ` : "Questo articolo è approvato. "}L'agenzia lo pubblicherà sul sito (pubblicazione prevista ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
   }
-  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed">{text}</p>;
+  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }
 
 function BlogCommentList({

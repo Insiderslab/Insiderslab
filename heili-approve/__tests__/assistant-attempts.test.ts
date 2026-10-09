@@ -165,6 +165,7 @@ function attemptMatches(attempt: Attempt, where: AttemptWhere): boolean {
 function installPrismaMock() {
   const tx = {
     $executeRaw: vi.fn(async () => 1),
+    reviewVoiceCall: { findFirst: vi.fn(async () => null) },
     post: { findUnique: vi.fn(async () => ({ workspaceId: "workspace-1", clientId: "client-1", status: "IN_REVIEW", currentVersionNumber: currentPostVersion })) },
     reviewProviderAttempt: {
       findFirst: vi.fn(async ({ where }: { where: AttemptWhere }) => {

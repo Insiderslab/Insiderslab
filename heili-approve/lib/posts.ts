@@ -1773,20 +1773,21 @@ export async function approvePost(
 }
 
 /**
- * Client asks for changes. `message` becomes the general CLIENT comment (for
- * the assistant: summary + bullet list). `opts.actionItems` are the
- * assistant's structured items: each one about a specific media / video
- * moment also becomes its own CLIENT comment, so it shows up as a pin or a
- * marker on the video timeline (see planActionItemComment).
+ * Client asks for changes. The assistant path turns `message` and its
+ * structured action items into comments. The manual portal path uses
+ * `useSavedComments`: it submits the reviewer's existing unresolved comments
+ * on this exact version without copying them into a redundant summary.
  */
 export async function requestChanges(
   postId: string,
   reviewer: ReviewerRef,
   versionNumber: number,
-  message: string,
+  message: string | null,
   opts: {
     reviewSessionId?: string;
     actionItems?: RequestChangesActionItem[];
+    /** Submit comments already saved by this reviewer on the current version. */
+    useSavedComments?: boolean;
     /**
      * Ads "Invia le mie decisioni" with every variant discarded: re-checked
      * under the row lock (a variant approved in the meantime is a conflict)
@@ -1794,9 +1795,16 @@ export async function requestChanges(
      */
     allVariantsRejected?: boolean;
   } = {}
-): Promise<{ post: Post; comment: PostComment; actionComments: PostComment[] }> {
+): Promise<{ post: Post; comment: PostComment | null; actionComments: PostComment[] }> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
-  let body = parseOrThrow(changesMessageSchema, message);
+  const useSavedComments = opts.useSavedComments === true;
+  if (
+    useSavedComments &&
+    (message !== null || opts.reviewSessionId !== undefined || opts.actionItems !== undefined || opts.allVariantsRejected)
+  ) {
+    throw new ValidationError("Richiesta di modifiche non valida");
+  }
+  let body = useSavedComments ? null : parseOrThrow(changesMessageSchema, message);
   const actionItems = opts.actionItems ? parseOrThrow(actionItemsSchema, opts.actionItems) : [];
   const actor: Actor = { kind: "reviewer", reviewerId: reviewer.id };
 
@@ -1818,6 +1826,22 @@ export async function requestChanges(
       select: { id: true, media: true, content: true },
     });
 
+    const savedFeedback = useSavedComments
+      ? await tx.postComment.findMany({
+          where: {
+            postId,
+            versionId: version.id,
+            authorType: "CLIENT",
+            reviewerId: reviewer.id,
+            resolvedAt: null,
+          },
+          select: { id: true },
+        })
+      : [];
+    if (useSavedComments && savedFeedback.length === 0) {
+      throw new ValidationError("Non hai ancora indicato modifiche. Aggiungi e invia almeno un commento prima di continuare.");
+    }
+
     await guardedPostUpdate(
       tx,
       { id: postId, status: post.status, currentVersionNumber: versionNumber },
@@ -1838,15 +1862,18 @@ export async function requestChanges(
       }
       body = parseOrThrow(changesMessageSchema, buildRejectionMessage(evaluation, content));
     }
-    const comment = await tx.postComment.create({
-      data: {
-        postId,
-        versionId: version.id,
-        authorType: "CLIENT",
-        reviewerId: reviewer.id,
-        body,
-      },
-    });
+    const comment =
+      body === null
+        ? null
+        : await tx.postComment.create({
+            data: {
+              postId,
+              versionId: version.id,
+              authorType: "CLIENT",
+              reviewerId: reviewer.id,
+              body,
+            },
+          });
 
     const target: ActionItemTarget =
       post.kind === "BLOG_ARTICLE"
@@ -1884,7 +1911,8 @@ export async function requestChanges(
       actor,
       versionNumber,
       metadata: {
-        commentId: comment.id,
+        ...(comment ? { commentId: comment.id } : {}),
+        ...(savedFeedback.length ? { feedbackCommentIds: savedFeedback.map((item) => item.id) } : {}),
         ...(opts.actionItems ? { actionCommentIds: actionComments.map((c) => c.id) } : {}),
         ...(opts.reviewSessionId ? { reviewSessionId: opts.reviewSessionId } : {}),
       },
