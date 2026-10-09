@@ -90,3 +90,17 @@
 - Organizzazione per il test: **"Negocio de Stefano Finoti"** (vuota, owner Stefano, già con pipeline e profilo agente creati alla registrazione). Evita una terza organizzazione non cancellabile. Rinomina in "InsidersLab" facoltativa e successiva.
 - Ordine rivisto per non lasciare buchi tra webhook e connessione: token → togli i 3 WABA → App Secret (`META_APP_SECRET` impostato da Stefano + riavvio) → **collega WhatsApp nel CRM e salva** (il wizard iscrive anche il WABA all'app) → webhook dell'app verso il CRM → verifica interruttore "Iscriviti ai webhook" → modello Utility → test.
 - Fuori dalla fase 2: pagamento del WABA, Clientify, tutto La Bambola (portfolio da far verificare al cliente, numero da rimettere in linea o sostituire, organizzazione nel CRM da creare quando il numero è pronto), pulizia dei dati demo in "Hair extension Clinic".
+
+### 9–10/10 notte — Messaggio di prova non arrivato: diagnosi sul VPS
+**Fatti (output incollato da Stefano dal VPS `srv1899808`, cartella `/opt/vocero`)**
+- Container `vocero-app` Up (healthy), riavviato ~1 h prima; `vocero-postgres` Up da 5 settimane.
+- **`META_APP_SECRET` nel container è lungo 106 caratteri**: un App Secret Meta è di 32 caratteri esadecimali. La prova con Graph (`access_token=<app_id>|<secret>`) sulle tre app non ha restituito nulla: il valore contiene caratteri che rompono la richiesta. Con questo segreto il CRM risponde **401 a ogni evento di Meta** (`src/server/inbox/webhook.ts:32-38`) e il route **non scrive nulla nel log** in caso di 401/404 → spiega log vuoti e messaggio mai arrivato. **Causa più probabile.**
+- Un comando precedente ha copiato quel valore anche in `/opt/vocero/.env` (1 riga `META_APP_SECRET=`). Esiste un `docker-compose.override.yml` non versionato: va controllato se definisce la variabile.
+- Log `app` ultimi 60 min: nessuna riga `webhook`/`desconocido`/errore. Caddy (`second-brain-caddy-1`) non ha l'access log attivo: si vedono solo avvisi normali su `/api/events` (SSE della Posta).
+- **Produzione gira `38bdc65` (20/8, fasi 1-3)**, non `main`. `origin/main` è ora `2f4338d` (10/10: modelli WhatsApp in italiano, PR #2) — nuovo lavoro di un'altra sessione, non ancora in produzione. Webhook, firma e instradamento in `38bdc65` sono identici a quelli attuali (verificato).
+
+**Strumenti preparati (testati con docker/curl simulati, nessun segreto nell'output)**
+- `crm-whatsapp/diagnosi-whatsapp.sh` — solo lettura: container, formato e validità dell'App Secret (con Meta), connessione salvata nel CRM, webhook dall'esterno (GET, POST firmato, POST senza firma), e lato Meta col token salvato nel CRM: numero, `webhook_configuration`, override, `subscribed_apps`. `--iscrivi` iscrive il WABA all'app se manca.
+- `crm-whatsapp/correggi-app-secret.sh` — chiede la chiave senza mostrarla, la valida con Meta per l'app 609974691965875, copia `.env`, scrive il valore, ricrea `app`, ricontrolla la lunghezza; si ferma se `docker-compose.override.yml` contiene un valore scritto.
+
+**Prossimo passo (Stefano, ~5 min):** scaricare i due script, lanciare `correggi-app-secret.sh`, scrivere "ciao" al numero, lanciare `diagnosi-whatsapp.sh` e incollare l'esito.
