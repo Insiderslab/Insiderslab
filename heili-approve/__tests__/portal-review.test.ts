@@ -17,13 +17,29 @@ import AdsReview from "@/components/portal/ads-review";
 import BlogReview from "@/components/portal/blog-review";
 import PostCard from "@/components/portal/post-card";
 import PostReview from "@/components/portal/post-review";
-import { savedFeedbackBlocker } from "@/components/portal/review-pieces";
+import { OpenFeedbackNotice, savedFeedbackBlocker } from "@/components/portal/review-pieces";
 import type { PortalAdsPost, PortalBlogPost, PortalPost, PortalQueue } from "@/components/portal/types";
 import { emptyAdContent } from "@/lib/content/ads";
 import { emptyBlogContent, renderMarkdownSafe } from "@/lib/content/blog";
 
 const queue: PortalQueue = { nextPostId: "next", toReviewCount: 2, position: 1 };
 const now = new Date("2026-10-05T10:00:00Z");
+
+describe("explicit approval feedback notice", () => {
+  it("warns about other reviewers' current notes without including agency or old/resolved notes", () => {
+    const html = renderToStaticMarkup(createElement(OpenFeedbackNotice, { comments: [
+      { authorType: "CLIENT", authorName: "Altro referente", resolved: false },
+      { authorType: "AGENCY", authorName: "Agenzia", resolved: false },
+      { authorType: "CLIENT", authorName: "Vecchia versione", resolved: false, fromVersion: 1 },
+      { authorType: "CLIENT", authorName: "Già risolto", resolved: true },
+    ] }));
+    expect(html).toContain("1 commento aperto");
+    expect(html).toContain("Altro referente");
+    expect(html).not.toContain("Vecchia versione");
+    expect(html).not.toContain("Già risolto");
+    expect(html).not.toContain("Agenzia");
+  });
+});
 
 const base = {
   id: "p1",

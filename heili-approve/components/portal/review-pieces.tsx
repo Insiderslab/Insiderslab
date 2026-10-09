@@ -126,11 +126,14 @@ export function SuccessPanel({
 /** Compact assistant action, kept beside the other feedback tools. */
 export function AssistantToggle({
   open,
+  mounted = open,
   onToggle,
   containerRef,
   children,
 }: {
   open: boolean;
+  /** Keep local feedback while the panel is collapsed, after its first opening. */
+  mounted?: boolean;
   onToggle: () => void;
   containerRef: RefObject<HTMLDivElement | null>;
   /** The panel, rendered while open. */
@@ -150,7 +153,7 @@ export function AssistantToggle({
           <span className="block truncate text-xs text-muted">Chat o conversazione vocale sul contenuto</span>
         </span>
       </button>
-      {open && children}
+      {mounted && <div hidden={!open}>{children}</div>}
     </div>
   );
 }
@@ -176,6 +179,23 @@ export function savedFeedbackBlocker(hasUnsavedDraft: boolean, savedCommentCount
     return "Non hai ancora indicato modifiche. Aggiungi e invia almeno un commento prima di continuare.";
   }
   return null;
+}
+
+export const UNSAVED_COMMENT_MESSAGE = "Hai un commento ancora da inviare. Invia il commento oppure annullalo prima di concludere la revisione.";
+
+/** Every reviewer's current feedback matters before an explicit override. */
+export function OpenFeedbackNotice({ comments, ads = false }: {
+  comments: Array<{ authorType: string; authorName: string; resolved: boolean; fromVersion?: number | null }>;
+  ads?: boolean;
+}) {
+  const open = comments.filter((comment) => comment.authorType === "CLIENT" && !comment.resolved && comment.fromVersion == null);
+  if (!open.length) return null;
+  const authors = [...new Set(open.map((comment) => comment.authorName))].join(", ");
+  return <p className="text-sm text-warning">
+    {open.length === 1 ? "C’è 1 commento aperto" : `Ci sono ${open.length} commenti aperti`} di {authors} su questa versione.
+    {ads ? " Confermando invii le decisioni sulle varianti." : " Se approvi, il contenuto viene approvato così com’è."}
+    {" Per richiedere interventi sui commenti, scegli «Chiedi modifiche»."}
+  </p>;
 }
 
 export function SheetError({ error, stale, onReload }: { error: string | null; stale: boolean; onReload: () => void }) {

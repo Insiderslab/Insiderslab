@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { ContentKind } from "@/app/generated/prisma/client";
 import { addCommentAction, approvePostAction, requestChangesAction } from "@/app/review/[token]/actions";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
-import AssistantPanel from "@/components/review/assistant-panel";
+import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
 import { buildAnchor } from "@/lib/content/blog-text";
 import type { BlogAnchor } from "@/lib/content/types";
 import BottomSheet from "./bottom-sheet";
@@ -32,6 +32,8 @@ import {
   StaleBanner,
   SuccessPanel,
   savedFeedbackBlocker,
+  UNSAVED_COMMENT_MESSAGE,
+  OpenFeedbackNotice,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
 
@@ -96,6 +98,7 @@ export default function BlogReview({
   const router = useRouter();
   const readerRef = useRef<HTMLDivElement>(null);
   const assistantRef = useRef<HTMLDivElement>(null);
+  const assistantControl = useRef<AssistantPanelHandle>(null);
   const lastSelection = useRef<BlogAnchor | null>(null);
   const assistantApproval = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
 
@@ -183,7 +186,9 @@ export default function BlogReview({
     }
     setDraft(null);
     setDecisionError(null);
-    setNotice("Commento inviato: lo vedrà l'agenzia.");
+    setNotice(post.status === "CHANGES_REQUESTED"
+      ? "Commento aggiunto alla richiesta di modifiche già inviata."
+      : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
   }
 
@@ -199,9 +204,39 @@ export default function BlogReview({
   }
 
   function openSheet(kind: "approve") {
+    if (blockUnsavedComment()) return;
     setDecisionError(null);
     setSheetError(null);
     setSheet(kind);
+  }
+
+  function blockUnsavedComment(): boolean {
+    if (draft === null) return false;
+    setDecisionError(UNSAVED_COMMENT_MESSAGE);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('form textarea')?.focus());
+    return true;
+  }
+
+  async function requestChangesFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.requestChanges();
+    } else {
+      await requestSavedChanges();
+    }
+  }
+
+  async function approveFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.approve();
+    } else {
+      openSheet("approve");
+    }
   }
 
   function closeSheet() {
@@ -213,7 +248,7 @@ export default function BlogReview({
   }
 
   async function confirmApprove() {
-    if (sheetBusy) return;
+    if (sheetBusy || blockUnsavedComment()) return;
     setSheetBusy(true);
     setSheetError(null);
     const result = await approvePostAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
@@ -261,14 +296,19 @@ export default function BlogReview({
   const approveFromAssistant = useCallback(
     () =>
       new Promise<void>((resolve, reject) => {
+        if (draft !== null) {
+          reject(new Error(UNSAVED_COMMENT_MESSAGE));
+          return;
+        }
         assistantApproval.current = { resolve, reject };
         setSheetError(null);
         setSheet("approve");
       }),
-    []
+    [draft]
   );
 
   async function submitFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
@@ -283,7 +323,8 @@ export default function BlogReview({
     finish("changes");
   }
 
-  function toggleAssistant() {
+  async function toggleAssistant() {
+    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
     const open = !assistantOpen;
     setAssistantOpen(open);
     if (open) {
@@ -391,9 +432,11 @@ export default function BlogReview({
           )}
         </div>
         {canAct && assistantEnabled && (
-          <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+          <AssistantToggle open={assistantOpen} mounted onToggle={toggleAssistant} containerRef={assistantRef}>
             <AssistantPanel
               key={`${post.id}-${post.versionNumber}`}
+              controlRef={assistantControl}
+              onRequestSavedChanges={requestSavedChanges}
               token={token}
               postId={post.id}
               versionNumber={post.versionNumber}
@@ -439,7 +482,7 @@ export default function BlogReview({
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={requestSavedChanges}
+                onClick={requestChangesFromBar}
                 disabled={sheetBusy}
                 className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface disabled:opacity-50"
               >
@@ -447,7 +490,7 @@ export default function BlogReview({
               </button>
               <button
                 type="button"
-                onClick={() => openSheet("approve")}
+                onClick={approveFromBar}
                 disabled={sheetBusy}
                 className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
@@ -480,13 +523,7 @@ export default function BlogReview({
         <p className="text-sm text-muted">
           Stai approvando la versione {post.versionNumber}: verrà pubblicato esattamente il testo che vedi.
         </p>
-        {myOpenComments > 0 && (
-          <p className="text-sm text-warning">
-            {myOpenComments === 1
-              ? "Hai lasciato un commento su questa versione: se approvi, l'articolo uscirà così com'è."
-              : `Hai lasciato ${myOpenComments} commenti su questa versione: se approvi, l'articolo uscirà così com'è.`}
-          </p>
-        )}
+        {canAct && <OpenFeedbackNotice comments={post.comments} />}
         <SheetError error={sheetError} stale={stale} onReload={reload} />
         <SheetButtons
           busy={sheetBusy}

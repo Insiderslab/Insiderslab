@@ -17,7 +17,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { addPlanCommentAction, approvePlanAction } from "@/app/review/[token]/actions";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { NETWORK_LABELS } from "@/lib/domain";
@@ -50,6 +50,7 @@ export default function PlanReview({
   gridSlot: ReactNode;
 }) {
   const router = useRouter();
+  const commentRef = useRef<HTMLTextAreaElement>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
@@ -77,13 +78,21 @@ export default function PlanReview({
   const firstToReview = plan.posts.find((p) => p.canAct);
   const waiting = plan.posts.filter((p) => p.canAct).length;
 
+  function blockDraft(): boolean {
+    if (!comment.trim() && !commentPending) return false;
+    setCommentError("Hai un commento ancora da inviare. Invialo oppure svuota il campo prima di approvare il piano.");
+    commentRef.current?.focus();
+    return true;
+  }
+
   function openSheet() {
+    if (blockDraft()) return;
     setSheetError(null);
     setSheetOpen(true);
   }
 
   async function approveAll() {
-    if (busy) return;
+    if (busy || blockDraft()) return;
     setBusy(true);
     setSheetError(null);
     try {
@@ -195,9 +204,9 @@ export default function PlanReview({
       <section className="space-y-3" aria-labelledby="plan-grid">
         <div className="space-y-1">
           <h2 id="plan-grid" className="text-lg font-semibold">
-            Il tuo profilo a {plan.monthName}
+            Post Instagram del piano
           </h2>
-          <p className="text-sm text-muted">Così apparirà la griglia di Instagram, dal post più recente. Tocca un post per aprirlo.</p>
+          <p className="text-sm text-muted">Anteprima dei soli post Instagram inclusi nel piano, dal più recente. Non include i contenuti già presenti sul profilo. Tocca un post per aprirlo.</p>
         </div>
         {gridSlot}
       </section>
@@ -240,7 +249,9 @@ export default function PlanReview({
         <label className="block space-y-2">
           <span className="sr-only">Commento sul piano</span>
           <textarea
+            ref={commentRef}
             value={comment}
+            disabled={commentPending || busy}
             onChange={(e) => setComment(e.target.value.slice(0, 5000))}
             rows={3}
             placeholder="Per esempio: mi piace il ritmo, ma vorrei più foto del locale."
@@ -291,6 +302,7 @@ export default function PlanReview({
             : `Approvi ${postsWord(toApprove)} così come li vedi: l'agenzia li programmerà per le loro date.`}
         </p>
         <p className="text-sm text-muted">Ogni post viene approvato nella versione che vedi adesso.</p>
+        {plan.comments.some((c) => !c.fromAgency) && <p className="text-sm text-warning">Ci sono note generali sul piano. Approvare autorizza a procedere con i post così come sono: per richiedere una modifica, apri il singolo post e scegli «Chiedi modifiche».</p>}
         {selection.skipped.length > 0 && (
           <SkippedList skipped={selection.skipped} title="Non li approvo in blocco:" />
         )}

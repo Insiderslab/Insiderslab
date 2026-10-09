@@ -60,6 +60,7 @@ import {
   type NetworkOptions,
 } from "@/lib/domain";
 import {
+  BulkApprovalFeedbackConflictError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
@@ -1676,6 +1677,55 @@ async function loadPostForReviewerAction(db: DbClient, postId: string, reviewer:
 const STALE_VERSION_MESSAGE =
   "Il post è stato aggiornato dall'agenzia nel frattempo: ricarica la pagina per vedere la versione più recente";
 
+const BULK_APPROVAL_ACTIVE_VOICE_STATUSES = ["STARTING", "ACTIVE", "CLOSING"] as const;
+
+/**
+ * Plan-wide approval is conservative: feedback on this version must be
+ * decided from the individual post. approvePost holds the same post-row lock
+ * used by comments and assistant writes while these checks run.
+ */
+async function assertBulkApprovalHasNoFeedback(
+  tx: Prisma.TransactionClient,
+  postId: string,
+  versionNumber: number
+): Promise<void> {
+  const version = await tx.postVersion.findUnique({
+    where: { postId_number: { postId, number: versionNumber } },
+    select: { id: true },
+  });
+  if (!version) throw new ConflictError(STALE_VERSION_MESSAGE);
+
+  const [comment, clientMessage, activeVoice, clientVoiceFragment] = await Promise.all([
+    tx.postComment.findFirst({
+      where: {
+        postId,
+        authorType: "CLIENT",
+        resolvedAt: null,
+        OR: [{ versionId: version.id }, { versionId: null }],
+      },
+      select: { id: true },
+    }),
+    tx.reviewMessage.findFirst({
+      where: { role: "CLIENT", session: { postId, versionNumber } },
+      select: { id: true },
+    }),
+    tx.reviewVoiceCall.findFirst({
+      where: {
+        status: { in: [...BULK_APPROVAL_ACTIVE_VOICE_STATUSES] },
+        session: { postId, versionNumber },
+      },
+      select: { id: true },
+    }),
+    tx.reviewVoiceTranscriptFragment.findFirst({
+      where: { speaker: "user", call: { session: { postId, versionNumber } } },
+      select: { id: true },
+    }),
+  ]);
+  if (comment || clientMessage || activeVoice || clientVoiceFragment) {
+    throw new BulkApprovalFeedbackConflictError();
+  }
+}
+
 /**
  * After a client decision on a post of a monthly plan: keeps the plan's
  * status in sync and tells the agency once when the whole plan is decided.
@@ -1702,18 +1752,27 @@ export async function approvePost(
      * never skipped.
      */
     notify?: boolean;
+    /** Apply the plan-wide feedback guard; single-post approval stays explicit. */
+    bulkSafety?: boolean;
   } = {}
 ): Promise<Post> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
   const actor: Actor = { kind: "reviewer", reviewerId: reviewer.id };
 
   const result = await prisma.$transaction(async (tx) => {
+    if (opts.bulkSafety === true) {
+      await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${postId} FOR UPDATE`;
+    }
     const post = await loadPostForReviewerAction(tx, postId, reviewer);
     if (post.currentVersionNumber !== versionNumber) throw new ConflictError(STALE_VERSION_MESSAGE);
 
     // Double click / second tab: approving what is already approved is a no-op.
     if (post.approvedAt && ["APPROVED", "SCHEDULING", "SCHEDULED", "DELIVERED"].includes(post.status)) {
       return { post, changed: false };
+    }
+
+    if (opts.bulkSafety === true) {
+      await assertBulkApprovalHasNoFeedback(tx, postId, versionNumber);
     }
 
     const next = assertTransition(post.status, "approve");
@@ -2004,6 +2063,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
   if (actor.kind === "system") throw new ForbiddenError();
 
   return prisma.$transaction(async (tx) => {
+    // Serialize with plan-wide approval and assistant writes.
+    await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${data.postId} FOR UPDATE`;
     const post = await tx.post.findUnique({ where: { id: data.postId } });
     // A kind this instance does not handle does not exist for it.
     if (!post || !isKindEnabled(post.kind)) throw new NotFoundError("Post non trovato");
@@ -2026,6 +2087,9 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       if (!reviewer?.active || reviewer.clientId !== post.clientId || !isClientVisible(post.status)) {
         throw new NotFoundError("Post non trovato");
       }
+      if (post.status !== "IN_REVIEW" && post.status !== "CHANGES_REQUESTED") {
+        throw new ConflictError("Questo post è già stato deciso e non accetta nuovi commenti");
+      }
       maxVersion = visibleVersionNumber(post.currentVersionNumber, await lastSubmittedVersion(tx, post));
     }
 
@@ -2033,6 +2097,9 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       ? await tx.postVersion.findFirst({ where: { id: data.versionId, postId: post.id } })
       : await tx.postVersion.findUnique({ where: { postId_number: { postId: post.id, number: maxVersion } } });
     if (!version || version.number > maxVersion) throw new NotFoundError("Versione non trovata");
+    if (actor.kind === "reviewer" && version.number !== post.currentVersionNumber) {
+      throw new ConflictError("Il post è stato aggiornato: ricarica la pagina prima di commentare");
+    }
 
     // Where a comment can point depends on the kind: social → the post's
     // media; blog → a passage (anchor); ads → a variant and its media.

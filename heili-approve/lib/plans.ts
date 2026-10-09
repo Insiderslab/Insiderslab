@@ -28,7 +28,14 @@ import type { Actor } from "@/lib/actor";
 import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
 import { CLIENT_VISIBLE_STATUSES } from "@/lib/domain";
-import { ConflictError, InvalidTransitionError, NotFoundError, ValidationError, parseOrThrow } from "@/lib/errors";
+import {
+  BulkApprovalFeedbackConflictError,
+  ConflictError,
+  InvalidTransitionError,
+  NotFoundError,
+  ValidationError,
+  parseOrThrow,
+} from "@/lib/errors";
 import {
   notifyPlanApproved,
   notifyPlanComment,
@@ -544,7 +551,16 @@ export async function listPlansForReviewer(reviewer: ReviewerRef) {
   });
 }
 
-/** Open (unresolved) client comments per post, on each post's latest version. */
+/**
+ * Feedback that excludes a post from one-click plan approval, on each post's
+ * latest version. The historical name remains because the portal consumes the
+ * count as an eligibility signal.
+ *
+ * Includes unresolved client comments (and legacy null-version comments), a
+ * conversation with at least one CLIENT message, active voice calls, and
+ * authenticated user speech fragments not projected yet. An assistant-only
+ * greeting is not client feedback.
+ */
 export async function openClientCommentCounts(postIds: string[]): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   if (postIds.length === 0) return counts;
@@ -552,14 +568,37 @@ export async function openClientCommentCounts(postIds: string[]): Promise<Map<st
     where: { id: { in: postIds } },
     select: {
       id: true,
+      currentVersionNumber: true,
       versions: { orderBy: { number: "desc" }, take: 1, select: { id: true } },
       comments: { where: { authorType: "CLIENT", resolvedAt: null }, select: { versionId: true } },
+      reviewSessions: {
+        select: {
+          versionNumber: true,
+          messages: { where: { role: "CLIENT" }, take: 1, select: { id: true } },
+          voiceCalls: {
+            where: {
+              OR: [
+                { status: { in: ["STARTING", "ACTIVE", "CLOSING"] } },
+                { fragments: { some: { speaker: "user" } } },
+              ],
+            },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      },
     },
   });
   for (const post of posts) {
     const current = post.versions[0]?.id;
     // Comments without a version predate versioning: they count for the current one.
-    counts.set(post.id, post.comments.filter((c) => c.versionId === null || c.versionId === current).length);
+    const comments = post.comments.filter((c) => c.versionId === null || c.versionId === current).length;
+    const conversations = post.reviewSessions.filter(
+      (session) =>
+        session.versionNumber === post.currentVersionNumber &&
+        (session.messages.length > 0 || session.voiceCalls.length > 0)
+    ).length;
+    counts.set(post.id, comments + conversations);
   }
   return counts;
 }
@@ -626,9 +665,13 @@ export async function approvePlan(
   const titles = new Map(posts.map((p) => [p.id, p.title]));
   for (const item of selection.approve) {
     try {
-      await approvePost(item.id, reviewer, item.versionNumber, { notify: false });
+      await approvePost(item.id, reviewer, item.versionNumber, { notify: false, bulkSafety: true });
       approved.push(item.id);
     } catch (error) {
+      if (error instanceof BulkApprovalFeedbackConflictError) {
+        skipped.push({ id: item.id, title: titles.get(item.id) ?? "", reason: "comments" });
+        continue;
+      }
       if (error instanceof ConflictError || error instanceof InvalidTransitionError || error instanceof NotFoundError) {
         skipped.push({ id: item.id, title: titles.get(item.id) ?? "", reason: "stale" });
         continue;

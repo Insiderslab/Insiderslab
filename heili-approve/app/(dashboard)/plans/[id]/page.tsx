@@ -90,7 +90,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     outside: plan.outside.filter(sendable).length,
     outsideTotal: plan.outside.length,
   };
-  const tiles: GridTile[] = instagramGridOrder(plan.posts).map((post) => ({
+  const tiles: GridTile[] = instagramGridOrder(plan.posts.filter((post) => post.networks.includes("instagram"))).map((post) => ({
     id: post.id,
     title: post.title,
     ...coverOf(post),
@@ -180,7 +180,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
           <section className="hidden space-y-3 md:block" aria-labelledby="plan-calendar-title">
             <div>
               <h2 id="plan-calendar-title" className="text-lg font-semibold capitalize">Calendario · {planMonthTitle(plan.month)}</h2>
-              <p className="text-sm text-muted">Vista per data degli stessi post elencati sotto.</p>
+              <p className="text-sm text-muted">Tutti i post del mese: {plan.posts.length} nel piano e {plan.outside.length} da aggiungere. Aggiungere una bozza al piano non la invia al cliente.</p>
             </div>
             <PlanCalendar month={plan.month} timeZone={zone} posts={calendarPosts} now={now} />
           </section>
@@ -212,7 +212,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
               </div>
               <div className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm">
                 Questi post appartengono a {monthName}, ma non sono ancora nel piano. «Invia il piano» li aggiunge
-                automaticamente; puoi aggiungerli ora per controllare subito griglia ed elenco completi.
+                automaticamente; puoi aggiungerli ora per controllare la composizione del piano. Le bozze diventeranno visibili al cliente solo dopo l’invio in revisione.
               </div>
               <ol className="panel divide-y divide-border overflow-hidden">
                 {plan.outside.map((post) => (
@@ -252,17 +252,17 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
           <section className="panel space-y-3 p-4 sm:p-5" aria-labelledby="plan-grid-title">
             <div className="space-y-1">
               <h2 id="plan-grid-title" className="text-lg font-semibold">
-                Anteprima griglia Instagram
+                Post Instagram inclusi nel piano
               </h2>
               <p className="text-sm text-muted">
-                È una vista degli stessi post del piano, ordinati dal più recente. Tocca una casella per aprire quel post.
+                Solo i contenuti Instagram già inclusi nel piano, dal più recente. Non include il profilo esistente né i post ancora da aggiungere. Tocca una casella per aprirla.
               </p>
             </div>
             <InstagramGrid
               tiles={tiles}
               accountName={plan.client.name}
               logoUrl={plan.client.logoUrl}
-              caption={`${plan.posts.length === 1 ? "1 post" : `${plan.posts.length} post`} a ${monthName}`}
+              caption={`${tiles.length} contenuti Instagram del piano`}
             />
           </section>
 

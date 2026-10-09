@@ -20,7 +20,15 @@
  * the chat and tell the model exactly what the client means.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { useSpeechInput } from "@/components/voice/use-speech-input";
 import { useLiveConversation } from "@/components/voice/use-live-conversation";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
@@ -75,6 +83,36 @@ export interface AssistantPanelProps {
     variantId?: string | null;
     timeSec?: number | null;
   } | null;
+  /** Lets the persistent portal footer reuse this panel's guarded actions. */
+  controlRef?: Ref<AssistantPanelHandle>;
+  /** Existing saved-comment flow, used when this assistant has no feedback yet. */
+  onRequestSavedChanges?: () => Promise<void>;
+}
+
+export interface AssistantPanelHandle {
+  requestChanges(): Promise<void>;
+  approve(): Promise<void>;
+  close(): Promise<boolean>;
+}
+
+type ComposerAction = "prepare" | "send" | "approve";
+
+export function composerBlockingMessage(
+  draft: string,
+  listening: boolean,
+  action: ComposerAction
+): string | null {
+  if (!draft.trim() && !listening) return null;
+  const next =
+    action === "approve"
+      ? "approvare"
+      : action === "send"
+        ? "inviare le modifiche"
+        : "preparare il riepilogo";
+  if (listening) {
+    return `Ferma la dettatura, poi invia o svuota il messaggio prima di ${next}.`;
+  }
+  return `Invia o svuota il messaggio ancora in bozza prima di ${next}: non è ancora incluso nel riepilogo.`;
 }
 
 /** How often the chips re-read the player / selection / variant on screen. */
@@ -156,6 +194,8 @@ export function AssistantPanel({
   getContext,
   variantNames,
   getPointContext,
+  controlRef,
+  onRequestSavedChanges,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const labels: ActionItemLabels = { variantNames };
@@ -188,6 +228,7 @@ export function AssistantPanel({
   );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const draftRef = useRef(draft);
   const contextRef = useRef({ videoTime, selection, adsContext, pointContext });
   const speechInput = useSpeechInput({
@@ -219,6 +260,17 @@ export function AssistantPanel({
     applyState(state);
     return state;
   }, [applyState, stateUrl]);
+
+  const reloadAfterVoice = useCallback(async () => {
+    const state = await reload();
+    // A new voice call can create a new review session. Never keep the
+    // editable text from the previously completed session over the new one.
+    if (state.session?.status !== "COMPLETED" || state.session.id !== session?.id || state.session.changesMessage !== session?.changesMessage) {
+      setChangesDraft(null);
+    }
+    setReadiness(null);
+    return state;
+  }, [reload, session?.id, session?.changesMessage]);
 
   // Resume the conversation for this version, if any.
   useEffect(() => {
@@ -264,7 +316,7 @@ export function AssistantPanel({
     [cancelSpeechInput, postId, versionNumber]
   );
 
-  const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reload });
+  const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reloadAfterVoice });
   const voiceBusy = live.phase !== "idle";
   const messages = session?.messages ?? [];
   const lastMessage = messages.at(-1);
@@ -275,6 +327,18 @@ export function AssistantPanel({
   const messagesLeft = session ? session.clientMessagesLeft : null;
   const outOfSessions = !session && sessionsLeft === 0;
   const composerDisabled = voiceBusy || !canChat || done !== null || busy !== null || outOfSessions || messagesLeft === 0;
+
+  function guardComposer(action: ComposerAction): boolean {
+    if (loading) {
+      setError("Sto recuperando i tuoi commenti e la conversazione. Attendi il caricamento prima di concludere la revisione.");
+      return false;
+    }
+    const message = composerBlockingMessage(draftRef.current, speechInput.listening, action);
+    if (!message) return true;
+    setError(message);
+    textareaRef.current?.focus();
+    return false;
+  }
   function currentContextMarker(context = contextRef.current): string {
     const {
       adsContext: currentAdsContext,
@@ -319,6 +383,7 @@ export function AssistantPanel({
     }
     speechInput.cancel();
     setError(null);
+    setReadiness(null);
     void live.start(currentContextMarker());
   }
 
@@ -414,22 +479,24 @@ export function AssistantPanel({
     return result;
   }
 
-  async function prepareSummary() {
-    if (busy) return;
+  async function prepareSummary(): Promise<boolean> {
+    if (busy || !guardComposer("prepare")) return false;
     setBusy("finalize");
     setError(null);
     try {
       await live.stop();
       await finalize();
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Non sono riuscito a preparare il riepilogo. Riprova.");
+      return false;
     } finally {
       setBusy(null);
     }
   }
 
   async function submitChanges() {
-    if (busy || !session) return;
+    if (busy || !session || !guardComposer("send")) return;
     const message = (changesDraft ?? session.changesMessage ?? "").trim();
     if (!message) {
       setError("Il messaggio per l'agenzia è vuoto.");
@@ -448,7 +515,7 @@ export function AssistantPanel({
   }
 
   async function approve() {
-    if (busy) return;
+    if (busy || !guardComposer("approve")) return;
     setBusy("approve");
     setError(null);
     try {
@@ -466,13 +533,49 @@ export function AssistantPanel({
     }
   }
 
+  async function requestChanges() {
+    if (busy || !guardComposer("send")) return;
+    if (voiceBusy || (session?.status === "OPEN" && hasClientMessages)) {
+      const prepared = await prepareSummary();
+      if (prepared) {
+        window.requestAnimationFrame(() =>
+          panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        );
+      }
+      return;
+    }
+    if (completed) {
+      await submitChanges();
+      return;
+    }
+    if (onRequestSavedChanges) {
+      await onRequestSavedChanges();
+      return;
+    }
+    setError("Scrivi un messaggio o aggiungi un commento al contenuto prima di chiedere modifiche.");
+    textareaRef.current?.focus();
+  }
+
+  async function close(): Promise<boolean> {
+    if (busy) return false;
+    speechInput.cancel();
+    try {
+      await live.stop();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  useImperativeHandle(controlRef, () => ({ requestChanges, approve, close }));
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const sendHighlighted = completed ? session?.verdict === "changes" : readiness === "ready_changes";
   const approveHighlighted = completed ? session?.verdict === "approve" : readiness === "ready_approve";
 
   return (
-    <section className="panel rounded-lg p-4 space-y-3" aria-label="Assistente di revisione">
+    <section ref={panelRef} className="panel rounded-lg p-4 space-y-3" aria-label="Assistente di revisione">
       <header className="flex items-start gap-3">
         <HeiliAssistantIcon className="h-9 w-9" />
         <div className="min-w-0 space-y-1">
@@ -492,7 +595,9 @@ export function AssistantPanel({
           <p className="text-sm text-muted">Caricamento…</p>
         ) : (
           <>
-            <Bubble role="ASSISTANT" content={copy.intro} />
+            {messages.length === 0 && !voiceBusy && !live.clientText && !live.assistantText && (
+              <Bubble role="ASSISTANT" content={copy.intro} />
+            )}
             {messages.map((m) => (
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
             ))}
@@ -524,7 +629,16 @@ export function AssistantPanel({
           session={session}
           changesDraft={changesDraft ?? session.changesMessage ?? ""}
           onChangesDraft={setChangesDraft}
-          disabled={busy !== null || !canChat}
+          disabled={busy !== null || !canChat || voiceBusy || Boolean(draft.trim()) || speechInput.listening}
+          disabledReason={
+            voiceBusy
+              ? "Termina la conversazione vocale: il riepilogo verrà aggiornato con ciò che state dicendo."
+              : draft.trim() || speechInput.listening
+                ? "Invia o svuota il messaggio qui sotto: questa bozza non è ancora inclusa nel riepilogo."
+                : !canChat
+                  ? "La revisione non è più modificabile."
+                  : null
+          }
           labels={labels}
         />
       )}
@@ -653,6 +767,11 @@ export function AssistantPanel({
                   <p className="text-sm font-medium" role="status">
                     {live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
                   </p>
+                  {live.phase === "active" && live.remainingSeconds !== null && (
+                    <p className="text-xs text-muted" role="timer" aria-live="off">
+                      Tempo rimasto: {formatCountdown(live.remainingSeconds)}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     {live.phase === "active" && (
                       <button type="button" onClick={live.toggleMicrophone} aria-pressed={live.muted}
@@ -701,6 +820,13 @@ export function AssistantPanel({
               <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
                 {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
               </ActionButton>
+              {(voiceBusy || draft.trim() || speechInput.listening) && (
+                <p className="basis-full text-xs text-muted">
+                  {voiceBusy
+                    ? "Termina la conversazione vocale prima di inviare o approvare."
+                    : "Il messaggio in bozza va inviato o svuotato prima dell’azione finale."}
+                </p>
+              )}
             </div>
           )}
         </>
@@ -793,19 +919,21 @@ function SummaryCard({
   changesDraft,
   onChangesDraft,
   disabled,
+  disabledReason,
   labels,
 }: {
   session: AssistantSessionView;
   changesDraft: string;
   onChangesDraft: (value: string) => void;
   disabled: boolean;
+  disabledReason: string | null;
   labels: ActionItemLabels;
 }) {
   return (
     <div className="space-y-3 rounded border border-border bg-background p-3">
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
-          Riepilogo{session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""}
+          Riepilogo{session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
         </p>
         <p className="whitespace-pre-wrap text-sm">{session.summary}</p>
       </div>
@@ -830,7 +958,9 @@ function SummaryCard({
         </ul>
       )}
       <label className="block space-y-1">
-        <span className="text-xs text-muted">Messaggio che riceverà l&apos;agenzia (puoi modificarlo)</span>
+        <span className="text-xs text-muted">
+          Messaggio da inviare all&apos;agenzia (non ancora inviato; puoi modificarlo qui)
+        </span>
         <textarea
           value={changesDraft}
           onChange={(e) => onChangesDraft(e.target.value)}
@@ -839,6 +969,7 @@ function SummaryCard({
           disabled={disabled}
           className="w-full resize-y rounded border border-border bg-background p-2 text-base outline-none focus:border-accent disabled:opacity-60"
         />
+        {disabled && disabledReason && <span className="block text-xs text-muted">{disabledReason}</span>}
       </label>
     </div>
   );
@@ -875,3 +1006,9 @@ function ActionButton({
 }
 
 export default AssistantPanel;
+
+export function formatCountdown(seconds: number): string {
+  const safe = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(safe / 60);
+  return `${minutes}:${String(safe % 60).padStart(2, "0")}`;
+}

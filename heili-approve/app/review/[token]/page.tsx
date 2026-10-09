@@ -45,9 +45,11 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const now = new Date();
   const ref = { id: reviewer.id, clientId: reviewer.clientId };
   const [allPosts, plans] = await Promise.all([listPostsForReviewer(ref), listPlansForReviewer(ref)]);
-  const planCards = portalPlanCards(plans, { token, now, timeZone });
   const kindsShown = portalKinds(clientServices(reviewer.client), allPosts);
   const selected = parsePortalKind(query.tipo, kindsShown);
+  const planCards = !selected || selected === "SOCIAL_POST" ? portalPlanCards(plans, { token, now, timeZone }) : [];
+  const visiblePlanIds = new Set(planCards.map((plan) => plan.id));
+  const firstWaitingPlan = planCards.find((plan) => plan.waiting > 0);
   const tabs = portalKindTabs(token, kindsShown, allPosts, tabsSelected(selected, kindsShown));
   const posts = selected ? allPosts.filter((p) => p.kind === selected) : allPosts;
   const cards = posts.map(
@@ -69,6 +71,8 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
     })
   );
   const groups = groupPortalPosts(cards, now);
+  const standaloneIds = new Set(posts.filter((p) => !p.planId || !visiblePlanIds.has(p.planId)).map((p) => p.id));
+  const standaloneGroups = groupPortalPosts(cards.filter((p) => standaloneIds.has(p.id)), now);
   // An empty list speaks of the tab, else of what the client gets here.
   const kinds =
     posts.length > 0 ? posts.map((p) => p.kind) : selected ? [selected] : kindsShown.length > 0 ? kindsShown : enabledKinds();
@@ -97,10 +101,10 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
         </p>
         {groups.toReview.length > 0 && (
           <Link
-            href={portalPath(token, groups.toReview[0].id)}
+            href={firstWaitingPlan?.href ?? portalPath(token, groups.toReview[0].id)}
             className="btn btn-primary !min-h-12 w-full !text-base sm:w-auto"
           >
-            {groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Inizia dal primo"}
+            {firstWaitingPlan ? "Rivedi il piano del mese" : groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Inizia dal primo"}
           </Link>
         )}
         {groups.toReview.length > 0 && (
@@ -126,6 +130,8 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 
       {planCards.length > 0 && (
         <section className="space-y-3" aria-label="Piani del mese">
+          <h2 className="text-lg font-semibold">Piani del mese</h2>
+          <p className="text-sm text-muted">Apri un piano per rivedere i suoi post. Gli altri contenuti sono elencati separatamente qui sotto.</p>
           {planCards.map((plan) => (
             <PlanCard key={plan.id} plan={plan} />
           ))}
@@ -134,48 +140,48 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 
       {tabs.length > 0 && <KindTabs tabs={tabs} />}
 
-      {groups.toReview.length > 0 && (
-        <Section title="Da approvare" count={groups.toReview.length} highlight>
-          {groups.toReview.map((post) => (
+      {standaloneGroups.toReview.length > 0 && (
+        <Section title={planCards.length > 0 ? "Contenuti singoli da approvare" : "Da approvare"} count={standaloneGroups.toReview.length} highlight>
+          {standaloneGroups.toReview.map((post) => (
             <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
           ))}
         </Section>
       )}
 
-      {groups.inProgress.length > 0 && (
+      {standaloneGroups.inProgress.length > 0 && (
         <Section
           title="Modifiche richieste"
           subtitle="In lavorazione dall'agenzia: riceverai un'email quando la nuova versione sarà pronta."
-          count={groups.inProgress.length}
+          count={standaloneGroups.inProgress.length}
         >
-          {groups.inProgress.map((post) => (
+          {standaloneGroups.inProgress.map((post) => (
             <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
           ))}
         </Section>
       )}
 
-      {(groups.approvedUpcoming.length > 0 || groups.approvedPast.length > 0) && (
+      {(standaloneGroups.approvedUpcoming.length > 0 || standaloneGroups.approvedPast.length > 0) && (
         <Section
           title={socialOnly ? "Approvati / programmati" : "Approvati"}
-          count={groups.approvedUpcoming.length + groups.approvedPast.length}
+          count={standaloneGroups.approvedUpcoming.length + standaloneGroups.approvedPast.length}
         >
-          {groups.approvedUpcoming.length === 0 && (
+          {standaloneGroups.approvedUpcoming.length === 0 && (
             <p className="text-sm text-muted">
               {adsOnly
                 ? "Nessuna campagna in partenza nei prossimi giorni."
                 : `Nessun ${noun.one} in uscita nei prossimi giorni.`}
             </p>
           )}
-          {groups.approvedUpcoming.map((post) => (
+          {standaloneGroups.approvedUpcoming.map((post) => (
             <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
           ))}
-          {groups.approvedPast.length > 0 && (
+          {standaloneGroups.approvedPast.length > 0 && (
             <details className="group rounded-lg border border-border">
               <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm text-muted">
-                {`${adsOnly ? "Campagne già partite" : socialOnly ? "Già pubblicati" : "Date già passate"} (${groups.approvedPast.length})`}
+                {`${adsOnly ? "Campagne già partite" : socialOnly ? "Già pubblicati" : "Date già passate"} (${standaloneGroups.approvedPast.length})`}
               </summary>
               <div className="space-y-3 p-3 pt-0">
-                {groups.approvedPast.map((post) => (
+                {standaloneGroups.approvedPast.map((post) => (
                   <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
                 ))}
               </div>
@@ -275,8 +281,7 @@ function PlanCard({ plan }: { plan: PlanCardData }) {
       </span>
       <span className="block text-xl font-semibold leading-tight">{plan.heading}</span>
       <span className="block text-sm text-muted">
-        {plan.progress.total === 1 ? "1 post" : `${plan.progress.total} post`} · tutto il mese in una pagina, con la griglia del
-        profilo
+        {plan.progress.total === 1 ? "1 post" : `${plan.progress.total} post`} · i post inclusi nel piano, con anteprima Instagram
       </span>
       <PlanProgressBar progress={plan.progress} size="sm" />
       <span

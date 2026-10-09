@@ -58,6 +58,14 @@ export class RateLimitError extends Error {
   constructor(message: string) { super(message); this.name = "RateLimitError"; }
 }
 
+/** A plan-wide approval found feedback that needs an individual decision. */
+export class BulkApprovalFeedbackConflictError extends ConflictError {
+  constructor(message = "Il post ha commenti o una conversazione da verificare") {
+    super(message);
+    this.name = "BulkApprovalFeedbackConflictError";
+  }
+}
+
 export function isDomainError(error: unknown): error is DomainError {
   return (
     error instanceof InvalidTransitionError ||

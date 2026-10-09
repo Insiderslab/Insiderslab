@@ -108,9 +108,9 @@ export default function InstagramGrid({
         </span>
       </figcaption>
       {tiles.length === 0 ? (
-        <p className="inset p-4 text-sm text-muted">Nessun post con immagini in questo mese.</p>
+        <p className="inset p-4 text-sm text-muted">Nessun contenuto Instagram incluso nel piano. I post delle altre reti sono nell’elenco del piano.</p>
       ) : (
-        <ul className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-lg" aria-label="Anteprima della griglia del profilo">
+        <ul className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-lg" aria-label="Anteprima dei contenuti Instagram del piano">
           {tiles.map((tile) => {
             const inner = (
               <>

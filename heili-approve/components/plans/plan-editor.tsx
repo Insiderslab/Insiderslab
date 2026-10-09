@@ -116,7 +116,7 @@ export default function PlanEditor({
           Prepara e invia
         </h2>
         <p className="text-sm text-muted">
-          Il cliente legge questo messaggio prima dei post. «Salva senza inviare» conserva le modifiche solo per l’agenzia.
+          Il cliente legge questo messaggio prima dei post. {sent ? "Salvare aggiorna il piano già condiviso senza inviare email né nuove bozze." : "Salvare prepara il piano; l’invio lo rende disponibile al cliente."}
         </p>
       </div>
 
@@ -170,7 +170,7 @@ export default function PlanEditor({
           className="btn btn-primary"
           data-testid="plan-send"
         >
-          Controlla e invia il piano
+          {sent && toSend > 0 ? `Controlla e invia ${toSend} post da rivedere` : "Controlla e invia il piano"}
         </button>
         <button type="button" onClick={save} disabled={pending || !dirty} className="btn">
           {pending && !confirming ? "Salvataggio…" : "Salva senza inviare"}

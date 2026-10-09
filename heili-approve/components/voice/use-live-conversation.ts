@@ -56,10 +56,23 @@ export function useLiveConversation(input: {
   const [error, setError] = useState<string | null>(null);
   const [clientText, setClientText] = useState("");
   const [assistantText, setAssistantText] = useState("");
+  const [expiresAtMs, setExpiresAtMs] = useState<number | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const current = useRef<Connection | null>(null);
   const generation = useRef(0);
   const closedCallback = useRef(input.onClosed);
   useEffect(() => { closedCallback.current = input.onClosed; }, [input.onClosed]);
+
+  useEffect(() => {
+    if (phase !== "active" || expiresAtMs === null) return;
+    const update = () => setRemainingSeconds(Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1_000)));
+    const firstTick = window.setTimeout(update, 0);
+    const timer = window.setInterval(update, 1_000);
+    return () => {
+      window.clearTimeout(firstTick);
+      window.clearInterval(timer);
+    };
+  }, [expiresAtMs, phase]);
 
   const stop = useCallback(async () => {
     const connection = current.current;
@@ -85,6 +98,8 @@ export function useLiveConversation(input: {
         release(connection);
         if (current.current === connection) current.current = null;
         setPhase("idle");
+        setExpiresAtMs(null);
+        setRemainingSeconds(null);
         setMuted(false);
         setPlaybackBlocked(false);
       }
@@ -111,6 +126,8 @@ export function useLiveConversation(input: {
     if (current.current) return;
     setError(null);
     setPhase("connecting");
+    setExpiresAtMs(null);
+    setRemainingSeconds(null);
     setClientText("");
     setAssistantText("");
     const id = ++generation.current;
@@ -194,6 +211,8 @@ export function useLiveConversation(input: {
         await request(input.url, "DELETE", { callId: call.callId }, true).catch(() => {});
         return;
       }
+      const callExpiresAt = new Date(call.expiresAt).getTime();
+      if (Number.isFinite(callExpiresAt)) setExpiresAtMs(callExpiresAt);
       await peer.setRemoteDescription({ type: "answer", sdp: call.sdp });
     } catch (cause) {
       if (!alive()) return;
@@ -223,5 +242,19 @@ export function useLiveConversation(input: {
     catch { setError("Il browser non riesce a riprodurre l’audio. Controlla le impostazioni del dispositivo."); }
   }
 
-  return { phase, supported, muted, playbackBlocked, error, clientText, assistantText, start, stop, updateContext, toggleMicrophone, enablePlayback };
+  return {
+    phase,
+    supported,
+    muted,
+    playbackBlocked,
+    error,
+    clientText,
+    assistantText,
+    remainingSeconds,
+    start,
+    stop,
+    updateContext,
+    toggleMicrophone,
+    enablePlayback,
+  };
 }

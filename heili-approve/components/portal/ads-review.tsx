@@ -33,7 +33,7 @@ import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdVariantReview, { type AdCommentRequest } from "@/components/ads/ad-variant-review";
 import AssetCommentComposer from "@/components/ads/asset-comment-composer";
 import AdDecisionBadge from "@/components/ads/decision-badge";
-import AssistantPanel from "@/components/review/assistant-panel";
+import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
 import {
   AD_PLACEMENTS,
   AD_PLATFORM_LABELS,
@@ -65,6 +65,8 @@ import {
   StaleBanner,
   SuccessPanel,
   savedFeedbackBlocker,
+  UNSAVED_COMMENT_MESSAGE,
+  OpenFeedbackNotice,
 } from "./review-pieces";
 import type { PortalAdsPost, PortalQueue, PortalVariantDecision } from "./types";
 
@@ -114,6 +116,7 @@ export default function AdsReview({
 }: AdsReviewProps) {
   const router = useRouter();
   const assistantRef = useRef<HTMLDivElement>(null);
+  const assistantControl = useRef<AssistantPanelHandle>(null);
   const assistantSend = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
   const variants = post.content.variants;
   const { campaign } = post.content;
@@ -252,7 +255,9 @@ export default function AdsReview({
     setDraft(null);
     setAssetDraft(null);
     setDecisionError(null);
-    setNotice("Commento inviato: lo vedrà l'agenzia.");
+    setNotice(post.status === "CHANGES_REQUESTED"
+      ? "Commento aggiunto alla richiesta di modifiche già inviata."
+      : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
   }
 
@@ -296,9 +301,39 @@ export default function AdsReview({
   }
 
   function openSheet(kind: "send") {
+    if (blockUnsavedComment()) return;
     setDecisionError(null);
     setSheetError(null);
     setSheet(kind);
+  }
+
+  function blockUnsavedComment(): boolean {
+    if (draft === null && assetDraft === null) return false;
+    setDecisionError(UNSAVED_COMMENT_MESSAGE);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('form textarea')?.focus());
+    return true;
+  }
+
+  async function requestChangesFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.requestChanges();
+    } else {
+      await requestSavedChanges();
+    }
+  }
+
+  async function approveFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.approve();
+    } else {
+      openSheet("send");
+    }
   }
 
   function closeSheet() {
@@ -310,7 +345,7 @@ export default function AdsReview({
   }
 
   async function confirmSend() {
-    if (sheetBusy) return;
+    if (sheetBusy || blockUnsavedComment()) return;
     setSheetBusy(true);
     setSheetError(null);
     const result = await finalizeDecisionsAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
@@ -365,6 +400,10 @@ export default function AdsReview({
   const sendFromAssistant = useCallback(
     () =>
       new Promise<void>((resolve, reject) => {
+        if (draft !== null || assetDraft !== null) {
+          reject(new Error(UNSAVED_COMMENT_MESSAGE));
+          return;
+        }
         if (firstMissing) {
           jumpTo(firstMissing);
           reject(new Error("Prima decidi ogni variante con «Approva variante» o «Scarta», poi invia le decisioni."));
@@ -374,10 +413,11 @@ export default function AdsReview({
         setSheetError(null);
         setSheet("send");
       }),
-    [firstMissing]
+    [firstMissing, draft, assetDraft]
   );
 
   async function submitFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
@@ -392,7 +432,8 @@ export default function AdsReview({
     finish({ kind: "changes" });
   }
 
-  function toggleAssistant() {
+  async function toggleAssistant() {
+    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
     const open = !assistantOpen;
     setAssistantOpen(open);
     if (open) {
@@ -635,9 +676,11 @@ export default function AdsReview({
             )}
           </div>
           {canAct && assistantEnabled && (
-            <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+            <AssistantToggle open={assistantOpen} mounted onToggle={toggleAssistant} containerRef={assistantRef}>
               <AssistantPanel
                 key={`${post.id}-${post.versionNumber}`}
+                controlRef={assistantControl}
+                onRequestSavedChanges={requestSavedChanges}
                 token={token}
                 postId={post.id}
                 versionNumber={post.versionNumber}
@@ -686,7 +729,7 @@ export default function AdsReview({
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={requestSavedChanges}
+                onClick={requestChangesFromBar}
                 disabled={sheetBusy}
                 className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface disabled:opacity-50"
               >
@@ -694,7 +737,7 @@ export default function AdsReview({
               </button>
               <button
                 type="button"
-                onClick={() => openSheet("send")}
+                onClick={approveFromBar}
                 disabled={sheetBusy || count.missing.length > 0}
                 className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
@@ -718,6 +761,7 @@ export default function AdsReview({
         <p className="text-sm text-muted">
           Stai decidendo sulla versione {post.versionNumber}: verranno usate esattamente le creatività che vedi.
         </p>
+        {canAct && <OpenFeedbackNotice comments={post.comments} ads />}
         <SheetError error={sheetError} stale={stale} onReload={reload} />
         <SheetButtons
           busy={sheetBusy}

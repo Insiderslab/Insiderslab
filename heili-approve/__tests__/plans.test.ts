@@ -74,15 +74,33 @@ const { db, mockPrisma, mockPosts, mockNotify, NOT_FOUND } = vi.hoisted(() => {
       }),
     },
     post: {
-      findMany: vi.fn(async ({ where, select }: { where: Row; select?: { comments?: { where?: Row } } }) =>
+      findMany: vi.fn(async ({ where, select }: { where: Row; select?: Row }) =>
         db.posts
           .filter((p) => matches(p, where))
-          // Nested relation filter (open client comments).
-          .map((p) =>
-            select?.comments?.where
-              ? { ...p, comments: (p.comments as Row[]).filter((c) => matches(c, select.comments!.where)) }
-              : p
-          )
+          .map((p) => {
+            const commentsSelect = select?.comments as { where?: Row } | undefined;
+            const sessionsSelect = select?.reviewSessions as { select?: Row } | undefined;
+            const sessions = (p.reviewSessions as Row[] | undefined) ?? [];
+            return {
+              ...p,
+              ...(commentsSelect?.where
+                ? { comments: (p.comments as Row[]).filter((c) => matches(c, commentsSelect.where)) }
+                : {}),
+              ...(sessionsSelect
+                ? {
+                    reviewSessions: sessions.map((session) => ({
+                      ...session,
+                      messages: ((session.messages as Row[] | undefined) ?? []).filter((message) => message.role === "CLIENT"),
+                      voiceCalls: ((session.voiceCalls as Row[] | undefined) ?? []).filter(
+                        (call) =>
+                          ["STARTING", "ACTIVE", "CLOSING"].includes(call.status as string) ||
+                          ((call.fragments as Row[] | undefined) ?? []).some((fragment) => fragment.speaker === "user")
+                      ),
+                    })),
+                  }
+                : {}),
+            };
+          })
       ),
       updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
         const rows = db.posts.filter((p) => matches(p, where));
@@ -135,7 +153,7 @@ vi.mock("@/app/review/[token]/reviewer", () => ({
       : null,
 }));
 
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { BulkApprovalFeedbackConflictError, ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import {
   PLAN_NOTIFICATION_LEASE_MS,
   PLAN_NOTIFICATION_RETRY_MS,
@@ -181,6 +199,7 @@ function post(id: string, overrides: Row = {}): Row {
     publishAt: new Date("2026-11-05T09:00:00Z"),
     versions: [{ id: `${id}-v${(overrides.currentVersionNumber as number) ?? 1}` }],
     comments: [],
+    reviewSessions: [],
     ...overrides,
   };
 }
@@ -261,7 +280,7 @@ describe("Approva tutto il piano", () => {
     ]);
     expect(mockPosts.approvePost).toHaveBeenCalledTimes(1);
     // Same service as a single approval, bound to the version, without the per-post email.
-    expect(mockPosts.approvePost).toHaveBeenCalledWith("a", reviewer, 1, { notify: false });
+    expect(mockPosts.approvePost).toHaveBeenCalledWith("a", reviewer, 1, { notify: false, bulkSafety: true });
     expect(result.approved).toEqual(["a"]);
     expect(result.skipped.map((s) => [s.id, s.reason])).toEqual([
       ["b", "comments"],
@@ -283,6 +302,89 @@ describe("Approva tutto il piano", () => {
     );
     const result = await approvePlan("p1", reviewer, [{ postId: "a", versionNumber: 2 }]);
     expect(result.approved).toEqual(["a"]);
+  });
+
+  it("treats a legacy unresolved comment without version as current feedback", async () => {
+    db.posts.push(
+      post("a", {
+        currentVersionNumber: 2,
+        versions: [{ id: "a-v2" }],
+        comments: [{ authorType: "CLIENT", resolvedAt: null, versionId: null }],
+      })
+    );
+
+    await expect(approvePlan("p1", reviewer, [{ postId: "a", versionNumber: 2 }])).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    expect(mockPosts.approvePost).not.toHaveBeenCalled();
+  });
+
+  it("leaves current-version client conversations and active voice calls for individual review", async () => {
+    db.posts.push(
+      post("message", {
+        reviewSessions: [
+          { versionNumber: 1, messages: [{ id: "m1", role: "CLIENT" }], voiceCalls: [] },
+        ],
+      }),
+      post("voice", {
+        reviewSessions: [
+          { versionNumber: 1, messages: [], voiceCalls: [{ id: "v1", status: "ACTIVE" }] },
+        ],
+      })
+    );
+
+    await expect(
+      approvePlan("p1", reviewer, [
+        { postId: "message", versionNumber: 1 },
+        { postId: "voice", versionNumber: 1 },
+      ])
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(mockPosts.approvePost).not.toHaveBeenCalled();
+  });
+
+  it("leaves terminal voice feedback out even before transcript projection finishes", async () => {
+    db.posts.push(
+      post("a", {
+        reviewSessions: [
+          {
+            versionNumber: 1,
+            messages: [],
+            voiceCalls: [{ id: "v1", status: "CLOSED", fragments: [{ id: "f1", speaker: "user" }] }],
+          },
+        ],
+      })
+    );
+
+    await expect(approvePlan("p1", reviewer, [{ postId: "a", versionNumber: 1 }])).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    expect(mockPosts.approvePost).not.toHaveBeenCalled();
+  });
+
+  it("ignores assistant-only greetings and feedback from an older version", async () => {
+    db.posts.push(
+      post("a", {
+        currentVersionNumber: 2,
+        versions: [{ id: "a-v2" }],
+        reviewSessions: [
+          { versionNumber: 1, messages: [{ id: "old", role: "CLIENT" }], voiceCalls: [{ id: "old-v", status: "ACTIVE" }] },
+          { versionNumber: 2, messages: [{ id: "hello", role: "ASSISTANT" }], voiceCalls: [{ id: "closed", status: "CLOSED" }] },
+        ],
+      })
+    );
+
+    const result = await approvePlan("p1", reviewer, [{ postId: "a", versionNumber: 2 }]);
+    expect(result.approved).toEqual(["a"]);
+  });
+
+  it("reports feedback created after selection as feedback, not as a stale post", async () => {
+    db.posts.push(post("a"));
+    mockPosts.approvePost.mockRejectedValueOnce(new BulkApprovalFeedbackConflictError());
+
+    const result = await approvePlan("p1", reviewer, [{ postId: "a", versionNumber: 1 }]);
+
+    expect(result.approved).toEqual([]);
+    expect(result.skipped).toEqual([{ id: "a", title: "Post a", reason: "comments" }]);
   });
 
   it("turns a post changed meanwhile into a skipped one instead of failing everything", async () => {

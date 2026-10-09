@@ -30,7 +30,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Guarda ogni rete", body: "Usa le schede sopra l’anteprima per controllare come cambia il post sulle reti previste." },
       { title: "Controlla tutto il contenuto", body: "Leggi la didascalia completa, la data prevista e scorri foto o video. Nei video puoi fermarti sul momento che vuoi segnalare." },
-      { title: "Dai la tua decisione", body: "Se è tutto corretto scegli «Approva». Se serve un intervento, inserisci una nota precisa e scegli «Chiedi modifiche»." },
+      { title: "Dai la tua decisione", body: "Se è tutto corretto scegli «Approva». Se serve un intervento, salva i commenti sul contenuto e scegli «Chiedi modifiche»: saranno inviati senza doverli riscrivere." },
     ],
   },
   {
@@ -58,7 +58,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Leggi la versione proposta", body: "Controlla titolo, immagine e corpo dell’articolo. Se è una nuova versione, apri anche «Cosa è cambiato»." },
       { title: "Commenta una frase", body: "Seleziona il passaggio interessato e usa «Commenta questa frase»: la nota resterà collegata a quel testo." },
-      { title: "Concludi la revisione", body: "Approva se l’articolo è pronto oppure riunisci le richieste e scegli «Chiedi modifiche»." },
+      { title: "Concludi la revisione", body: "Approva se l’articolo è pronto; altrimenti salva i commenti sulle frasi e scegli «Chiedi modifiche», senza riscriverli." },
     ],
   },
   {
@@ -85,7 +85,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Indica il punto", body: "Su una foto tocca il punto interessato; su un video fermati sul secondo giusto; in un articolo seleziona la frase." },
       { title: "Descrivi il risultato che vuoi", body: "Scrivi cosa cambiare e, se puoi, perché: per esempio tono, colore, immagine, frase o invito all’azione." },
-      { title: "Usa l’assistente se serve", body: "L’assistente di revisione può farti domande per rendere la richiesta più precisa. La decisione finale resta sempre tua." },
+      { title: "Usa l’assistente se serve", body: "Apri «Parla con Heili» per scrivere o conversare a voce, anche interrompendo l’assistente. Controlla il riepilogo, poi invialo all’agenzia: parlare o preparare il riepilogo non invia una richiesta. «Detta il messaggio» trascrive soltanto nel campo di testo." },
     ],
   },
   {
