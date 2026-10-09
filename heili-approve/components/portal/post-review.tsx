@@ -230,6 +230,7 @@ export default function PostReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    setDecisionError(null);
     if (assistantControl.current) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -241,6 +242,7 @@ export default function PostReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    setDecisionError(null);
     if (assistantControl.current) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -494,7 +496,7 @@ export default function PostReview({
           }
           durationSec={draftMedia?.durationSec}
           onSubmit={submitComment}
-          onCancel={() => setDraft(null)}
+          onCancel={() => { setDraft(null); setDecisionError(null); }}
         />
       )}
 

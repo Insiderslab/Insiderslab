@@ -219,6 +219,7 @@ export default function BlogReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    setDecisionError(null);
     if (assistantControl.current) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -230,6 +231,7 @@ export default function BlogReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    setDecisionError(null);
     if (assistantControl.current) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -453,7 +455,7 @@ export default function BlogReview({
             draft={draft}
             mediaLabel={null}
             onSubmit={submitComment}
-            onCancel={() => setDraft(null)}
+            onCancel={() => { setDraft(null); setDecisionError(null); }}
           />
         )}
         <BlogCommentList
@@ -512,7 +514,7 @@ export default function BlogReview({
             draft={draft}
             mediaLabel={null}
             onSubmit={submitComment}
-            onCancel={() => setDraft(null)}
+            onCancel={() => { setDraft(null); setDecisionError(null); }}
             framed={false}
           />
         )}

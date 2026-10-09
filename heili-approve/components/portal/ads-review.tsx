@@ -316,6 +316,7 @@ export default function AdsReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    setDecisionError(null);
     if (assistantControl.current) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -327,6 +328,7 @@ export default function AdsReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    setDecisionError(null);
     if (assistantControl.current) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -631,7 +633,7 @@ export default function AdsReview({
                   variant={variant}
                   draft={draft.draft}
                   onSubmit={(input) => submitComment(variant.id, input)}
-                  onCancel={() => setDraft(null)}
+                  onCancel={() => { setDraft(null); setDecisionError(null); }}
                 />
               ) : undefined
             }
@@ -643,7 +645,7 @@ export default function AdsReview({
                   key={`${assetDraft.asset.kind}-${assetDraft.asset.index}`}
                   asset={assetDraft.asset}
                   onSubmit={(body) => submitComment(variant.id, { body })}
-                  onCancel={() => setAssetDraft(null)}
+                  onCancel={() => { setAssetDraft(null); setDecisionError(null); }}
                 />
               ) : undefined
             }
@@ -699,7 +701,7 @@ export default function AdsReview({
               draft={draft.draft}
               mediaLabel={null}
               onSubmit={(input) => submitComment(null, input)}
-              onCancel={() => setDraft(null)}
+              onCancel={() => { setDraft(null); setDecisionError(null); }}
             />
           )}
           <CommentList
