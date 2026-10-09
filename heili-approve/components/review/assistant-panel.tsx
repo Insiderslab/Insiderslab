@@ -804,7 +804,9 @@ export function AssistantPanel({
 
           {(hasClientMessages || completed || live.clientText) && (
             <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:flex-wrap">
-              {completed ? (
+              {completed && controlRef ? (
+                <p className="text-sm text-muted">Controlla il riepilogo, poi premi «Chiedi modifiche» nella barra in basso per inviarlo all’agenzia.</p>
+              ) : completed ? (
                 <ActionButton onClick={submitChanges} disabled={busy !== null || voiceBusy} primary={sendHighlighted}>
                   {busy === "submit" ? "Invio…" : "Invia le modifiche all'agenzia"}
                 </ActionButton>
@@ -817,9 +819,9 @@ export function AssistantPanel({
                   {busy === "finalize" ? "Preparo il riepilogo…" : "Prepara il riepilogo per l'agenzia"}
                 </ActionButton>
               )}
-              <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
+              {!controlRef && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
                 {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
-              </ActionButton>
+              </ActionButton>}
               {(voiceBusy || draft.trim() || speechInput.listening) && (
                 <p className="basis-full text-xs text-muted">
                   {voiceBusy
