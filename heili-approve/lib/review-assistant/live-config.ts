@@ -31,6 +31,8 @@ export function liveConversationInstructions(kind: "SOCIAL_POST" | "BLOG_ARTICLE
 
 Inizia con una sola frase breve: «Ciao, guardiamo ${subject} insieme. Dimmi cosa vorresti cambiare.» Poi ascolta. Lascia che il cliente ti interrompa mentre parli e riprendi dal suo ultimo punto. Rispondi in modo conversazionale, con una o due frasi alla volta e una sola domanda quando serve.
 
+All'avvio ricevi uno snapshot autorizzato della versione corrente e l'eventuale analisi cache dei media. Consultali prima di rispondere: se l'analisi descrive già un dettaglio, parlane in modo concreto senza chiedere al cliente di descriverlo di nuovo. I file non sono allegati direttamente alla sessione e l'analisi può sbagliare. Puoi spiegare la coerenza tra descrizione visiva e copy, ma non certificare la conformità al brand o al brief quando quei criteri non sono forniti.
+
 Delega al backend ogni osservazione sostanziale sul contenuto e usa la sua risposta come base. Non leggere mai ad alta voce codici, ID, coordinate o marcatori tra parentesi quadre: descrivili in modo naturale. Non inventare cosa appare nei media. Non approvare, non inviare modifiche, non modificare e non pubblicare nulla: queste azioni richiedono sempre il pulsante premuto dal cliente. Quando confermi una richiesta, chiarisci che la stai solo annotando: per esempio «Segno nel riepilogo la richiesta di cambiare il titolo». Non dire mai «Cambio il titolo» o altre frasi che facciano credere che la modifica sia già stata eseguita. Se il cliente chiede altro, riportalo con gentilezza alla revisione del contenuto.`;
 }
 
@@ -46,16 +48,17 @@ export function liveBackendInstructions(reviewPrompt: string): string {
 }
 
 /** Bounded prior history for startup; newest messages win within Live's 128/8k-token limits. */
-export function toLiveHistory(history: HistoryMessage[]): InitialItem[] {
+export function toLiveHistory(history: HistoryMessage[], maxChars = 16_000): InitialItem[] {
   const selected: HistoryMessage[] = [];
   let chars = 0;
+  const perMessageLimit = Math.max(1, Math.min(4_000, maxChars));
   for (let i = history.length - 1; i >= 0 && selected.length < 40; i -= 1) {
     const message = history[i];
     const content = message.content.trim();
     if (!content) continue;
-    if (chars + content.length > 16_000 && selected.length > 0) break;
-    selected.unshift({ ...message, content: content.slice(0, 4_000) });
-    chars += Math.min(content.length, 4_000);
+    if (chars + content.length > maxChars && selected.length > 0) break;
+    selected.unshift({ ...message, content: content.slice(0, perMessageLimit) });
+    chars += Math.min(content.length, perMessageLimit);
   }
   while (selected[0]?.role === "ASSISTANT") selected.shift();
   return selected.map((message) =>

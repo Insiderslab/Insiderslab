@@ -10,6 +10,14 @@ Il microfono nel commento detta una bozza modificabile; non invia il commento. �
 
 La trascrizione in diretta aiuta a seguire il dialogo. Il server riceve gli eventi autentici del provider, li conserva nella sessione di revisione e li rende disponibili al normale riepilogo. «Prepara il riepilogo» termina prima la chiamata e attende il salvataggio. Approvazioni e invio delle modifiche restano azioni esplicite del cliente. L’app non conserva registrazioni audio; GPT-Live è configurato con `store: false`. Questa impostazione non costituisce una promessa di Zero Data Retention del provider. Le prove browser con dispositivi simulati non certificano la resa del microfono e degli altoparlanti fisici.
 
+### Contesto visivo prima della chiamata
+
+Correzione del 9 ottobre 2026 dopo una prova reale: l'analisi dei media poteva terminare 20–25 secondi dopo l'avvio della voce, lasciando nella chiamata uno snapshot «non disponibile». Ora il pulsante prepara prima il contesto tramite `POST /api/review/[token]/assistant/voice/prepare`: finché l'analisi è pendente il microfono rimane spento e non viene creata una sessione OpenAI. Il browser ricontrolla ogni 2 secondi per un massimo di circa 90 secondi; l'attesa è annullabile. Un'analisi fallita o un media non risolvibile mostra un messaggio esplicito e lascia disponibili i commenti scritti. Il server ricontrolla la disponibilità anche all'avvio effettivo, prima di consumare il limite di chiamate.
+
+La voce riceve all'avvio uno snapshot limitato della versione corrente, testi, varianti, selezione e analisi dei media. Il modello di supporto conserva il contesto dettagliato. L'analisi è descrittiva e può contenere errori: permette di discutere elementi visivi e coerenza con i testi, ma non certifica un brief o regole di brand che non sono stati forniti. Non vengono allegati file immagine direttamente al modello vocale. Le descrizioni restano dati non attendibili nel prompt e non istruzioni; l'endpoint di preparazione restituisce solo stato e conteggi.
+
+La risoluzione dell'analisi usa l'asset della versione autorizzata nello stesso workspace; per i media senza `assetId` usa l'URL locale. Analisi obsolete vengono preparate di nuovo, risultati malformati non sono presentati come pronti e fallimenti con esito incerto non vengono ritentati automaticamente.
+
 Il punto selezionato mantiene coordinate, media, variante e momento del video insieme, anche nel riepilogo strutturato e nel commento finale. Le sessioni sono vincolate alla versione: un aggiornamento del post durante una risposta impedisce di salvare un feedback sulla versione superata.
 
 ## Limiti e gestione delle chiamate

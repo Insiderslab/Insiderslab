@@ -765,7 +765,7 @@ export function AssistantPanel({
               ) : (
                 <>
                   <p className="text-sm font-medium" role="status">
-                    {live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
+                    {live.phase === "preparing" ? "Sto preparando il contesto delle immagini e dei video… Il microfono è ancora spento." : live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
                   </p>
                   {live.phase === "active" && live.remainingSeconds !== null && (
                     <p className="text-xs text-muted" role="timer" aria-live="off">
@@ -784,7 +784,7 @@ export function AssistantPanel({
                     )}
                     <button type="button" onClick={() => void live.stop().catch(() => {})} disabled={live.phase === "closing"}
                       className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50">
-                      {live.phase === "connecting" ? "Annulla collegamento" : "Termina conversazione"}
+                      {live.phase === "preparing" ? "Annulla preparazione" : live.phase === "connecting" ? "Annulla collegamento" : "Termina conversazione"}
                     </button>
                   </div>
                   <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l’agenzia.</p>
@@ -813,7 +813,7 @@ export function AssistantPanel({
               ) : (
                 <ActionButton
                   onClick={prepareSummary}
-                  disabled={busy !== null || live.phase === "connecting" || live.phase === "closing" || (!voiceBusy && session?.status !== "OPEN")}
+                  disabled={busy !== null || live.phase === "preparing" || live.phase === "connecting" || live.phase === "closing" || (!voiceBusy && session?.status !== "OPEN")}
                   primary={readiness === "ready_changes"}
                 >
                   {busy === "finalize" ? "Preparo il riepilogo…" : "Prepara il riepilogo per l'agenzia"}

@@ -24,6 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("MEDIA_ANALYSIS_ENABLED", "true"); vi.stubEnv("QWEN_API_KEY", "test"); vi.stubEnv("MEDIA_TRANSCRIPTION_ENABLED", "true");
   vi.stubEnv("OPENAI_API_KEY", "test");
+  mock.findAssets.mockResolvedValue([]);
   mock.findAsset.mockResolvedValue({ id: "asset", workspaceId: "work" });
   mock.updateMany.mockResolvedValue({ count: 1 });
   mock.inspect.mockResolvedValue({ audio: true, duration: 30 });
@@ -63,25 +64,88 @@ describe("bounded media evidence", () => {
     expect(analysisSchema.safeParse(result).success).toBe(true);
     expect(analysisSchema.safeParse({ ...result, speech: [{ start: -1, end: 4, text: "x" }] }).success).toBe(false);
   });
-  it("loads evidence only by authorized workspace and exact version's asset URLs", async () => {
-    mock.findAssets.mockResolvedValue([{ storageKey: "work/file.mp4", analysis: { status: "READY", result } }]);
+  it("loads legacy URL-only evidence only from the authorized workspace", async () => {
+    mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: { revision: ANALYSIS_REVISION, status: "READY", result } }]);
     const ctx = context();
-    await attachMediaEvidence(ctx, "work");
-    expect(mock.findAssets).toHaveBeenCalledWith({ where: { workspaceId: "work", storageKey: { in: ["work/file.mp4"] } }, include: { analysis: true } });
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "ready", total: 1, ready: 1 });
+    expect(mock.findAssets).toHaveBeenCalledWith({ where: { workspaceId: "work", OR: [{ storageKey: { in: ["work/file.mp4"] } }] }, include: { analysis: true } });
     expect(ctx.mediaEvidence).toContain("Una tazza rossa"); expect(mock.queue).not.toHaveBeenCalled();
   });
-  it("does not fetch external assets or expose another tenant's analysis", async () => {
-    mock.findAssets.mockResolvedValue([]);
+  it("resolves an explicit legacy assetId before considering its URL", async () => {
+    mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/canonical.mp4", analysis: { revision: ANALYSIS_REVISION, status: "READY", result } }]);
+    const ctx = context(); ctx.media[0].assetId = "asset"; ctx.media[0].url = "https://approve.test/media/work/different.mp4";
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "ready", total: 1, ready: 1 });
+    expect(mock.findAssets).toHaveBeenCalledWith({ where: { workspaceId: "work", OR: [{ id: { in: ["asset"] } }] }, include: { analysis: true } });
+    expect(ctx.mediaEvidence).toContain("Una tazza rossa");
+  });
+  it("does not fetch external assets and reports their evidence as unavailable", async () => {
     const ctx = context(); ctx.media = [{ type: "image", mimeType: "image/png", url: "http://127.0.0.1/private" }];
-    await attachMediaEvidence(ctx, "work");
-    expect(mock.findAssets).not.toHaveBeenCalled(); expect(ctx.mediaEvidence).toBeUndefined();
-    const owned = context(); await attachMediaEvidence(owned, "another-workspace");
-    expect(owned.mediaEvidence).toBe("");
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "unavailable", total: 1, ready: 0 });
+    expect(mock.findAssets).not.toHaveBeenCalled(); expect(ctx.mediaEvidence).toContain("media non risolvibile");
+  });
+  it("does not expose another workspace or fall back from an explicit assetId to its URL", async () => {
+    const ctx = context(); ctx.media[0].assetId = "foreign-asset";
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "unavailable", total: 1, ready: 0 });
+    expect(mock.findAssets).toHaveBeenCalledWith({ where: { workspaceId: "work", OR: [{ id: { in: ["foreign-asset"] } }] }, include: { analysis: true } });
+    expect(ctx.mediaEvidence).toContain("media non risolvibile"); expect(mock.queue).not.toHaveBeenCalled();
   });
   it("keeps pending analysis honest and requests background work", async () => {
     mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: null }]);
-    const ctx = context(); await attachMediaEvidence(ctx, "work");
+    const ctx = context(); await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "pending", total: 1, ready: 0 });
     expect(ctx.mediaEvidence).toContain("in preparazione"); expect(mock.queue).toHaveBeenCalledWith({ assetId: "asset", workspaceId: "work" });
+  });
+  it("keeps current pending and processing analyses pending without duplicating a processing claim", async () => {
+    for (const status of ["PENDING", "PROCESSING"]) {
+      mock.queue.mockClear();
+      mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: { revision: ANALYSIS_REVISION, status, result: null } }]);
+      const ctx = context();
+      await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "pending", total: 1, ready: 0 });
+      expect(mock.queue).toHaveBeenCalledTimes(status === "PENDING" ? 1 : 0);
+    }
+  });
+  it("requeues stale non-processing analysis and waits for the current revision", async () => {
+    mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: { revision: "old-revision", status: "READY", result } }]);
+    const ctx = context();
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "pending", total: 1, ready: 0 });
+    expect(ctx.mediaEvidence).toContain("in preparazione");
+    expect(mock.queue).toHaveBeenCalledWith({ assetId: "asset", workspaceId: "work" });
+  });
+  it("does not automatically retry a current failed analysis", async () => {
+    mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: { revision: ANALYSIS_REVISION, status: "FAILED", result: null } }]);
+    const ctx = context();
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "unavailable", total: 1, ready: 0 });
+    expect(ctx.mediaEvidence).toContain("non disponibile"); expect(mock.queue).not.toHaveBeenCalled();
+  });
+  it("treats malformed current READY evidence as terminally unavailable", async () => {
+    mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: { revision: ANALYSIS_REVISION, status: "READY", result: { summary: "incomplete" } } }]);
+    const ctx = context();
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "unavailable", total: 1, ready: 0 });
+    expect(ctx.mediaEvidence).toContain("risultato non valido"); expect(mock.queue).not.toHaveBeenCalled();
+  });
+  it("returns ready for a post with no media without querying storage", async () => {
+    const ctx = context(); ctx.media = [];
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "ready", total: 0, ready: 0 });
+    expect(mock.findAssets).not.toHaveBeenCalled(); expect(ctx.mediaEvidence).toBeUndefined();
+  });
+  it("reports media as unavailable when analysis is disabled", async () => {
+    vi.stubEnv("MEDIA_ANALYSIS_ENABLED", "false");
+    const ctx = context();
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "unavailable", total: 1, ready: 0 });
+    expect(mock.findAssets).not.toHaveBeenCalled(); expect(ctx.mediaEvidence).toContain("non disponibile");
+  });
+  it("counts every authorized reference and does not treat media beyond the cap as ready", async () => {
+    const ctx = context();
+    ctx.media = Array.from({ length: 31 }, (_, index) => ({ type: "image" as const, mimeType: "image/png", url: `https://approve.test/media/work/${index}.png` }));
+    mock.findAssets.mockResolvedValue(ctx.media.slice(0, 30).map((_, index) => ({ id: `asset-${index}`, storageKey: `work/${index}.png`, analysis: { revision: ANALYSIS_REVISION, status: "READY", result } })));
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "unavailable", total: 31, ready: 30 });
+    expect(ctx.mediaEvidence).toContain("Altri 1 media");
+  });
+  it("gives pending precedence when a post mixes pending and unavailable media", async () => {
+    const ctx = context();
+    ctx.media.push({ type: "image", mimeType: "image/png", url: "https://external.test/unavailable.png" });
+    mock.findAssets.mockResolvedValue([{ id: "asset", storageKey: "work/file.mp4", analysis: null }]);
+    await expect(attachMediaEvidence(ctx, "work")).resolves.toEqual({ status: "pending", total: 2, ready: 0 });
+    expect(ctx.mediaEvidence).toContain("in preparazione"); expect(ctx.mediaEvidence).toContain("media non risolvibile");
   });
   it("preserves ads variant identity in evidence", () => {
     const ctx = context(); ctx.content = { kind: "AD_CREATIVE", decisions: [], ads: { variants: [{ id: "variant-B", media: ctx.media }] } as never };

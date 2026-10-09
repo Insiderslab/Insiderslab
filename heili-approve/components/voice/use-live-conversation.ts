@@ -6,7 +6,7 @@ const subscribeCapabilities = () => () => {};
 const browserSupportsVoice = () => Boolean(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
 const serverSupportsVoice = () => false;
 
-type Phase = "idle" | "connecting" | "active" | "closing";
+type Phase = "idle" | "preparing" | "connecting" | "active" | "closing";
 type Call = { callId: string; sdp: string; expiresAt: string; sessionId: string };
 type Connection = {
   generation: number;
@@ -17,14 +17,15 @@ type Connection = {
   call?: Call;
   timer?: ReturnType<typeof setTimeout>;
   closing?: Promise<void>;
+  preparationAbort: AbortController;
 };
 
-async function request<T>(url: string, method: string, body: unknown, keepalive = false): Promise<T> {
+async function request<T>(url: string, method: string, body: unknown, keepalive = false, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     method, cache: "no-store", keepalive,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: keepalive ? undefined : AbortSignal.timeout(30_000),
+    signal: keepalive ? undefined : signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.success) {
@@ -34,6 +35,7 @@ async function request<T>(url: string, method: string, body: unknown, keepalive 
 }
 
 function release(connection: Connection) {
+  connection.preparationAbort.abort();
   clearTimeout(connection.timer);
   connection.stream?.getTracks().forEach((track) => track.stop());
   connection.audio.pause();
@@ -79,6 +81,7 @@ export function useLiveConversation(input: {
     if (!connection) return;
     if (connection.closing) return connection.closing;
     generation.current++;
+    connection.preparationAbort.abort();
     setPhase("closing");
     connection.stream?.getTracks().forEach((track) => track.stop());
     connection.audio.pause();
@@ -125,7 +128,7 @@ export function useLiveConversation(input: {
   const start = useCallback(async (contextMarker: string) => {
     if (current.current) return;
     setError(null);
-    setPhase("connecting");
+    setPhase("preparing");
     setExpiresAtMs(null);
     setRemainingSeconds(null);
     setClientText("");
@@ -135,7 +138,7 @@ export function useLiveConversation(input: {
     const audio = new Audio();
     audio.autoplay = true;
     const channel = peer.createDataChannel("oai-events");
-    const connection: Connection = { generation: id, peer, audio, channel };
+    const connection: Connection = { generation: id, peer, audio, channel, preparationAbort: new AbortController() };
     current.current = connection;
     const alive = () => current.current === connection && generation.current === id;
     const fail = (message: string) => {
@@ -185,8 +188,27 @@ export function useLiveConversation(input: {
       }
     };
     channel.onclose = () => { if (alive()) fail("Connessione vocale chiusa. Puoi continuare nella chat."); };
-    connection.timer = setTimeout(() => fail("La connessione vocale sta impiegando troppo tempo. Riprova."), 45_000);
     try {
+      const preparationDeadline = Date.now() + 90_000;
+      while (alive()) {
+        const readiness = await request<{ status: "ready" | "pending" | "unavailable" }>(
+          `${input.url}/prepare`, "POST", { postId: input.postId, versionNumber: input.versionNumber }, false, connection.preparationAbort.signal
+        );
+        if (!alive()) return;
+        if (readiness.status === "ready") break;
+        if (readiness.status !== "pending") throw new Error("Non riesco ad analizzare le immagini o i video di questo contenuto. Puoi usare i commenti scritti; l’agenzia può verificare i file caricati.");
+        if (Date.now() >= preparationDeadline) throw new Error("L’analisi del contenuto sta richiedendo più tempo del previsto. Riprova tra poco: la conversazione vocale non è ancora iniziata.");
+        await new Promise<void>((resolve, reject) => {
+          const signal = connection.preparationAbort.signal;
+          const abort = () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
+          const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, 2_000);
+          signal.addEventListener("abort", abort, { once: true });
+          if (signal.aborted) abort();
+        });
+      }
+      if (!alive()) return;
+      setPhase("connecting");
+      connection.timer = setTimeout(() => fail("La connessione vocale sta impiegando troppo tempo. Riprova."), 45_000);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       if (!alive()) { stream.getTracks().forEach((track) => track.stop()); return; }
       connection.stream = stream;
