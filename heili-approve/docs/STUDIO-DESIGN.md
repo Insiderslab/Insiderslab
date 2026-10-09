@@ -34,8 +34,16 @@ I prototipi mostrati in chat usano Studio Forma e Officina Nord come esempi fitt
 
 ## Verifica
 
-Verifiche sul codice finale: 704 test automatici superati (46 file), TypeScript, ESLint sui file modificati e build Next.js di produzione completati. Nel browser: 24 controlli per editor e viste del piano, 36 per il feedback Studio e 21 per il ciclo della conversazione vocale, tutti superati. I controlli coprono desktop e mobile, bozze, cambio riferimento/variante, microfono vicino all'invio, blocco del passaggio a Heili durante la dettatura, cancellazione della preparazione vocale e decisioni.
+Verifiche sul codice finale: 704 test automatici superati (46 file), TypeScript, ESLint sui file modificati e build Next.js di produzione completati. Nel browser: 24 controlli per editor e viste del piano, 46 per il feedback Studio e 21 per il ciclo della conversazione vocale, tutti superati. I controlli coprono desktop e mobile, bozze, cambio riferimento/variante, microfono vicino all'invio, blocco del passaggio a Heili durante la dettatura, cancellazione della preparazione vocale e decisioni.
 
 Il browser con dispositivi simulati non certifica la resa di un microfono fisico. Le integrazioni vocali e l'analisi Qwen conservano il funzionamento verificato nel rilascio precedente; questo aggiornamento modifica la loro presentazione, non il modello o la voce.
 
 La revisione indipendente del codice non ha rilevato regressioni materiali. Il controllo visivo finale ha separato il testo di aiuto dalla riga dei comandi: Heili, microfono e invio restano leggibili anche nel pannello desktop stretto.
+
+## Rilascio verificato
+
+Pubblicata su approve.heili.cloud l'immagine approve-app:92cbfc6, commit 92cbfc694beb8a6fa36285711ff51bef70df0caf. Backup verificato prima del passaggio, nessuna migrazione pendente. Web, worker, cron e media-worker aggiornati e controlli di salute superati.
+
+La prova online con un cliente sintetico ha superato 9 controlli: composer immediato, microfono accanto all'invio, avviso in assenza di modifiche senza apertura di Heili, blocco della decisione con bozza manuale, apertura dell'assistente, recupero del testo tornando al commento, assenza di overflow mobile ed errori runtime. Il cliente di prova, il suo workspace e i media sono stati rimossi. Nessuna comunicazione inviata a clienti reali.
+
+Il routing delle decisioni attende il recupero del feedback precedente e apre Heili solo quando serve; la regressione è coperta anche con GET ritardato e sessione persistente.
