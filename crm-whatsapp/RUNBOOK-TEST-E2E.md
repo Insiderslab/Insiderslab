@@ -72,3 +72,21 @@
 1. Meta → Centro gestione account → Password e sicurezza: aggiungere app di autenticazione o telefono; verificare quale email è "principale" (è lì che va il codice). Poi rigenerare il token permanente.
 2. Togliere a `WhatsappBot` le 5 risorse in più.
 3. Decidere su n8n: verificare con il login oppure procedere senza (consigliato).
+
+### 9/10 — Fase 1 del controllo WhatsApp (sessione Chrome, sola lettura; registro scritto dalla sessione cloud)
+**Stato trovato**
+- Account Meta: email principale stefano@insiderslab.it + telefono; c'è una passkey. "E-mail recenti": **nessuna email di sicurezza inviata nelle ultime 2 settimane** → il codice del 6/10 non è mai partito da Meta. Sull'utente di sistema c'è un banner "Verifica dell'account richiesta" in sospeso.
+- `WhatsappBot`: risorse = app 609974691965875, WABA Insiderslab Team + 3 in più (2 WABA "Insiderslab", Test WABA). Pixel/Dataset già rimossi. Nessun token.
+- App 609974691965875: webhook ancora su n8n, solo `messages`, WABA Insiderslab Team **non** iscritto.
+- WABA Insiderslab Team: numero Collegato, qualità Alta, nome "Insiderlabs" approvato, limite 2.000/24 h, **nessun metodo di pagamento**, **0 modelli**. Partner: solo Clientify (controllo completo).
+- **CRM `crm.heili.cloud`: le organizzazioni InsidersLab e La Bambola NON esistono.** L'istanza ha 2 organizzazioni: "Negocio de Stefano Finoti" (slug `principal`, 1 utente, 0 contatti) e "Hair extension Clinic" (1 utente, 8 contatti demo della ferramenta "El Martillo", agente "Martillito" = dati della demo di Vocero). Verificato nel codice: `GET /api/admin/orgs` elenca **tutte** le organizzazioni dell'istanza, quindi non è un problema di account o permessi. Nessuna organizzazione collegata a WhatsApp. URL del webhook mostrata (quindi `META_WEBHOOK_VERIFY_TOKEN` è impostato); avviso "Nessun App Secret configurato". Nessun modello.
+- Portfolio La Bambola Morrocoy (2451131388356181): **non verificato** ("Sono necessarie ulteriori informazioni"); WABA 104583859184157 di tipo App WhatsApp Business, numero +58 414-4324032 **non in linea**; app "La bambolaChatbot" 1368958778397072 in sviluppo, webhook vuoto.
+
+**Correzioni ai documenti**
+- `vocero-crm/docs/ops/rilascio-c1.md` (branch `claude/keen-ptolemy-l0kv8g`) e `ANALISI-COMPLETA-2026-10-09.md` davano per esistenti in produzione "InsidersLab" e "La Bambola": **falso**. Le 2 organizzazioni reali sono "Negocio de Stefano Finoti" e "Hair extension Clinic". Il rischio di C1/C2 (chiavi d'istanza con 2 organizzazioni) resta identico.
+- Il codice non ha endpoint per cancellare un'organizzazione dal pannello: ogni organizzazione creata resta.
+
+**Decisioni per la fase 2 (proposta della sessione cloud)**
+- Organizzazione per il test: **"Negocio de Stefano Finoti"** (vuota, owner Stefano, già con pipeline e profilo agente creati alla registrazione). Evita una terza organizzazione non cancellabile. Rinomina in "InsidersLab" facoltativa e successiva.
+- Ordine rivisto per non lasciare buchi tra webhook e connessione: token → togli i 3 WABA → App Secret (`META_APP_SECRET` impostato da Stefano + riavvio) → **collega WhatsApp nel CRM e salva** (il wizard iscrive anche il WABA all'app) → webhook dell'app verso il CRM → verifica interruttore "Iscriviti ai webhook" → modello Utility → test.
+- Fuori dalla fase 2: pagamento del WABA, Clientify, tutto La Bambola (portfolio da far verificare al cliente, numero da rimettere in linea o sostituire, organizzazione nel CRM da creare quando il numero è pronto), pulizia dei dati demo in "Hair extension Clinic".
