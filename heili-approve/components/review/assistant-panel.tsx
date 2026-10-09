@@ -90,6 +90,7 @@ export interface AssistantPanelProps {
 }
 
 export interface AssistantPanelHandle {
+  hasPendingFeedback(): boolean;
   requestChanges(): Promise<void>;
   approve(): Promise<void>;
   close(): Promise<boolean>;
@@ -567,7 +568,21 @@ export function AssistantPanel({
     }
   }
 
-  useImperativeHandle(controlRef, () => ({ requestChanges, approve, close }));
+  function hasPendingFeedback(): boolean {
+    if (done !== null) return false;
+    return Boolean(
+      draftRef.current.trim() ||
+        pendingMessage !== null ||
+        busy !== null ||
+        voiceBusy ||
+        speechInput.listening ||
+        hasClientMessages ||
+        completed ||
+        live.clientText.trim()
+    );
+  }
+
+  useImperativeHandle(controlRef, () => ({ hasPendingFeedback, requestChanges, approve, close }));
 
   // ─── Render ────────────────────────────────────────────────────────────────
 

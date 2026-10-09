@@ -247,7 +247,7 @@ export default function PostReview({
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
     setDecisionError(null);
-    if (assistantControl.current) {
+    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await assistantControl.current?.requestChanges();
@@ -259,7 +259,7 @@ export default function PostReview({
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
     setDecisionError(null);
-    if (assistantControl.current) {
+    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
       setAssistantOpen(true);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await assistantControl.current?.approve();
