@@ -60,3 +60,14 @@ Container non-root, filesystem di sola lettura, upload read-only, tmpfs, capabil
 Fonti tecniche: [Whisper e timestamp](https://developers.openai.com/api/docs/guides/speech-to-text), [Qwen3-VL-Flash](https://docs.modelstudio.console.alibabacloud.com/en/model-studio/qwen3-vl-flash).
 
 Documentazione vocale: [GPT-Live](https://developers.openai.com/api/docs/guides/live), [WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc), [controlli server e trascrizione](https://developers.openai.com/api/docs/guides/voice-server-controls).
+
+## Verifica del rilascio del 9 ottobre 2026
+
+Rilasciato su `approve.heili.cloud` con immagine `approve-app:a03a5f9` (commit `a03a5f9d31807dcbd6aeabbed257de4f05cbebdd`). Entrambi i branch `claude/bold-lovelace-xdiiw9` e `codex/approve-review-improvements` contengono le modifiche.
+
+- Suite completa prima della rifinitura della trascrizione: 643/643 test; rifinitura verificata con 9/9 test vocali, compreso il caso di frammenti intercalati nel mezzo di una parola. Build, TypeScript e lint superati; resta un warning preesistente in `invitation-accept-card.tsx`.
+- Browser con dispositivi simulati: 16/16 verifiche sul collegamento, annullamento, microfono, trascrizione e chiusura.
+- Sul rilascio finale: 11/11 verifiche con WebRTC e GPT-Live reali, usando esclusivamente un cliente temporaneo e audio sintetico. La richiesta di cambiare il titolo in «Primavera in città» è presente nel riepilogo strutturato. Chiamata chiusa dal provider; trascrizione salvata in tre messaggi leggibili. Confermato che un altro revisore non può chiudere la chiamata.
+- Riepilogo persistente dopo refresh; visualizzazione controllata a 1440 e 390 px senza overflow orizzontale. Nessuna prova del microfono fisico dell’utente.
+- Nessuna approvazione, pubblicazione, email o notifica inviata dal test. Cliente, utente e workspace sintetici eliminati dopo aver verificato la chiusura delle chiamate.
+- Migrazione applicata; salute pubblica OK, servizi senza riavvii. Backup verificati prima dei rilasci in `/docker/approve/backups/pre-143f487` e `/docker/approve/backups/pre-a03a5f9`. Il rollback dell’immagine può mantenere le nuove tabelle additive.
