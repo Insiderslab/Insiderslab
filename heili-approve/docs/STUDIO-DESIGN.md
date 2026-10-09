@@ -37,3 +37,5 @@ I prototipi mostrati in chat usano Studio Forma e Officina Nord come esempi fitt
 Verifiche sul codice finale: 704 test automatici superati (46 file), TypeScript, ESLint sui file modificati e build Next.js di produzione completati. Nel browser: 24 controlli per editor e viste del piano, 36 per il feedback Studio e 21 per il ciclo della conversazione vocale, tutti superati. I controlli coprono desktop e mobile, bozze, cambio riferimento/variante, microfono vicino all'invio, blocco del passaggio a Heili durante la dettatura, cancellazione della preparazione vocale e decisioni.
 
 Il browser con dispositivi simulati non certifica la resa di un microfono fisico. Le integrazioni vocali e l'analisi Qwen conservano il funzionamento verificato nel rilascio precedente; questo aggiornamento modifica la loro presentazione, non il modello o la voce.
+
+La revisione indipendente del codice non ha rilevato regressioni materiali. Il controllo visivo finale ha separato il testo di aiuto dalla riga dei comandi: Heili, microfono e invio restano leggibili anche nel pannello desktop stretto.

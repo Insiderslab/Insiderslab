@@ -134,14 +134,10 @@ export default function AssetCommentComposer({
           placeholder="Cosa cambieresti? Per esempio: troppo generico, direi «Prima settimana gratis»."
           className="min-h-24 w-full resize-y border-0 bg-transparent p-3 text-base outline-none"
         />
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <div className="flex min-w-0 items-center gap-2">
-            {assistantAction}
-            <span className="text-xs text-muted">
-              {dictating ? "Ti ascolto…" : body.trim() ? "Bozza sul dispositivo · non inviata" : "Scrivi o detta"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1 px-2 pb-2">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="min-w-0">{assistantAction}</div>
+            <div className="flex shrink-0 items-center gap-2">
             <DictationButton
               value={body}
               onChange={(value) => {
@@ -166,7 +162,11 @@ export default function AssetCommentComposer({
             >
               <span aria-hidden="true">↑</span>
             </button>
+            </div>
           </div>
+          <span className="block text-xs text-muted">
+            {dictating ? "Ti ascolto…" : body.trim() ? "Bozza sul dispositivo · non inviata" : "Scrivi o detta"}
+          </span>
         </div>
       </div>
       {error ? (

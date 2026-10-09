@@ -170,10 +170,10 @@ export function AssistantActionButton({ onToggle }: { onToggle: () => void }) {
       type="button"
       onClick={onToggle}
       aria-label="Parla con Heili"
-      className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-accent hover:bg-accent/5"
+      className="inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-accent hover:bg-accent/5"
     >
       <HeiliAssistantIcon className="h-6 w-6" />
-      <span className="hidden sm:inline">Parla con Heili</span>
+      <span className="truncate">Parla con Heili</span>
     </button>
   );
 }
