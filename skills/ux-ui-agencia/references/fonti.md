@@ -27,7 +27,9 @@ Nessun testo è copiato: le regole sono riformulate e adattate al lavoro di agen
 - Direttiva (UE) 2019/882 e D.Lgs. 82/2022; linee guida AgID — ⚠️ verificare sempre il testo vigente
 - Core Web Vitals — Google (soglie al 75° percentile dei dati di campo)
 - Apple Human Interface Guidelines (44 pt) e Material Design (48 dp) — solo le soglie numeriche
-- Baymard Institute — solo statistiche pubbliche; le linee guida a pagamento non si riproducono
+- Baymard Institute — solo statistiche pubbliche, citando pagina e anno consultati:
+  baymard.com/lists/cart-abandonment-rate, baymard.com/research-articles/current-state-of-checkout-ux.
+  Le linee guida a pagamento non si riproducono
 
 ## Prossimi aggiornamenti da tenere d'occhio
 

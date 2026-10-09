@@ -123,8 +123,9 @@ volte al secondo (2.3.1); animazioni automatiche oltre 5 secondi con pausa (2.2.
 ## 5. Cosa consegnare
 
 - Tabella dei rilievi con criterio WCAG, dove, evidenza, severità (scala in
-  `audit-euristiche.md`) e correzione. Qualsiasi fallimento AA su un task critico è
-  severità 4.
+  `audit-euristiche.md`) e correzione. La severità segue la regola WCAG unica di
+  `audit-euristiche.md § 6` (4 se impedisce a un gruppo di utenti un task critico, 3 se lo
+  rende più faticoso, altrove almeno 2).
 - Esito per criterio della tabella §3: ✅ / ❌ / non verificato, nel template
   `assets/templates/report-accessibilita.md`, con il verdetto `CONFORME AA` /
   `NON CONFORME AA (n criteri ❌)` / `NON VALUTABILE`.

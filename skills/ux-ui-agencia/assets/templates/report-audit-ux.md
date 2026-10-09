@@ -1,15 +1,31 @@
 # Audit UX/UI — [Prodotto / Cliente]
 
+> Parte per il cliente: §1, §2, §6 e §8 (senza gergo). Il resto è materiale interno per il
+> team e per verificare il lavoro.
+
 **URL o build verificata:** ___ (ambiente: produzione / staging / prototipo)
 **Data del controllo:** AAAA-MM-GG
 **Dispositivi e viewport testati:** mobile 375/390 · tablet 768 · desktop 1440 (adatta) —
 emulati / dispositivo reale: ___
-**Dati di performance:** campo (CrUX) / laboratorio (Lighthouse) — dichiarare quale
+**Dati di performance:** campo (CrUX) / laboratorio (Lighthouse) / nessuno (→ Non verificato)
+**Strumenti:** ___ (audit_probe.js, contrast_check.py, axe, screen reader, PSI...)
+**Evidenze:** ___ (cartella con screenshot, probe.json, palette)
 **Profili usati nel percorso dei task:** ___
 **Utente di riferimento:** ___ (chi è, cosa vuole ottenere, contesto d'uso)
 **Task critici verificati:** 1. ___ 2. ___ 3. ___
 **Fonti:** ___ (brief, analytics, call, ticket assistenza, recensioni)
 **Revisore:** ___
+
+**Lettura in una riga:** Lo leggo come ___ per ___, tono ___, superficie ___, vincoli ___.
+
+**Contesto minimo (G1)**
+| # | Voce | Valore | Fonte o ⚠️ IPOTESI |
+|---|---|---|---|
+| 1 | Utente principale e contesto | | |
+| 2 | Task critici | | |
+| 3 | Piattaforma e stack | | |
+| 4 | Obiettivo misurabile | | |
+| 5 | Vincoli (brand, lingue, EAA, scadenza) | | |
 
 ---
 
@@ -29,8 +45,9 @@ In tre righe, per chi non legge oltre:
 |---|---|---|---|---|---|
 | 1 | ___ | ___ | 4 | S | ___ |
 
-Ordine: prima i quick win (severità ≥ 3, sforzo S), poi severità decrescente, a parità
-di severità lo sforzo minore.
+Ordine (regola unica di `audit-euristiche.md § 6`): prima ciò che impedisce il task critico
+a tutti, poi i quick win (severità ≥ 3, sforzo S), poi severità decrescente e sforzo minore.
+"Chi" = ruolo (sviluppo, grafica, contenuti, cliente) o persona di `cliente.md`.
 
 ## 3. Punteggio per euristica
 
@@ -48,7 +65,15 @@ di severità lo sforzo minore.
 | N10 Aiuto e documentazione | | |
 | **Totale** | __ / __ → __ / 100 | |
 
+Ogni rilievo conta su una sola euristica (mappatura in `audit-euristiche.md § 6`).
 Problemi sistemici (una causa, tanti sintomi): ___
+
+**Percorso dei task (facoltativo ma consigliato)**
+| Task · passo | Sa cosa fare? | Vede il controllo? | Capisce che fa ciò che vuole? | Capisce dal feedback? | Rilievo |
+|---|---|---|---|---|---|
+| T1 · 1 | ✅/❌ | | | | UX-__ |
+
+Carico cognitivo (8 punti, `audit-euristiche.md § 4`): schermata ___ → n "sì" su 8.
 
 ## 3bis. Copertura per area
 
@@ -76,7 +101,9 @@ Severità: 0 non è un problema · 1 cosmetico · 2 minore · 3 maggiore · 4 bl
 
 ## 5. Accessibilità — esito dei controlli principali
 
-Per un controllo completo usare `report-accessibilita.md` (modalità ACCESSIBILITÀ).
+In AUDIT: i criteri qui sotto più ogni altro criterio fallito trovato. La tabella completa
+e la bozza della pagina informativa EAA solo in modalità ACCESSIBILITÀ
+(`report-accessibilita.md`).
 
 | Criterio WCAG 2.2 | Esito | Dove | Nota |
 |---|---|---|---|

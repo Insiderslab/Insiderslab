@@ -31,7 +31,8 @@ Se la riga contiene un'ipotesi, si chiede conferma con **una** domanda.
 | **Esperienza** | portfolio, lancio di prodotto, evento | identità, momento memorabile, movimento intenzionale |
 
 Il tipo si sceglie per **superficie**, non per prodotto: la landing di un gestionale è
-Persuasione, il gestionale è Operatività.
+Persuasione, il gestionale è Operatività. Checkout, form di preventivo e onboarding sono
+misti: Persuasione per gerarchia e fiducia, Operatività per i campi.
 
 ## 2. Da dove nascono le scelte
 

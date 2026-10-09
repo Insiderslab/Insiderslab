@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Valigeria Bianchi - Checkout</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #333; font-size: 13px; }
+  header { position: sticky; top: 0; background: linear-gradient(90deg,#7b2ff7,#4f8cff); color:#fff; padding: 18px 24px; height: 60px; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 24px; display:flex; gap:24px; }
+  .form { flex: 2; } .summary { flex: 1; background:#f7f7f7; padding:16px; border-radius:16px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+  input, select { border: 1px solid #e3e3e3; padding: 6px; width: 45%; margin: 4px; font-size: 13px; }
+  input::placeholder { color: #c4c4c4; }
+  input:focus, button:focus, a:focus { outline: none; }
+  .btn { background: #9ad0ff; color: #fff; border: 0; padding: 6px 10px; font-size: 12px; border-radius: 16px; }
+  .btn2 { background: #ff7a59; color:#fff; border:0; padding: 6px 10px; font-size:12px; border-radius:16px; }
+  .muted { color: #aaaaaa; }
+  .err { color: red; display:none; }
+  .icons span { display:inline-block; width:18px; height:18px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header><b>VALIGERIA BIANCHI</b> · VIAGGIA · SCOPRI · ESPLORA →</header>
+<div class="wrap">
+  <div class="form">
+    <h2>Checkout</h2>
+    <p class="muted">Per completare l'ordine devi creare un account.</p>
+    <form id="f" onsubmit="return check()">
+      <input placeholder="Nome"><input placeholder="Cognome">
+      <input placeholder="Email"><input placeholder="Password">
+      <input placeholder="Conferma password"><input placeholder="Telefono">
+      <input placeholder="Data di nascita (MM/DD/YYYY)"><input placeholder="Codice fiscale">
+      <input placeholder="Indirizzo"><input placeholder="Città">
+      <input placeholder="CAP"><input placeholder="Provincia">
+      <input placeholder="Indirizzo fatturazione"><input placeholder="Città fatturazione">
+      <input placeholder="CAP fatturazione"><input placeholder="Come ci hai conosciuto?">
+      <input placeholder="Numero carta" onpaste="return false"><input placeholder="Scadenza">
+      <input placeholder="CVV">
+      <div class="icons">Paga con: <span title="PayPal">🅿️</span><span title="Apple Pay">🍎</span></div>
+      <p class="err" id="e">Si è verificato un errore.</p>
+      <div style="margin-top:12px">
+        <button class="btn" type="submit">Invia</button>
+        <button class="btn2" type="button" onclick="document.getElementById('f').reset()">Cancella tutto</button>
+        <button class="btn" type="button">Torna al negozio</button>
+      </div>
+    </form>
+  </div>
+  <div class="summary">
+    <h3>Riepilogo</h3>
+    <p>Trolley Cabina Pro x1 — 129,00 €</p>
+    <p class="muted">Spedizione e IVA calcolate dopo il pagamento</p>
+    <p><b>Totale: 129,00 €*</b></p>
+  </div>
+</div>
+<script>
+function check(){ document.getElementById('f').reset(); document.getElementById('e').style.display='block'; return false; }
+</script>
+</body>
+</html>

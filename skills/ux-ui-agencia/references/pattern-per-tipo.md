@@ -35,15 +35,16 @@ affidabile · contattare / prenotare / chiedere preventivo da mobile.
 ## 2. E-commerce
 
 **Task critici di default**: trovare un prodotto (ricerca o categoria) · valutarlo
-(foto, prezzo, varianti, disponibilità, spedizione) · comprare da mobile come ospite.
+(foto, prezzo, varianti, disponibilità, spedizione) · comprare da mobile senza passaggi non
+necessari.
 
 - **Costo totale presto**: spese di spedizione, IVA e tempi visibili in scheda prodotto o
   nel carrello, non scoperti all'ultimo passo (i costi inattesi sono la prima causa di
-  abbandono nelle ricerche pubbliche Baymard).
+  abbandono nelle ricerche pubbliche Baymard — ⚠️ citare l'edizione: vedi `fonti.md`).
 - **Checkout come ospite** sempre disponibile; la registrazione si offre dopo l'acquisto
   (l'account obbligatorio è tra le prime cause di abbandono).
 - Un checkout ben fatto sta intorno a 12–14 elementi di form in tutto (stima pubblica
-  Baymard): ogni campo in più va giustificato.
+  Baymard, ⚠️ verificare l'edizione corrente): ogni campo in più va giustificato.
 - Pochi campi: nome completo in un campo dove possibile, indirizzo con autocompletamento,
   fatturazione = spedizione preselezionato, CAP → città automatica. Campi fiscali italiani
   (codice fiscale, P.IVA, SDI/PEC) solo quando si chiede fattura.

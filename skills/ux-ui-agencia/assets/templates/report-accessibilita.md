@@ -54,7 +54,8 @@ In tre righe:
 | 4.1.2 Nome, ruolo, valore | A | | | | |
 | 4.1.3 Messaggi di stato | AA | | | | |
 
-Severità: 4 se il fallimento blocca un task critico, altrimenti almeno 3.
+Severità (regola unica di `audit-euristiche.md § 6`): 4 se impedisce a un gruppo di utenti un
+task critico, 3 se lo rende più faticoso, altrove almeno 2.
 Criteri non elencati: verificati / non verificati (dichiarare quale).
 
 ## 3. Contrasti
