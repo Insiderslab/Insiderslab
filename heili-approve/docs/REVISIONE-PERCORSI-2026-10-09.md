@@ -34,7 +34,7 @@ Questa revisione conserva le regole esistenti: l'AI propone, il cliente decide; 
 3. **Note generali del piano e richieste bloccanti.** La nota sul piano resta una nota, senza stato di risoluzione. Questa revisione aggiunge un avviso nella conferma; serve poi distinguere strutturalmente una nota informativa da una richiesta che riguarda tutto il mese, con risposta dell'agenzia.
 4. **Bozze lungo la navigazione.** Conservare il testo quando si cambia punto dell'immagine, post o pagina, con recupero per post/versione e messaggio in caso di versione superata. La conservazione del testo locale aggiunta qui copre la chiusura del pannello nella stessa pagina, non refresh o navigazione. Le conversazioni già salvate sono invece recuperate anche al rientro.
 5. **Link cliente nelle viste compatte.** Portare la stessa azione «Copia link cliente» anche in calendario e righe del piano, mantenendo la scelta esplicita del referente quando ce n'è più di uno.
-6. **Semplificazione visiva dell'assistente.** Dopo aver unificato il comportamento, ridurre le ripetizioni fra riepilogo, messaggio modificabile e pulsanti; distinguere chiaramente dettatura e conversazione. Verificare in una breve sessione con un cliente reale che riesca a completare il primo feedback senza istruzioni verbali. Non usare il numero dei test automatici come sostituto di questa prova.
+6. **Semplificazione visiva dell'assistente.** Questa revisione elimina le coppie duplicate di pulsanti decisionali. Come passo successivo, ridurre le ripetizioni fra riepilogo e messaggio modificabile; distinguere chiaramente dettatura e conversazione. Verificare in una breve sessione con un cliente reale che riesca a completare il primo feedback senza istruzioni verbali. Non usare il numero dei test automatici come sostituto di questa prova.
 
 ## Scenari da mantenere nella regressione
 
@@ -51,3 +51,15 @@ Questa revisione conserva le regole esistenti: l'AI propone, il cliente decide; 
 ## Limiti della revisione
 
 Le prove browser sintetiche verificano il comportamento dell'interfaccia, non il gradimento soggettivo della voce o una conversazione con microfono fisico. La connessione reale GPT-Live è stata verificata nella release precedente; qui si verifica la regressione del client. Questa è una revisione approfondita dei percorsi selezionati, non una nuova certificazione completa della sicurezza di ogni endpoint.
+
+
+## Verifica e rilascio
+
+- Suite completa: 666 test superati; controlli mirati ripetuti dopo gli ultimi ritocchi di interfaccia.
+- Browser con componenti reali, azioni/API simulate e CSS dell’app: 19 scenari superati, comprese sessione recuperata e decisioni senza doppie conferme; controllo larghezze 390 e 1440 px. La home raggruppata è verificata anche dal rendering server con filtri e piani non visibili.
+- Client vocale: 16 controlli di regressione superati, senza nuove chiamate a pagamento al modello.
+- TypeScript e build Docker superati; ESLint senza errori, con un avviso preesistente in `invitation-accept-card.tsx`.
+- Nessuna modifica allo schema del database. Backup verificato e immagine precedente conservata prima del rilascio.
+- Pubblicato su `https://approve.heili.cloud` il codice `6e6cbee76bd91638d86f02476051a125a87c5000`: health check positivo e 9 controlli sul sito pubblicato superati, con dati sintetici poi rimossi. Verificate anche le schermate mobile e desktop; nessun contenuto cliente approvato e nessuna conversazione AI avviata dai controlli.
+- Backup pre-rilascio verificato: `/docker/approve/backups/pre-6e6cbee`.
+- I test non sostituiscono una prova di usabilità con un cliente reale; la voce non è stata valutata con un microfono fisico in questa revisione.
