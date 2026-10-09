@@ -104,3 +104,11 @@
 - `crm-whatsapp/correggi-app-secret.sh` — chiede la chiave senza mostrarla, la valida con Meta per l'app 609974691965875, copia `.env`, scrive il valore, ricrea `app`, ricontrolla la lunghezza; si ferma se `docker-compose.override.yml` contiene un valore scritto.
 
 **Prossimo passo (Stefano, ~5 min):** scaricare i due script, lanciare `correggi-app-secret.sh`, scrivere "ciao" al numero, lanciare `diagnosi-whatsapp.sh` e incollare l'esito.
+
+### 9/10 23:36 UTC — Primo messaggio reale ricevuto dal CRM ✅
+- Deploy di `main` `2f4338d` in produzione (`git pull --ff-only && docker compose up -d --build --no-deps app`), health 200. Nessuna variabile `WAPI_*`: modo diretto.
+- `correggi-app-secret.sh`: chiave confermata da Meta per l'app 609974691965875, `.env` aggiornato (backup `.env.bak-20261009-233612`), container ricreato. **Nota sicurezza:** durante un primo tentativo la chiave è stata incollata nel terminale come comando ed è comparsa in chat e nella cronologia bash → va rigenerata ("Reimposta" in Meta) e riscritta con lo stesso script.
+- `diagnosi-whatsapp.sh`: tutte le sezioni OK. Segreto valido (32), connessione `Negocio de Stefano Finoti` / WABA 1027272492350148 / Phone 671133866076775 / connected; GET 200, POST firmato 200, POST senza firma 401; numero CONNECTED, CLOUD_API, nome APPROVED, qualità GREEN; callback dell'app = CRM con token coincidente; app iscritte al WABA: Whatpp Business Insiderslab + Clientify Inbox (735132587797436).
+- Database: messaggio in entrata **"Ciao" alle 23:36**, organizzazione "Negocio de Stefano Finoti", `wa_message_id` reale → **la catena Meta → CRM funziona**. Causa del guasto: `META_APP_SECRET` sbagliato (106 caratteri) → 401 silenziosi.
+- Nella stessa organizzazione ci sono 16 messaggi della **demo "Ferretería El Martillo"** (seed caricato nelle ultime 24 h): da ripulire prima di usare l'organizzazione per lavoro vero.
+- Resta da fare la tabella C: risposta manuale dal composer, risposta AI (agente spento, chiave OpenRouter da verificare), handoff, finestra 24 h; modello Utility da creare; token permanente di `WhatsappBot`; pulizia risorse in eccesso; rigenerazione App Secret.
