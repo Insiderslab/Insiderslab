@@ -90,6 +90,7 @@ export interface AssistantPanelProps {
 }
 
 export interface AssistantPanelHandle {
+  isLoadingFeedback(): boolean;
   hasPendingFeedback(): boolean;
   requestChanges(): Promise<void>;
   approve(): Promise<void>;
@@ -582,7 +583,13 @@ export function AssistantPanel({
     );
   }
 
-  useImperativeHandle(controlRef, () => ({ hasPendingFeedback, requestChanges, approve, close }));
+  useImperativeHandle(controlRef, () => ({
+    isLoadingFeedback: () => loading,
+    hasPendingFeedback,
+    requestChanges,
+    approve,
+    close,
+  }));
 
   // ─── Render ────────────────────────────────────────────────────────────────
 

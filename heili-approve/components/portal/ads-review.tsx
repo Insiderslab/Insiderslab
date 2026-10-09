@@ -339,6 +339,10 @@ export default function AdsReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current?.isLoadingFeedback()) {
+      setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
+      return;
+    }
     setDecisionError(null);
     if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
       setAssistantOpen(true);
@@ -351,6 +355,10 @@ export default function AdsReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current?.isLoadingFeedback()) {
+      setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
+      return;
+    }
     setDecisionError(null);
     if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
       setAssistantOpen(true);
