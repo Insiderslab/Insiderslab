@@ -5,26 +5,29 @@ asset non deve indovinare misure.** Se una spec dice "sezione servizi elegante",
 
 ## 1. Definizione di "spec pronta"
 
-Una spec di schermata (template `assets/templates/spec-schermata.md`) è pronta solo se ha:
+Una spec di schermata (template `assets/templates/spec-schermata.md`) è pronta solo se ha
+**tutte e 9** queste voci. È la lista che il gate G7a controlla, una per una:
 
-- obiettivo della schermata e **una** azione primaria con destinazione;
-- layout con griglia, larghezza massima e ordine del focus;
-- contenuti con lunghezze massime (o il testo definitivo);
-- comportamento a 3 viewport (mobile, tablet, desktop);
-- tutti gli stati degli elementi interattivi (o "N/A" motivato);
-- casi limite: testo lungo, vuoto, errore di rete, permessi;
-- solo token (nessun hex o px fuori scala);
-- criteri di accettazione verificabili ("Dato… quando… allora…");
-- note asset con formato, misure in px, proporzione, punto focale, peso massimo.
+1. obiettivo della schermata e **una** azione primaria con destinazione;
+2. layout con griglia, larghezza massima e ordine del focus;
+3. contenuti con lunghezze massime (o il testo definitivo);
+4. comportamento a 3 viewport (mobile, tablet, desktop);
+5. i 10 stati di ogni elemento interattivo (o "N/A" motivato);
+6. i 4 casi limite: testo lungo, vuoto/primo utilizzo, errore di rete o server, permessi;
+7. solo token (nessun hex o px fuori scala);
+8. criteri di accettazione verificabili ("Dato… quando… allora…");
+9. note asset con formato, misure in px, proporzione, punto focale, peso massimo.
 
 ## 2. Per stack
 
 ### WordPress + Elementor (stack standard di agenzia)
-La spec si traduce nel formato dell'agente 2 di `web-factory-insiderslab`: Container
-(flex row / column / grid N col), gap, padding desktop/mobile, larghezza boxed/full, widget
-Elementor, Loop Grid se il contenuto si ripete, Global Colors e Global Fonts con i nomi
-semantici del design system. Massimo 3 livelli di container annidati. Il build, i gate di
-fase e il go-live restano di `web-factory-insiderslab`.
+I siti WordPress/Elementor li produce `web-factory-insiderslab`. Quando questa skill gli
+consegna qualcosa (direzione visiva, token, una spec), lo fa nel suo formato
+`spec-sezione.md`: Container (flex row / column / grid N col), gap, padding
+desktop/mobile, larghezza boxed/full, widget Elementor, Loop Grid se il contenuto si ripete,
+Global Colors e Fonts con i nomi di `cliente.md § Convenzioni stack`, massimo 3 livelli di
+container annidati, sezione "Da NON fare". Il build, i gate di fase e il go-live restano di
+`web-factory-insiderslab`.
 
 ### React / Next.js / Vue con Tailwind o CSS
 - Token esportati come CSS custom properties (`--color-bg-surface`, `--space-4`) e mappati
@@ -83,4 +86,5 @@ Allora il contatore del carrello si aggiorna entro 300 ms,
 - [ ] Contrasti verificati con lo script sui colori implementati
 - [ ] Nessun valore fuori token nel codice o nel builder
 - [ ] Testi definitivi, nessun lorem ipsum
-- [ ] Core Web Vitals entro soglia sulla pagina interessata
+- [ ] Core Web Vitals sulla pagina interessata: obiettivo "buono" (LCP ≤ 2,5 s, INP ≤ 200 ms,
+      CLS ≤ 0,1); per i siti WordPress vale come minimo bloccante il gate 6 di web-factory

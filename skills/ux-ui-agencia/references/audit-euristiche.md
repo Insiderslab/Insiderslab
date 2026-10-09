@@ -77,18 +77,19 @@ Per ogni passo del task, quattro domande. Un "no" è un rilievo.
 
 | # | Euristica | Domande di controllo | Violazioni tipiche |
 |---|---|---|---|
-| H1 | Visibilità dello stato del sistema | L'utente sa sempre dove si trova, cosa sta succedendo, se l'azione è andata? | Bottone senza stato di caricamento; upload senza progresso; voce di menu attiva non evidenziata; carrello che non si aggiorna |
-| H2 | Corrispondenza col mondo reale | Le parole sono quelle dell'utente o del sistema? L'ordine segue la logica del suo lavoro? | "Entità", "Record", "Submit", gergo interno; date in formato USA per utenti italiani; unità e valute sbagliate |
-| H3 | Controllo e libertà | Si può annullare, tornare indietro, uscire da un flusso senza perdere dati? | Modale senza chiusura; nessun "Annulla" dopo cancellazione; tasto indietro che svuota il form |
-| H4 | Coerenza e standard | Stessa azione = stesso nome, posizione, aspetto? Rispetta le convenzioni della piattaforma? | Tre stili di bottone primario; "Salva" e "Conferma" per la stessa azione; logo che non porta alla home |
-| H5 | Prevenzione degli errori | Il design impedisce l'errore prima di doverlo spiegare? | Campo data libero invece di selettore; azioni distruttive accanto a quelle frequenti; nessun vincolo su formati |
-| H6 | Riconoscere invece di ricordare | L'utente deve ricordare informazioni da una schermata all'altra? | Codici da copiare a mano; filtri che si perdono; istruzioni solo nel passo precedente |
-| H7 | Flessibilità ed efficienza | Gli utenti esperti hanno scorciatoie? I frequenti non ripetono lavoro? | Nessuna azione multipla in tabelle; nessun salvataggio di preferenze; nessun autocomplete |
-| H8 | Design estetico e minimalista | Ogni elemento serve al task? Il rumore copre il segnale? | Tre CTA in competizione; slider in hero; badge e banner ovunque; testo decorativo |
-| H9 | Riconoscere, diagnosticare e recuperare dagli errori | Il messaggio dice cosa è successo e come risolvere, vicino al problema? | "Si è verificato un errore"; errori solo in cima al form; codici tecnici; dati cancellati dopo l'errore |
-| H10 | Aiuto e documentazione | L'aiuto è contestuale e trovabile quando serve? | FAQ separate dal punto di dubbio; tooltip con informazioni critiche; nessun contatto visibile |
+| N1 | Visibilità dello stato del sistema | L'utente sa sempre dove si trova, cosa sta succedendo, se l'azione è andata? | Bottone senza stato di caricamento; upload senza progresso; voce di menu attiva non evidenziata; carrello che non si aggiorna |
+| N2 | Corrispondenza col mondo reale | Le parole sono quelle dell'utente o del sistema? L'ordine segue la logica del suo lavoro? | "Entità", "Record", "Submit", gergo interno; date in formato USA per utenti italiani; unità e valute sbagliate |
+| N3 | Controllo e libertà | Si può annullare, tornare indietro, uscire da un flusso senza perdere dati? | Modale senza chiusura; nessun "Annulla" dopo cancellazione; tasto indietro che svuota il form |
+| N4 | Coerenza e standard | Stessa azione = stesso nome, posizione, aspetto? Rispetta le convenzioni della piattaforma? | Tre stili di bottone primario; "Salva" e "Conferma" per la stessa azione; logo che non porta alla home |
+| N5 | Prevenzione degli errori | Il design impedisce l'errore prima di doverlo spiegare? | Campo data libero invece di selettore; azioni distruttive accanto a quelle frequenti; nessun vincolo su formati |
+| N6 | Riconoscere invece di ricordare | L'utente deve ricordare informazioni da una schermata all'altra? | Codici da copiare a mano; filtri che si perdono; istruzioni solo nel passo precedente |
+| N7 | Flessibilità ed efficienza | Gli utenti esperti hanno scorciatoie? I frequenti non ripetono lavoro? | Nessuna azione multipla in tabelle; nessun salvataggio di preferenze; nessun autocomplete |
+| N8 | Design estetico e minimalista | Ogni elemento serve al task? Il rumore copre il segnale? | Tre CTA in competizione; slider in hero; badge e banner ovunque; testo decorativo |
+| N9 | Riconoscere, diagnosticare e recuperare dagli errori | Il messaggio dice cosa è successo e come risolvere, vicino al problema? | "Si è verificato un errore"; errori solo in cima al form; codici tecnici; dati cancellati dopo l'errore |
+| N10 | Aiuto e documentazione | L'aiuto è contestuale e trovabile quando serve? | FAQ separate dal punto di dubbio; tooltip con informazioni critiche; nessun contatto visibile |
 
-Riferimento del principio nel report: `H1`…`H10`, oppure il criterio WCAG (`WCAG 2.5.8`),
+Riferimento del principio nel report: `N1`…`N10` (N come Nielsen, per non confonderle con
+i blocchi harness H1–H4), oppure il criterio WCAG (`WCAG 2.5.8`),
 oppure la legge (§4). Mai "best practice" generico.
 
 ## 4. Leggi di UX e carico cognitivo
@@ -131,13 +132,13 @@ Si misurano, non si stimano. Ogni misura va nel report con il valore trovato.
 | Contrasto testo normale | ≥ 4,5:1 (WCAG 1.4.3) | `scripts/contrast_check.py` sui colori estratti dal CSS |
 | Contrasto testo grande (≥ 24px o ≥ 18,66px bold) | ≥ 3:1 | idem, `--uso testo-grande` |
 | Contrasto componenti UI e focus | ≥ 3:1 (WCAG 1.4.11) | idem, `--uso ui` |
-| Target interattivi | ≥ 24×24 CSS px o spaziatura equivalente (WCAG 2.5.8 AA); raccomandato 44×44 per azioni primarie e touch | DevTools / Playwright `boundingBox()` |
+| Target interattivi | ≥ 24×24 CSS px o spaziatura equivalente (WCAG 2.5.8 AA; eccezioni: link in linea nel testo, controllo equivalente disponibile, controllo nativo del browser, dimensione essenziale); standard di agenzia 44×44 per CTA primaria e controlli principali su mobile | DevTools / Playwright `boundingBox()` |
 | Testo di lettura mobile | ≥ 16px, interlinea ≥ 1,5 | stili calcolati |
 | Lunghezza riga | 45–80 caratteri (ideale ~66) | larghezza contenitore / dimensione font |
 | Reflow | nessuno scroll orizzontale a 320 CSS px (WCAG 1.4.10) | viewport 320 o zoom 400% |
 | Zoom testo | leggibile al 200% senza perdita di funzioni (WCAG 1.4.4) | zoom browser |
 | Tastiera | tutto raggiungibile e azionabile con Tab/Invio/Spazio/Esc, ordine logico, nessuna trappola | percorso manuale |
-| Focus | visibile su ogni elemento e non coperto da header/banner sticky (WCAG 2.4.7, 2.4.11) | percorso manuale |
+| Focus | visibile su ogni elemento (WCAG 2.4.7) e mai interamente coperto da header/banner sticky (WCAG 2.4.11, AA); coperto in parte = rilievo di agenzia, non fallimento AA | percorso manuale |
 | LCP | ≤ 2,5 s (p75 mobile) | PageSpeed Insights / CrUX |
 | INP | ≤ 200 ms | PageSpeed Insights / CrUX |
 | CLS | ≤ 0,1 | PageSpeed Insights / CrUX |
@@ -172,14 +173,14 @@ Severità = impatto sul task × frequenza (quanti utenti, quante volte) × persi
   che grida "bloccante" su tutto non viene letto.
 
 ### Priorità
-Ordine dei lavori: severità decrescente; a parità di severità, prima lo sforzo minore
-(S < 1 giorno, M 1–3 giorni, L > 3 giorni). Le correzioni severità ≥ 3 e sforzo S sono i
-"quick win" e vanno in testa al report. I problemi sistemici (token, componente) si
+Ordine dei lavori: **prima i quick win** (severità ≥ 3 e sforzo S), poi severità
+decrescente; a parità di severità, prima lo sforzo minore (S < 1 giorno, M 1–3 giorni,
+L > 3 giorni). I problemi sistemici (token, componente) si
 correggono una volta alla fonte, non pagina per pagina.
 
 ### Punteggio 0–100 (derivato dai rilievi, non a sensazione)
 
-Ogni euristica H1–H10 riceve un voto 0–4 calcolato dai rilievi che la citano:
+Ogni euristica N1–N10 riceve un voto 0–4 calcolato dai rilievi che la citano:
 
 | Voto | Regola |
 |---|---|
@@ -191,14 +192,16 @@ Ogni euristica H1–H10 riceve un voto 0–4 calcolato dai rilievi che la citano
 | n/a | l'euristica non si applica alla superficie (motivare) |
 
 **Punteggio = somma dei voti ÷ (4 × euristiche applicabili) × 100**, arrotondato.
-I rilievi WCAG si contano sull'euristica più vicina (di solito H1, H4, H5 o H9) e anche
+I rilievi WCAG si contano sull'euristica più vicina (di solito N1, N4, N5 o N9) e anche
 nella tabella di accessibilità.
 
-| Punteggio | Verdetto |
-|---|---|
-| ≥ 70 e nessun rilievo di severità 4 | `SOLIDO` |
-| 50–69, oppure ≥ 70 con rilievi di severità 4 correggibili in fretta (sforzo S) | `DA MIGLIORARE` |
-| < 50, oppure severità 4 su un task critico con sforzo M/L | `CRITICO` |
+Verdetto: si applica la **prima riga vera dall'alto**.
+
+| # | Condizione | Verdetto |
+|---|---|---|
+| 1 | punteggio < 50, oppure almeno un rilievo di severità 4 con sforzo M o L | `CRITICO` |
+| 2 | punteggio < 70, oppure almeno un rilievo di severità 4 (sforzo S) | `DA MIGLIORARE` |
+| 3 | tutti gli altri casi | `SOLIDO` |
 
 Come riferimento, la maggior parte dei prodotti reali sta tra 50 e 80. Il punteggio
 serve a confrontare lo stesso prodotto nel tempo (prima/dopo), non prodotti diversi. Mai
@@ -206,7 +209,7 @@ un punteggio senza la tabella dei rilievi che lo giustifica.
 
 ## 7. Checklist per area
 
-Una riga per area nel report (§3 del template). Non tutte le voci valgono per ogni prodotto.
+Una riga per area nel report (§3bis del template). Non tutte le voci valgono per ogni prodotto.
 
 **Chiarezza e proposta di valore** — test dei 5 secondi: cosa è, per chi, cosa faccio ora ·
 headline concreta, non slogan · prova sociale vicino alla decisione.

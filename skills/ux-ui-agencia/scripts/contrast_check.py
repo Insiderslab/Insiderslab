@@ -22,7 +22,9 @@ Usi ammessi e soglia AA:
     testo         4.5:1  (testo normale, < 24px regular o < 18.66px bold)
     testo-grande  3.0:1  (>= 24px regular o >= 18.66px bold)
     ui            3.0:1  (bordi input, icone informative, focus ring, stati — WCAG 1.4.11)
-    decorativo    nessuna soglia (riportato solo per informazione)
+    decorativo    nessuna soglia — SOLO per elementi senza testo e senza funzione
+                  (sfondi, ornamenti). Etichettare "decorativo" un testo o un controllo
+                  per far passare il gate è un errore: lo script lo segnala nel riepilogo.
 
 Colori con alpha (#RRGGBBAA o #RGBA) vengono composti sopra lo sfondo prima del calcolo.
 Nessuna dipendenza esterna.
@@ -139,7 +141,12 @@ def main():
         print(f"| {r['nome']} | `{r['fg']}` | `{r['bg']}` | {r['uso']} | {r['rapporto']:.2f}:1 | {r['esito']} |")
 
     falliti = [r for r in risultati if not r["passa"]]
+    decorativi = [r for r in risultati if r["uso"] == "decorativo"]
     print()
+    if decorativi:
+        print(f"⚠️ {len(decorativi)} coppie escluse come 'decorativo' ("
+              + ", ".join(r["nome"] for r in decorativi)
+              + "): ammesso solo per elementi senza testo né funzione.")
     if falliti:
         print(f"GATE G3: ❌ BLOCCATO — {len(falliti)} coppie sotto soglia AA: "
               + ", ".join(r["nome"] for r in falliti))

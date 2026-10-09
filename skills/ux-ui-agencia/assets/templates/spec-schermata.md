@@ -27,14 +27,14 @@
 | Tablet (768–1279) | ___ |
 | Desktop (≥ 1280) | ___ |
 
-## Stati (tutti obbligatori per ogni elemento interattivo)
-| Elemento | Default | Hover | Focus visibile | Attivo/premuto | Disabilitato | Caricamento | Errore | Vuoto | Successo |
-|---|---|---|---|---|---|---|---|---|---|
-| ___ | | | | | | | | | |
+## Stati (i 10 di `design-system.md § 6`, obbligatori per ogni elemento interattivo)
+| Elemento | Default | Hover | Focus visibile | Attivo/premuto | Disabilitato | Caricamento | Errore | Successo | Vuoto | Selezionato/corrente |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ___ | | | | | | | | | | |
 
 "N/A" va motivato, non lasciato vuoto.
 
-## Dati e casi limite
+## Casi limite (tutti e 4 obbligatori)
 - Testo molto lungo / nome di 40 caratteri: ___
 - Zero risultati / primo utilizzo: ___
 - Errore di rete o server: ___
@@ -46,7 +46,8 @@ Nessun valore esadecimale o in px fuori dai token.
 
 ## Accessibilità
 - Contrasti verificati con `scripts/contrast_check.py`: ✅ / ❌
-- Target touch ≥ 44×44 px per le azioni primarie, mai < 24×24 px
+- Target: ≥ 24×24 CSS px per ogni target non in linea (WCAG 2.5.8, con eccezioni); ≥ 44×44
+  per la CTA primaria e i controlli principali su mobile; app native 44 pt / 48 dp
 - Etichette accessibili per icone senza testo: ___
 - Annunci per screen reader (aria-live) su: ___
 

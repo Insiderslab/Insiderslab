@@ -132,7 +132,7 @@ dove si era rimasti · capire notifiche e stati.
 ## 8. Modali, notifiche e toast
 
 - Modale solo per decisioni che bloccano il flusso; chiusura con X, Esc e click fuori
-  (tranne quando si perdono dati), focus intrappolato dentro e restituito all'apertura.
+  (tranne quando si perdono dati), focus intrappolato dentro e, alla chiusura, restituito all'elemento che l'ha aperta.
 - Mai modali all'ingresso del sito (newsletter, sconti) prima che l'utente abbia visto il
   contenuto; su mobile coprono tutto e penalizzano anche la SEO.
 - Toast: brevi, con azione di annulla quando ha senso, persistenti abbastanza da leggerli

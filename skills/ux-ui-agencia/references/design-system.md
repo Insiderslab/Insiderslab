@@ -29,8 +29,8 @@ space-4 (16px)    space.inset.md                card.padding
 - I componenti usano **solo** token semantici. I primitivi non compaiono mai in una spec.
 - Nomi per funzione, mai per aspetto: `color.text.muted`, non `grigio-chiaro`. Il rebranding
   cambia i valori, non i nomi.
-- Su Elementor i semantici diventano Global Colors/Fonts con nome italiano (`Primario`,
-  `Primario Scuro`, `Testo`, `Testo Chiaro`, `Sfondo`, `Sfondo Alt`, `Bordo`, `Accento`).
+- Su un page builder (es. Elementor) i semantici diventano Global Colors/Fonts con i nomi
+  definiti in `cliente.md § Convenzioni stack`.
 
 ## 2. Colore
 
@@ -58,6 +58,22 @@ space-4 (16px)    space.inset.md                card.padding
 - Hover, focus e premuto **aumentano** il contrasto, non lo riducono.
 - Ogni coppia testo/sfondo dichiarata nel design system passa da
   `scripts/contrast_check.py --palette`. L'output va nel documento.
+
+**Elenco minimo di coppie per il gate G3** (tutte obbligatorie, più quelle specifiche
+del prodotto):
+
+| Primo piano | Sfondi su cui verificarlo | Uso nello script |
+|---|---|---|
+| `color.text.default` | `bg.default`, `bg.subtle`, `surface` | testo |
+| `color.text.muted` | `bg.default`, `bg.subtle`, `surface` | testo |
+| testo dei bottoni | `color.action.primary` e i suoi stati hover/pressed | testo |
+| `color.action.primary` (link e bordo bottone secondario) | `bg.default`, `surface` | testo se è un link, ui se è un bordo |
+| `color.border.input` | `bg.default`, `surface` | ui |
+| `color.focus` | `bg.default`, `surface`, `color.action.primary` | ui |
+| testo e icone di `feedback.*` | i rispettivi sfondi di avviso e `bg.default` | testo / ui |
+| placeholder (se usato) | sfondo del campo | testo |
+
+`decorativo` è ammesso solo per elementi senza testo e senza funzione (sfondi, ornamenti).
 - Testo su immagini: overlay o area di sfondo che garantisca il contrasto sul punto più
   chiaro dell'immagine, non sulla media.
 - Grafici e stati non distinti solo dalla tinta (daltonismo: ~8% degli uomini).
@@ -183,8 +199,8 @@ Esempi: ✅ ___ / ❌ ___
 
 - Documento del design system (token con valori, tabella contrasti generata dallo script,
   scala tipografica, spaziature, raggi, ombre, movimento, schede componente).
-- Per Elementor: Global Colors/Fonts con i nomi semantici + spec in formato agente 2 di
-  `web-factory-insiderslab`.
+- Per Elementor: Global Colors/Fonts con i nomi di `cliente.md § Convenzioni stack` +
+  spec in formato `spec-sezione.md` di `web-factory-insiderslab`.
 - Per codice: file di token (CSS custom properties o JSON in formato Design Tokens) +
   mappatura nel tema (Tailwind o equivalente).
 - Per Figma: variabili e stili collegati agli stessi nomi.

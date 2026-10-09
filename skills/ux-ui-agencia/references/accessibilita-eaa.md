@@ -17,10 +17,14 @@ Questa skill dà la valutazione tecnica e di design. **Non** dà pareri legali: 
 ## 1. Chi è coinvolto
 
 - **Norma**: Direttiva (UE) 2019/882 (European Accessibility Act), recepita in Italia con
-  il D.Lgs. 82/2022. Si applica ai prodotti e servizi immessi sul mercato dal **28 giugno 2025**.
-  Vigilanza sui servizi: AgID, che nel 2026 ha pubblicato linee guida operative.
-  ⚠️ Verificare sempre la versione vigente delle linee guida e il regime sanzionatorio
-  sul testo ufficiale prima di citarli a un cliente.
+  il D.Lgs. 82/2022. Si applica ai prodotti immessi sul mercato e ai servizi forniti dal
+  **28 giugno 2025**. Vigilanza sui servizi: AgID (linee guida operative sui servizi
+  digitali segnalate nel 2026 — ⚠️ verificare numero e data della versione vigente sul
+  sito AgID prima di citarle).
+- **Regime transitorio**: i servizi possono continuare a essere forniti con prodotti già
+  legittimamente in uso prima del 28 giugno 2025 fino al **28 giugno 2030**; i contratti di
+  servizio conclusi prima restano validi fino alla scadenza, al massimo 5 anni. Cambia la
+  risposta a "da quando siamo obbligati?": va valutato caso per caso.
 - **Servizi coinvolti** (quelli che interessano un'agenzia): e-commerce e in generale i
   servizi venduti online a consumatori, servizi bancari al consumatore, trasporto
   passeggeri (siti, app, biglietteria), comunicazioni elettroniche, accesso a servizi
@@ -34,6 +38,10 @@ Questa skill dà la valutazione tecnica e di design. **Non** dà pareri legali: 
 - **Sanzioni**: previste dal D.Lgs. 82/2022, ma le fonti secondarie riportano importi
   diversi. ⚠️ Non citare cifre al cliente senza il testo vigente: è materia di
   `consulente-legale`.
+- **Chi risponde a "siamo obbligati?"**: questa skill dà un orientamento tecnico sul
+  perimetro, sempre marcato "da verificare". La risposta definitiva la dà il consulente
+  legale del cliente o `consulente-legale` (stessa politica dell'agente QA di
+  `web-factory-insiderslab`).
 - **Cosa chiede la norma in pratica**: il servizio deve essere percepibile, utilizzabile,
   comprensibile e robusto; il fornitore deve pubblicare le informazioni su come il servizio
   soddisfa i requisiti (nelle condizioni generali o in una pagina dedicata, spesso chiamata
@@ -45,13 +53,18 @@ progetti, solo che non è un obbligo legale del cliente.
 
 ## 2. Standard tecnico
 
-La presunzione di conformità passa per la norma armonizzata **EN 301 549**, che per il web
-rimanda alle WCAG livello AA. La versione 3.2.1 rimanda alle WCAG 2.1; la versione 4.1.1,
-allineata alle WCAG 2.2, è stata pubblicata a settembre 2026 ed è attesa la citazione in
-Gazzetta Ufficiale UE. ⚠️ Verificare lo stato della citazione prima di scriverlo al cliente.
+Il riferimento tecnico è la norma **EN 301 549**, che per il web rimanda alle WCAG livello
+AA. Attenzione alla differenza:
+- la v3.2.1 (che rimanda alle WCAG 2.1) è citata in Gazzetta UE per la direttiva sul
+  **settore pubblico** (2016/2102); per l'EAA oggi è il riferimento tecnico di fatto, **non**
+  una presunzione di conformità;
+- la presunzione di conformità all'EAA arriverà con la citazione di una norma armonizzata ai
+  sensi della 2019/882: la v4.1.1, allineata alle WCAG 2.2, risulta pubblicata a settembre
+  2026 con citazione attesa (fonte secondaria: deque.com). ⚠️ Verificare lo stato prima di
+  scriverlo al cliente.
 
-Nei nostri progetti si lavora comunque su **WCAG 2.2 AA**: include tutto ciò che chiede la
-2.1 più criteri nuovi utili per mobile e form (target, focus non coperto, trascinamento con
+Nei nostri progetti si lavora comunque su **WCAG 2.2 AA**: include i criteri della 2.1
+(tranne il 4.1.1 Parsing, rimosso) più criteri nuovi utili per mobile e form (target, focus non coperto, trascinamento con
 alternativa, aiuto coerente, autenticazione accessibile, nessun inserimento ridondante).
 
 ## 3. I criteri che contano di più
@@ -75,9 +88,9 @@ lista completa WCAG, ma coprono la maggior parte dei problemi reali.
 | 2.1.2 Nessuna trappola | Si esce da modali, menu, iframe | Tab dentro e fuori da ogni componente |
 | 2.4.1 Salto blocchi | Link "Vai al contenuto" o landmark | Primo Tab della pagina |
 | 2.4.3 Ordine del focus | Ordine logico e coerente con la lettura | Percorso Tab |
-| 2.4.4 Scopo del link | Il testo del link basta a capire dove porta | Niente "clicca qui", "scopri di più" ripetuti senza contesto |
+| 2.4.4 Scopo del link (A) | Lo scopo del link si capisce dal testo o dal suo contesto (frase, paragrafo, cella) | "Scopri di più" ripetuto senza contesto = fallimento; testo autosufficiente è il 2.4.9 (AAA), obiettivo di agenzia |
 | 2.4.7 Focus visibile | Indicatore visibile su ogni elemento | Mai `outline: none` senza sostituto |
-| 2.4.11 Focus non coperto | L'elemento con focus non è nascosto da header sticky, cookie banner, chat | Tab con banner aperti |
+| 2.4.11 Focus non coperto (AA) | L'elemento con focus non è **interamente** nascosto da header sticky, cookie banner, chat (nessuna parte coperta è il 2.4.12, AAA) | Tab con banner aperti |
 | 2.5.7 Movimenti di trascinamento | Alternativa a click per ogni drag (slider, riordino, kanban) | Prova senza trascinare |
 | 2.5.8 Dimensione target | ≥ 24×24 CSS px o spaziatura equivalente | Misura i bounding box |
 | 3.1.1 Lingua della pagina | `lang` corretto (`it`, `es`...) | Attributo su `html` |
@@ -112,7 +125,9 @@ volte al secondo (2.3.1); animazioni automatiche oltre 5 secondi con pausa (2.2.
 - Tabella dei rilievi con criterio WCAG, dove, evidenza, severità (scala in
   `audit-euristiche.md`) e correzione. Qualsiasi fallimento AA su un task critico è
   severità 4.
-- Esito per criterio della tabella §3: ✅ / ❌ / non verificato.
+- Esito per criterio della tabella §3: ✅ / ❌ / non verificato, nel template
+  `assets/templates/report-accessibilita.md`, con il verdetto `CONFORME AA` /
+  `NON CONFORME AA (n criteri ❌)` / `NON VALUTABILE`.
 - Piano di rimedio ordinato: prima ciò che blocca un task, poi ciò che è sistemico
   (token di colore, componente focus), poi il resto.
 - Se il cliente è nel perimetro EAA: bozza dei contenuti per la pagina informativa

@@ -37,11 +37,22 @@ ES per Spagna/LATAM, EN internazionale). Le spec per il team sono nella lingua d
 - Archivio: Google Drive, cartella del cliente
 - Call registrate: Fireflies
 
-## SOGLIE DI AGENZIA (si aggiungono a quelle della skill, non le sostituiscono)
-- PageSpeed mobile ≥ 85 su home e due template più visitati (gate 6 di web-factory)
+## SOGLIE DI AGENZIA
+- Performance siti WordPress: gate 6 di `web-factory-insiderslab` come minimo bloccante di
+  go-live (PageSpeed mobile ≥ 85 su home e due template più visitati, LCP < 3,0 s,
+  CLS < 0,15, INP < 300 ms). L'obiettivo UX della skill resta il "buono" Google
+  (2,5 s / 200 ms / 0,1).
 - Padding verticale di sezione standard: 96px desktop / 48px mobile
-- Scala spaziature: 4 / 8 / 16 / 24 / 32 / 48 / 64 / 96 px
+- Scala spaziature di agenzia — **sostituisce** quella di `design-system.md § 4` per i
+  siti WordPress: 4 / 8 / 16 / 24 / 32 / 48 / 64 / 96 px
 - Massimo due famiglie tipografiche, self-hosted, `font-display: swap`
+
+## CONVENZIONI STACK
+- Nomi dei Global Colors in Elementor (token semantici → nome): `Primario`,
+  `Primario Scuro`, `Accento`, `Testo`, `Testo Chiaro`, `Sfondo`, `Sfondo Alt`, `Bordo`
+- Formato spec per i siti WordPress: `spec-sezione.md` di `web-factory-insiderslab`
+- Skill per creare task: `monday-task-creator` (preview + OK obbligatori)
+- Strumento delle call registrate: Fireflies (`fireflies-processor`)
 
 ## BRAND / TONE OF VOICE INSIDERSLAB (quando il prodotto è nostro)
 - Tone: ⚠️ DA CONFERMARE
