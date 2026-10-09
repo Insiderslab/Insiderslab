@@ -369,6 +369,24 @@ export interface SendPlanResult {
   clientsWithoutEmail: string[];
 }
 
+/** Expose an existing collection without re-submitting posts or sending review emails. */
+export async function makePlanAvailable(planId: string, workspaceId: string): Promise<void> {
+  const plan = await findPlanForWorkspace(planId, workspaceId);
+  if (plan.client.archivedAt) throw new ValidationError("Il cliente è archiviato");
+  if (plan.sentAt) return;
+  const visible = await prisma.post.findMany({
+    where: { planId, workspaceId, clientId: plan.clientId, status: { in: [...CLIENT_VISIBLE_STATUSES] } },
+    select: { id: true },
+    take: 1,
+  });
+  if (!visible.length) throw new ValidationError("Invia prima almeno un post in revisione. Le bozze rimangono private.");
+  await prisma.contentPlan.updateMany({
+    where: { id: planId, workspaceId, sentAt: null },
+    data: { sentAt: new Date() },
+  });
+  await syncPlanStatus(planId);
+}
+
 /**
  * "Invia il piano al cliente": attaches the month's posts still outside the
  * plan, sends every DRAFT / CHANGES_REQUESTED post of the plan to review in

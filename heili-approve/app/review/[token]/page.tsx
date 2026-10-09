@@ -85,11 +85,16 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const socialOnly = kinds.every((k) => k === "SOCIAL_POST");
   const adsOnly = kinds.every((k) => k === "AD_CREATIVE");
   const firstName = reviewer.name.trim().split(/\s+/)[0] || reviewer.name;
+  const reviewProgress = planProgress(posts.map((post) => post.status));
 
   return (
     <main className="space-y-8">
-      <section className="panel space-y-3 p-5 sm:p-6">
-        <h1 className="text-[28px] font-semibold leading-tight">Ciao {firstName}!</h1>
+      <section className="space-y-4 py-3 sm:py-5">
+        <p className="label-caps">Il tuo spazio di revisione</p>
+        <div className="flex flex-wrap items-end justify-between gap-5">
+          <h1 className="text-[30px] font-semibold leading-tight">Ciao {firstName}.<br /><span className="text-muted">Un contenuto alla volta.</span></h1>
+          {reviewProgress.total > 0 && <div className="w-full sm:w-64"><PlanProgressBar progress={reviewProgress} label={`${reviewProgress.approved + reviewProgress.changes} di ${reviewProgress.total} contenuti revisionati`} /></div>}
+        </div>
         <p className="text-base text-muted">
           {groups.toReview.length === 0
             ? `Non ci sono ${noun.many} da approvare in questo momento. Ti scriveremo quando ce ne saranno di nuovi.`
@@ -112,9 +117,9 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
             {[
               ["Guarda", `Apri ${noun.theOne} come apparirà davvero.`],
               ["Commenta", "Tocca un punto o un secondo del video; puoi anche dettare a voce."],
-              ["Approva", "Un tocco e l'agenzia procede. Oppure chiedi modifiche."],
+              ["Concludi", "Approva oppure invia le modifiche. Il tuo feedback fa avanzare il lavoro."],
             ].map(([title, text], index) => (
-              <li key={title} className="inset flex gap-2.5 p-3">
+              <li key={title} className="flex gap-2.5 py-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
                   {index + 1}
                 </span>

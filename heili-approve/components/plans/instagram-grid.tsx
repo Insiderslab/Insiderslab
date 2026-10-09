@@ -93,7 +93,7 @@ export default function InstagramGrid({
 }) {
   const initial = accountName.trim().charAt(0).toUpperCase() || "?";
   return (
-    <figure className="space-y-3" data-testid="instagram-grid">
+    <figure className="panel studio-panel mx-auto max-w-3xl space-y-4" data-testid="instagram-grid">
       <figcaption className="flex items-center gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft text-base font-semibold text-accent">
           {logoUrl ? (
@@ -110,7 +110,7 @@ export default function InstagramGrid({
       {tiles.length === 0 ? (
         <p className="inset p-4 text-sm text-muted">Nessun contenuto Instagram incluso nel piano. I post delle altre reti sono nell’elenco del piano.</p>
       ) : (
-        <ul className="grid grid-cols-3 gap-0.5 overflow-hidden rounded-lg" aria-label="Anteprima dei contenuti Instagram del piano">
+        <ul className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl bg-surface-sunken p-1" aria-label="Anteprima dei contenuti Instagram del piano">
           {tiles.map((tile) => {
             const inner = (
               <>

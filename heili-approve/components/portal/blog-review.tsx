@@ -25,6 +25,7 @@ import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
   AssistantToggle,
+  AssistantActionButton,
   DecisionBar,
   ReviewNav,
   SheetButtons,
@@ -103,8 +104,12 @@ export default function BlogReview({
   const assistantApproval = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [draft, setDraft] = useState<CommentDraft | null>(null);
+  const [draft, setDraft] = useState<CommentDraft | null>(
+    post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
+  );
   const [draftKey, setDraftKey] = useState(0);
+  const [commentDirty, setCommentDirty] = useState(false);
+  const [commentListening, setCommentListening] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
@@ -114,6 +119,7 @@ export default function BlogReview({
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [draftSwitchNotice, setDraftSwitchNotice] = useState<string | null>(null);
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
@@ -160,7 +166,15 @@ export default function BlogReview({
   // ─── Comments ──────────────────────────────────────────────────────────────
 
   function openDraft(next: CommentDraft) {
+    if (commentDirty && draft) {
+      setDecisionError("Hai una bozza non inviata. Inviala oppure annullala prima di spostarti su un altro punto.");
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+      return;
+    }
     setNotice(null);
+    setDraftSwitchNotice(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(next);
     setDraftKey((k) => k + 1);
   }
@@ -184,7 +198,10 @@ export default function BlogReview({
       if (result.stale) setStale(true);
       return result.error;
     }
-    setDraft(null);
+    setCommentDirty(false);
+    setCommentListening(false);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
     setDecisionError(null);
     setNotice(post.status === "CHANGES_REQUESTED"
       ? "Commento aggiunto alla richiesta di modifiche già inviata."
@@ -196,6 +213,7 @@ export default function BlogReview({
 
   function finish(result: Outcome) {
     setOutcome(result);
+    setCommentDirty(false);
     setDraft(null);
     setDecisionError(null);
     setSheet(null);
@@ -211,9 +229,9 @@ export default function BlogReview({
   }
 
   function blockUnsavedComment(): boolean {
-    if (draft === null) return false;
+    if (!commentDirty) return false;
     setDecisionError(UNSAVED_COMMENT_MESSAGE);
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('form textarea')?.focus());
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
     return true;
   }
 
@@ -274,7 +292,7 @@ export default function BlogReview({
   async function requestSavedChanges() {
     if (sheetBusy) return;
     setDecisionError(null);
-    const blocker = savedFeedbackBlocker(draft !== null, myOpenComments);
+    const blocker = savedFeedbackBlocker(commentDirty, myOpenComments);
     if (blocker) {
       setDecisionError(blocker);
       return;
@@ -298,7 +316,7 @@ export default function BlogReview({
   const approveFromAssistant = useCallback(
     () =>
       new Promise<void>((resolve, reject) => {
-        if (draft !== null) {
+        if (commentDirty) {
           reject(new Error(UNSAVED_COMMENT_MESSAGE));
           return;
         }
@@ -306,7 +324,7 @@ export default function BlogReview({
         setSheetError(null);
         setSheet("approve");
       }),
-    [draft]
+    [commentDirty]
   );
 
   async function submitFromAssistant(input: { message: string; reviewSessionId: string }) {
@@ -326,6 +344,11 @@ export default function BlogReview({
   }
 
   async function toggleAssistant() {
+    if (commentListening) {
+      setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
+      return;
+    }
     if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
     const open = !assistantOpen;
     setAssistantOpen(open);
@@ -338,6 +361,8 @@ export default function BlogReview({
     setStale(false);
     setDecisionError(null);
     setSheet(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(null);
     router.refresh();
   }
@@ -396,45 +421,37 @@ export default function BlogReview({
 
       {outcome === null && !post.canAct && <BlogStatusNotice post={post} />}
 
-      {changesSlot}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)] lg:items-start">
+        <div className="space-y-4">
+          {changesSlot}
+          <section ref={readerRef} aria-label="Articolo" className="scroll-mt-4 rounded-[20px] border border-border bg-background px-4 py-6 sm:px-6">
+            <BlogReader content={post.content} html={post.html} comments={readerComments}
+              onCommentRequest={canComment ? (anchor) => openDraft({ kind: "passage", anchor }) : undefined}
+              onCommentOpen={openComment} activeCommentId={activeCommentId} dateLabel={post.articleDateLabel} />
+          </section>
+          {seoSlot}
+        </div>
 
-      <section ref={readerRef} aria-label="Articolo" className="scroll-mt-4 rounded-lg border border-border bg-background px-4 py-6 sm:px-6">
-        <BlogReader
-          content={post.content}
-          html={post.html}
-          comments={readerComments}
-          onCommentRequest={canComment ? (anchor) => openDraft({ kind: "passage", anchor }) : undefined}
-          onCommentOpen={openComment}
-          activeCommentId={activeCommentId}
-          dateLabel={post.articleDateLabel}
-        />
-      </section>
-
-      {seoSlot}
-
-      {notice && (
-        <p className="text-sm text-success" role="status">
-          {notice}
-        </p>
-      )}
-
-      <section className="space-y-3" aria-labelledby="comments-title">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="comments-title" className="text-base font-semibold">
-            Commenti{post.comments.length > 0 ? ` (${post.comments.length})` : ""}
-          </h2>
+      <section className="space-y-4 rounded-[20px] border border-border bg-surface p-4 sm:p-5" aria-labelledby="comments-title">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
+            <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
+            <p className="mt-1 text-sm text-muted">Scrivilo, dettalo oppure parlane con Heili.</p>
+          </div>
+          {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
+        </div>
           {canComment && draft?.kind !== "general" && (
             <button
               type="button"
               onClick={() => openDraft({ kind: "general" })}
-              className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:border-border-hover"
+              className="min-h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium hover:border-border-hover"
             >
               Commento generale
             </button>
           )}
-        </div>
         {canAct && assistantEnabled && (
-          <AssistantToggle open={assistantOpen} mounted onToggle={toggleAssistant} containerRef={assistantRef}>
+          <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
             <AssistantPanel
               key={`${post.id}-${post.versionNumber}`}
               controlRef={assistantControl}
@@ -449,15 +466,34 @@ export default function BlogReview({
             />
           </AssistantToggle>
         )}
+        <div hidden={assistantOpen}>
         {draft?.kind === "general" && canComment && (
           <CommentComposer
             key={draftKey}
             draft={draft}
             mediaLabel={null}
+            draftStorageScope={`${token}:${post.id}:${post.versionNumber}:general`}
             onSubmit={submitComment}
-            onCancel={() => { setDraft(null); setDecisionError(null); }}
+            onDirtyChange={setCommentDirty}
+            onListeningChange={setCommentListening}
+            assistantAction={
+              canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+            }
+            onCancel={() => {
+              setCommentDirty(false);
+              setCommentListening(false);
+              setDraft({ kind: "general" });
+              setDraftKey((key) => key + 1);
+              setDecisionError(null);
+              setDraftSwitchNotice(null);
+            }}
+            framed={false}
           />
         )}
+        </div>
+        {notice && <p className="text-sm text-success" role="status">{notice}</p>}
+        <div className="border-t border-border pt-4">
+          <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
         <BlogCommentList
           passages={passageComments}
           general={generalComments}
@@ -469,7 +505,9 @@ export default function BlogReview({
               : "Nessun commento su questa versione."
           }
         />
+        </div>
       </section>
+      </div>
 
       {historySlot}
 
@@ -486,7 +524,7 @@ export default function BlogReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-lg bg-accent px-3 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -494,7 +532,7 @@ export default function BlogReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-lg border border-border bg-background px-3 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50"
               >
                 Approva
               </button>
@@ -504,19 +542,47 @@ export default function BlogReview({
       )}
 
       <BottomSheet
-        open={draft?.kind === "passage" && canComment}
+        open={draft?.kind === "passage" && canComment && !assistantOpen}
         title="Commenta il passaggio"
-        onClose={() => setDraft(null)}
+        onClose={() => {
+          if (commentDirty) {
+            setDraftSwitchNotice("Hai una bozza non inviata. Inviala oppure annullala prima di chiudere.");
+            requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+            return;
+          }
+          setDraft({ kind: "general" });
+          setDraftKey((key) => key + 1);
+        }}
       >
         {draft?.kind === "passage" && (
+          <>
+          {draftSwitchNotice && (
+            <p className="rounded-md border border-error/40 bg-surface p-3 text-sm text-error" role="alert">
+              {draftSwitchNotice}
+            </p>
+          )}
           <CommentComposer
             key={draftKey}
             draft={draft}
             mediaLabel={null}
+            draftStorageScope={`${token}:${post.id}:${post.versionNumber}:passage`}
             onSubmit={submitComment}
-            onCancel={() => { setDraft(null); setDecisionError(null); }}
+            onDirtyChange={setCommentDirty}
+            onListeningChange={setCommentListening}
+            assistantAction={
+              canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+            }
+            onCancel={() => {
+              setCommentDirty(false);
+              setCommentListening(false);
+              setDraft({ kind: "general" });
+              setDraftKey((key) => key + 1);
+              setDecisionError(null);
+              setDraftSwitchNotice(null);
+            }}
             framed={false}
           />
+          </>
         )}
       </BottomSheet>
 

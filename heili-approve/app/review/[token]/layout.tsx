@@ -53,7 +53,7 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
         productName={productName()}
         tagline={portalTagline(portalServices(reviewer.client))}
       />
-      <div className="mx-auto w-full max-w-6xl flex-1 px-4 pb-10 pt-4">
+      <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-10 pt-4 sm:px-6">
         <div className="mb-4 flex justify-end">
           <HelpGuide audience="client" services={portalServices(reviewer.client)} />
         </div>

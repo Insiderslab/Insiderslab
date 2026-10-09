@@ -13,6 +13,7 @@ import { planLinkMessage } from "@/components/share/messages";
 import ReviewerSharePicker, { type ReviewerShareChoice } from "@/components/share/reviewer-share-picker";
 import { prisma } from "@/lib/db/client";
 import { getReviewPlanUrl } from "@/lib/reviewers";
+import PlanAvailabilityButton from "./plan-availability-button";
 
 function safePlanUrl(reviewer: { tokenEncrypted: string }, planId: string): string | null {
   try {
@@ -79,8 +80,9 @@ export default async function PlanSharePanel({
         <div className="inset space-y-1 p-3" data-testid="plan-share-hint">
           <p className="text-sm font-medium">Il piano non è ancora visibile al cliente.</p>
           <p className="text-sm text-muted">
-            Completa i post e usa «Invia il piano al cliente». Il link comparirà qui senza altri passaggi.
+            Se i post sono già in revisione, rendi disponibile il piano senza reinviarli.
           </p>
+          <PlanAvailabilityButton planId={plan.id} />
         </div>
       ) : (
         <div className="inset p-3" data-testid="plan-share-row">

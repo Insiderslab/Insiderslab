@@ -19,7 +19,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { addPlanCommentAction, approvePlanAction } from "@/app/review/[token]/actions";
-import { PlanProgressBar } from "@/components/plans/plan-bits";
+import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
+import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
 import { SKIP_REASON_LABELS, planProgress, selectApproveAll, type ApproveAllSkipReason } from "@/lib/plan-rules";
 import BottomSheet from "./bottom-sheet";
@@ -62,6 +63,7 @@ export default function PlanReview({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentNotice, setCommentNotice] = useState<string | null>(null);
   const [commentPending, startComment] = useTransition();
+  const [dictating, setDictating] = useState(false);
 
   const progress = planProgress(plan.posts.map((p) => p.status));
   const selection = selectApproveAll(
@@ -79,7 +81,7 @@ export default function PlanReview({
   const waiting = plan.posts.filter((p) => p.canAct).length;
 
   function blockDraft(): boolean {
-    if (!comment.trim() && !commentPending) return false;
+    if (!comment.trim() && !commentPending && !dictating) return false;
     setCommentError("Hai un commento ancora da inviare. Invialo oppure svuota il campo prima di approvare il piano.");
     commentRef.current?.focus();
     return true;
@@ -117,7 +119,7 @@ export default function PlanReview({
 
   function sendComment() {
     const body = comment.trim();
-    if (!body) return;
+    if (!body || dictating || commentPending) return;
     setCommentError(null);
     setCommentNotice(null);
     startComment(async () => {
@@ -183,7 +185,7 @@ export default function PlanReview({
               <button
                 type="button"
                 onClick={openSheet}
-                className="min-h-12 rounded-lg bg-success px-5 text-base font-semibold text-white hover:opacity-90"
+                className="btn min-h-12 order-2"
                 data-testid="plan-approve-all"
               >
                 Approva tutto il piano ({toApprove})
@@ -192,7 +194,7 @@ export default function PlanReview({
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                className="inline-flex min-h-12 items-center justify-center rounded-lg border-2 border-foreground px-5 text-base font-semibold hover:bg-surface-hover"
+                className="btn btn-primary min-h-12 order-1"
               >
                 Rivedi uno per uno
               </Link>
@@ -201,7 +203,7 @@ export default function PlanReview({
         )}
       </header>
 
-      <section className="space-y-3" aria-labelledby="plan-grid">
+      <PlanViews instagram={<section className="space-y-3" aria-labelledby="plan-grid">
         <div className="space-y-1">
           <h2 id="plan-grid" className="text-lg font-semibold">
             Post Instagram del piano
@@ -209,9 +211,9 @@ export default function PlanReview({
           <p className="text-sm text-muted">Anteprima dei soli post Instagram inclusi nel piano, dal più recente. Non include i contenuti già presenti sul profilo. Tocca un post per aprirlo.</p>
         </div>
         {gridSlot}
-      </section>
+      </section>}
 
-      <section className="space-y-3" aria-labelledby="plan-posts">
+      list={<section className="space-y-3" aria-labelledby="plan-posts">
         <h2 id="plan-posts" className="flex items-center gap-2 text-lg font-semibold">
           I post del mese
           <span className="chip chip-offline">{plan.posts.length}</span>
@@ -223,9 +225,9 @@ export default function PlanReview({
             </li>
           ))}
         </ol>
-      </section>
+      </section>} />
 
-      <section className="space-y-3" aria-labelledby="plan-comment">
+      <section className="panel space-y-3 p-5" aria-labelledby="plan-comment">
         <div className="space-y-1">
           <h2 id="plan-comment" className="text-lg font-semibold">
             Commento sul piano
@@ -258,14 +260,17 @@ export default function PlanReview({
             className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
           />
         </label>
+        <div className="flex items-center justify-end gap-2">
+        <DictationButton value={comment} onChange={setComment} maxLength={5000} compact disabled={commentPending || busy} onListeningChange={setDictating} />
         <button
           type="button"
           onClick={sendComment}
-          disabled={commentPending || comment.trim() === ""}
-          className="min-h-11 rounded-md border border-border px-4 text-sm font-medium hover:border-border-hover disabled:opacity-50"
+          disabled={commentPending || dictating || comment.trim() === ""}
+          className="btn btn-primary min-h-11"
         >
           {commentPending ? "Invio…" : "Invia il commento"}
         </button>
+        </div>
         {commentError && (
           <p className="text-sm text-error" role="alert">
             {commentError}
@@ -283,7 +288,7 @@ export default function PlanReview({
           <button
             type="button"
             onClick={openSheet}
-            className="min-h-12 w-full rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90"
+            className="btn min-h-12 w-full"
           >
             Approva tutto il piano ({toApprove})
           </button>

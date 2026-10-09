@@ -58,6 +58,7 @@ import {
 import KindLabel from "./kind-label";
 import {
   AssistantToggle,
+  AssistantActionButton,
   DecisionBar,
   ReviewNav,
   SheetButtons,
@@ -128,9 +129,13 @@ export default function AdsReview({
 
   const [decided, setDecided] = useState<Record<string, PortalVariantDecision>>({});
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [draft, setDraft] = useState<VariantDraft | null>(null);
+  const [draft, setDraft] = useState<VariantDraft | null>(
+    post.canAct || post.status === "CHANGES_REQUESTED" ? { variantId: "", draft: { kind: "general" } } : null
+  );
   const [assetDraft, setAssetDraft] = useState<{ variantId: string; asset: GoogleAssetRef } | null>(null);
   const [draftKey, setDraftKey] = useState(0);
+  const [commentDirty, setCommentDirty] = useState(false);
+  const [commentListening, setCommentListening] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -220,8 +225,15 @@ export default function AdsReview({
   // ─── Comments ──────────────────────────────────────────────────────────────
 
   function openDraft(variantId: string, next: CommentDraft) {
+    if (commentDirty && (draft || assetDraft)) {
+      setDecisionError("Hai una bozza non inviata. Inviala oppure annullala prima di spostarti su un altro punto.");
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+      return;
+    }
     activeVariant.current = variantId;
     setNotice(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setAssetDraft(null);
     setDraft({ variantId, draft: next });
     setDraftKey((k) => k + 1);
@@ -252,8 +264,11 @@ export default function AdsReview({
       if (result.stale) setStale(true);
       return result.error;
     }
-    setDraft(null);
+    setCommentDirty(false);
+    setCommentListening(false);
+    setDraft({ variantId: "", draft: { kind: "general" } });
     setAssetDraft(null);
+    setDraftKey((key) => key + 1);
     setDecisionError(null);
     setNotice(post.status === "CHANGES_REQUESTED"
       ? "Commento aggiunto alla richiesta di modifiche già inviata."
@@ -262,8 +277,15 @@ export default function AdsReview({
   }
 
   function openAssetDraft(variantId: string, asset: GoogleAssetRef) {
+    if (commentDirty && (draft || assetDraft)) {
+      setDecisionError("Hai una bozza non inviata. Inviala oppure annullala prima di spostarti su un altro punto.");
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+      return;
+    }
     activeVariant.current = variantId;
     setNotice(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(null);
     setAssetDraft({ variantId, asset });
   }
@@ -292,6 +314,7 @@ export default function AdsReview({
 
   function finish(next: Outcome) {
     setOutcome(next);
+    setCommentDirty(false);
     setDraft(null);
     setAssetDraft(null);
     setDecisionError(null);
@@ -308,9 +331,9 @@ export default function AdsReview({
   }
 
   function blockUnsavedComment(): boolean {
-    if (draft === null && assetDraft === null) return false;
+    if (!commentDirty) return false;
     setDecisionError(UNSAVED_COMMENT_MESSAGE);
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('form textarea')?.focus());
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
     return true;
   }
 
@@ -376,7 +399,7 @@ export default function AdsReview({
   async function requestSavedChanges() {
     if (sheetBusy) return;
     setDecisionError(null);
-    const blocker = savedFeedbackBlocker(draft !== null || assetDraft !== null, myOpenComments);
+    const blocker = savedFeedbackBlocker(commentDirty, myOpenComments);
     if (blocker) {
       setDecisionError(blocker);
       return;
@@ -402,7 +425,7 @@ export default function AdsReview({
   const sendFromAssistant = useCallback(
     () =>
       new Promise<void>((resolve, reject) => {
-        if (draft !== null || assetDraft !== null) {
+        if (commentDirty) {
           reject(new Error(UNSAVED_COMMENT_MESSAGE));
           return;
         }
@@ -415,7 +438,7 @@ export default function AdsReview({
         setSheetError(null);
         setSheet("send");
       }),
-    [firstMissing, draft, assetDraft]
+    [firstMissing, commentDirty]
   );
 
   async function submitFromAssistant(input: { message: string; reviewSessionId: string }) {
@@ -435,6 +458,11 @@ export default function AdsReview({
   }
 
   async function toggleAssistant() {
+    if (commentListening) {
+      setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
+      return;
+    }
     if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
     const open = !assistantOpen;
     setAssistantOpen(open);
@@ -447,6 +475,8 @@ export default function AdsReview({
     setStale(false);
     setDecisionError(null);
     setSheet(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(null);
     setAssetDraft(null);
     setDecided({});
@@ -603,6 +633,8 @@ export default function AdsReview({
         </p>
       )}
 
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)] lg:items-start">
+      <div className="space-y-4">
       {variants.map((variant, index) => (
         <div
           key={variant.id}
@@ -628,25 +660,54 @@ export default function AdsReview({
             onRequestGeneralComment={canComment ? () => openDraft(variant.id, { kind: "general" }) : undefined}
             composer={
               draft?.variantId === variant.id && canComment ? (
+                <div hidden={assistantOpen}>
                 <VariantComposer
                   key={draftKey}
                   variant={variant}
                   draft={draft.draft}
+                  draftStorageScope={`${token}:${post.id}:${post.versionNumber}:variant:${variant.id}`}
+                  onDirtyChange={setCommentDirty}
+                  onListeningChange={setCommentListening}
+                  assistantAction={
+                    canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                  }
                   onSubmit={(input) => submitComment(variant.id, input)}
-                  onCancel={() => { setDraft(null); setDecisionError(null); }}
+                  onCancel={() => {
+                    setCommentDirty(false);
+                    setCommentListening(false);
+                    setDraft({ variantId: "", draft: { kind: "general" } });
+                    setDraftKey((key) => key + 1);
+                    setDecisionError(null);
+                  }}
                 />
+                </div>
               ) : undefined
             }
             onCommentAsset={canComment ? (asset) => openAssetDraft(variant.id, asset) : undefined}
             activeAsset={assetDraft?.variantId === variant.id ? assetDraft.asset : null}
             assetComposer={
               assetDraft?.variantId === variant.id && canComment ? (
+                <div hidden={assistantOpen}>
                 <AssetCommentComposer
                   key={`${assetDraft.asset.kind}-${assetDraft.asset.index}`}
                   asset={assetDraft.asset}
+                  draftStorageScope={`${token}:${post.id}:${post.versionNumber}:variant:${variant.id}:asset:${assetDraft.asset.kind}:${assetDraft.asset.index}`}
+                  onDirtyChange={setCommentDirty}
+                  onListeningChange={setCommentListening}
+                  assistantAction={
+                    canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                  }
                   onSubmit={(body) => submitComment(variant.id, { body })}
-                  onCancel={() => { setAssetDraft(null); setDecisionError(null); }}
+                  onCancel={() => {
+                    setCommentDirty(false);
+                    setCommentListening(false);
+                    setAssetDraft(null);
+                    setDraft({ variantId: "", draft: { kind: "general" } });
+                    setDraftKey((key) => key + 1);
+                    setDecisionError(null);
+                  }}
                 />
+                </div>
               ) : undefined
             }
             draftPin={draftPinOf(draft, variant.id)}
@@ -660,25 +721,29 @@ export default function AdsReview({
           />
         </div>
       ))}
+      </div>
 
       {(setComments.length > 0 || canComment || (canAct && assistantEnabled)) && (
-        <section className="space-y-3" aria-labelledby="set-comments-title">
-          <div className="flex items-center justify-between gap-3">
-            <h2 id="set-comments-title" className="text-base font-semibold">
-              Commenti sul set{setComments.length > 0 ? ` (${setComments.length})` : ""}
-            </h2>
+        <section className="space-y-4 rounded-[20px] border border-border bg-surface p-4 sm:p-5 lg:sticky lg:top-4" aria-labelledby="set-comments-title">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
+              <h2 id="set-comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
+              <p className="mt-1 text-sm text-muted">Sul set in generale puoi scrivere, dettare o parlare con Heili.</p>
+            </div>
+            {setComments.length > 0 && <span className="text-xs text-muted">{setComments.length} salvati</span>}
+          </div>
             {canComment && !(draft?.variantId === "" && draft.draft.kind === "general") && (
               <button
                 type="button"
                 onClick={() => openDraft("", { kind: "general" })}
-                className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:border-border-hover"
+                className="min-h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium hover:border-border-hover"
               >
                 Scrivi un commento
               </button>
             )}
-          </div>
           {canAct && assistantEnabled && (
-            <AssistantToggle open={assistantOpen} mounted onToggle={toggleAssistant} containerRef={assistantRef}>
+            <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
               <AssistantPanel
                 key={`${post.id}-${post.versionNumber}`}
                 controlRef={assistantControl}
@@ -695,22 +760,41 @@ export default function AdsReview({
               />
             </AssistantToggle>
           )}
+          <div hidden={assistantOpen}>
           {draft?.variantId === "" && canComment && (
             <CommentComposer
               key={draftKey}
               draft={draft.draft}
               mediaLabel={null}
+              draftStorageScope={`${token}:${post.id}:${post.versionNumber}:set`}
+              onDirtyChange={setCommentDirty}
+              onListeningChange={setCommentListening}
+              assistantAction={
+                canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+              }
               onSubmit={(input) => submitComment(null, input)}
-              onCancel={() => { setDraft(null); setDecisionError(null); }}
+              onCancel={() => {
+                setCommentDirty(false);
+                setCommentListening(false);
+                setDraft({ variantId: "", draft: { kind: "general" } });
+                setDraftKey((key) => key + 1);
+                setDecisionError(null);
+              }}
+              framed={false}
             />
           )}
+          </div>
+          <div className="border-t border-border pt-4">
+            <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
           <CommentList
             comments={setComments}
             media={[]}
             emptyText="Per la campagna in generale (date, budget, pubblico) scrivi qui; per una variante usa «Commenta la variante»."
           />
+          </div>
         </section>
       )}
+      </div>
 
       {historySlot}
 
@@ -733,7 +817,7 @@ export default function AdsReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-lg border border-border bg-background px-3 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50"
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -741,7 +825,7 @@ export default function AdsReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy || count.missing.length > 0}
-                className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-lg bg-accent px-3 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 Invia le mie decisioni
               </button>
@@ -797,13 +881,21 @@ function draftPinOf(
 function VariantComposer({
   variant,
   draft,
+  draftStorageScope,
   onSubmit,
   onCancel,
+  onDirtyChange,
+  onListeningChange,
+  assistantAction,
 }: {
   variant: AdVariant;
   draft: CommentDraft;
+  draftStorageScope: string;
   onSubmit: (input: CommentSubmission) => Promise<string | null>;
   onCancel: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+  onListeningChange: (listening: boolean) => void;
+  assistantAction?: ReactNode;
 }) {
   const index = draft.kind === "pin" || draft.kind === "moment" ? draft.mediaIndex : null;
   const media = index !== null ? variant.media[index] : undefined;
@@ -815,6 +907,11 @@ function VariantComposer({
       draft={draft}
       mediaLabel={label}
       durationSec={media?.durationSec}
+      draftStorageScope={draftStorageScope}
+      onDirtyChange={onDirtyChange}
+      onListeningChange={onListeningChange}
+      assistantAction={assistantAction}
+      autoFocus
       onSubmit={onSubmit}
       onCancel={onCancel}
     />

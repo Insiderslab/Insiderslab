@@ -16,13 +16,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import InstagramGrid, { type GridTile } from "@/components/plans/instagram-grid";
-import { PlanProgressBar, PlanStatusChip } from "@/components/plans/plan-bits";
+import { PlanProgressBar, PlanStatusChip, PlanViews } from "@/components/plans/plan-bits";
 import PlanCalendar from "@/components/plans/plan-calendar";
 import PlanEditor from "@/components/plans/plan-editor";
 import { AddToPlanButton } from "@/components/plans/plan-post-buttons";
 import PlanSharePanel from "@/components/plans/plan-share-panel";
 import { dayKeyIn, formatDateTime, newContentHref, toLocalParts } from "@/components/posts/helpers";
 import StatusBadge from "@/components/status-badge";
+import QuickReviewLink from "@/components/share/quick-review-link";
 import { NETWORK_LABELS, isNetwork, parseMediaItems, type MediaItem } from "@/lib/domain";
 import { NotFoundError } from "@/lib/errors";
 import {
@@ -137,6 +138,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
+            {plan.sentAt && <QuickReviewLink kind="plan" id={plan.id} />}
             <Link href={`/calendar?clientId=${plan.client.id}&mese=${plan.month}`} className="btn btn-sm min-h-11">
               Calendario del mese
             </Link>
@@ -166,66 +168,73 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
         )}
       </header>
 
-      <section className="panel p-4 sm:p-5" aria-labelledby="plan-flow-title">
-        <h2 id="plan-flow-title" className="text-base font-semibold">Cosa succede in questo piano</h2>
-        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-          <p><span className="font-semibold">1. Prepara.</span> Crea o modifica i post del mese. Restano bozze finché non li invii.</p>
-          <p><span className="font-semibold">2. Controlla.</span> Calendario, elenco e griglia mostrano gli stessi post in modi diversi.</p>
-          <p><span className="font-semibold">3. Invia.</span> «Invia il piano» manda insieme solo bozze e correzioni pronte.</p>
-        </div>
-      </section>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_25rem]">
+        <div className="min-w-0">
+          <PlanViews
+            list={
+              <div className="space-y-6">
+                <section className="space-y-3" aria-labelledby="plan-posts-title">
+                  <div>
+                    <h3 id="plan-posts-title" className="text-lg font-semibold">Post inclusi ({plan.posts.length})</h3>
+                    <p className="text-sm text-muted">Questi contenuti fanno già parte del piano del cliente.</p>
+                  </div>
+                  {plan.posts.length === 0 ? (
+                    <p className="panel p-5 text-sm text-muted">Il piano non ha ancora post.</p>
+                  ) : (
+                    <ol className="panel divide-y divide-border overflow-visible" data-testid="plan-posts">
+                      {plan.posts.map((post) => <PlanPostRow key={post.id} post={post} zone={zone} />)}
+                    </ol>
+                  )}
+                </section>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="min-w-0 space-y-6">
-          <section className="hidden space-y-3 md:block" aria-labelledby="plan-calendar-title">
-            <div>
-              <h2 id="plan-calendar-title" className="text-lg font-semibold capitalize">Calendario · {planMonthTitle(plan.month)}</h2>
-              <p className="text-sm text-muted">Tutti i post del mese: {plan.posts.length} nel piano e {plan.outside.length} da aggiungere. Aggiungere una bozza al piano non la invia al cliente.</p>
-            </div>
-            <PlanCalendar month={plan.month} timeZone={zone} posts={calendarPosts} now={now} />
-          </section>
-
-          <section className="space-y-3" aria-labelledby="plan-posts-title">
-            <h2 id="plan-posts-title" className="text-lg font-semibold">
-              Post del piano ({plan.posts.length})
-            </h2>
-            {plan.posts.length === 0 ? (
-              <p className="panel p-4 text-sm text-muted">Il piano non ha ancora post.</p>
-            ) : (
-              <ol className="panel divide-y divide-border overflow-hidden" data-testid="plan-posts">
-                {plan.posts.map((post) => (
-                  <PlanPostRow key={post.id} post={post} zone={zone} />
-                ))}
-              </ol>
-            )}
-          </section>
-
-          {plan.outside.length > 0 && (
-            <section className="space-y-3" aria-labelledby="plan-outside-title">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 id="plan-outside-title" className="text-lg font-semibold">
-                  Post del mese da aggiungere ({plan.outside.length})
-                </h2>
-                {plan.outside.length > 1 && (
-                  <AddToPlanButton planId={plan.id} postIds={plan.outside.map((p) => p.id)} label="Aggiungi tutti al piano" />
+                {plan.outside.length > 0 && (
+                  <section className="space-y-3" aria-labelledby="plan-outside-title">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 id="plan-outside-title" className="text-lg font-semibold">Da aggiungere ({plan.outside.length})</h3>
+                        <p className="text-sm text-muted">Sono post dello stesso mese, ma non fanno ancora parte del piano.</p>
+                      </div>
+                      {plan.outside.length > 1 && (
+                        <AddToPlanButton planId={plan.id} postIds={plan.outside.map((p) => p.id)} label="Aggiungi tutti" />
+                      )}
+                    </div>
+                    <div className="rounded-xl bg-warning-soft p-3 text-sm text-foreground">
+                      Aggiungerli serve a comporre il piano. Le bozze diventano visibili al cliente solo quando le invii in revisione.
+                    </div>
+                    <ol className="panel divide-y divide-border overflow-visible">
+                      {plan.outside.map((post) => (
+                        <PlanPostRow
+                          key={post.id}
+                          post={post}
+                          zone={zone}
+                          action={<AddToPlanButton planId={plan.id} postIds={[post.id]} label="Aggiungi" />}
+                        />
+                      ))}
+                    </ol>
+                  </section>
                 )}
               </div>
-              <div className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm">
-                Questi post appartengono a {monthName}, ma non sono ancora nel piano. «Invia il piano» li aggiunge
-                automaticamente; puoi aggiungerli ora per controllare la composizione del piano. Le bozze diventeranno visibili al cliente solo dopo l’invio in revisione.
+            }
+            calendar={
+              <div className="space-y-3">
+                <p className="text-sm text-muted">
+                  {plan.posts.length} nel piano e {plan.outside.length} da aggiungere. Il calendario è una vista: non invia contenuti.
+                </p>
+                <PlanCalendar month={plan.month} timeZone={zone} posts={calendarPosts} now={now} />
               </div>
-              <ol className="panel divide-y divide-border overflow-hidden">
-                {plan.outside.map((post) => (
-                  <PlanPostRow
-                    key={post.id}
-                    post={post}
-                    zone={zone}
-                    action={<AddToPlanButton planId={plan.id} postIds={[post.id]} label="Aggiungi al piano" />}
-                  />
-                ))}
-              </ol>
-            </section>
-          )}
+            }
+            instagram={
+              <div className="space-y-3">
+                <p className="text-sm text-muted">Solo i contenuti Instagram inclusi, dal più recente. Tocca una casella per aprire il post.</p>
+                <InstagramGrid
+                  tiles={tiles}
+                  accountName={plan.client.name}
+                  logoUrl={plan.client.logoUrl}
+                  caption={`${tiles.length} contenuti Instagram del piano`}
+                />
+              </div>
+            }
+          />
         </div>
 
         <aside className="order-first min-w-0 space-y-6 lg:order-none">
@@ -248,23 +257,6 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             planName={planName}
             toReview={progress.inReview}
           />
-
-          <section className="panel space-y-3 p-4 sm:p-5" aria-labelledby="plan-grid-title">
-            <div className="space-y-1">
-              <h2 id="plan-grid-title" className="text-lg font-semibold">
-                Post Instagram inclusi nel piano
-              </h2>
-              <p className="text-sm text-muted">
-                Solo i contenuti Instagram già inclusi nel piano, dal più recente. Non include il profilo esistente né i post ancora da aggiungere. Tocca una casella per aprirla.
-              </p>
-            </div>
-            <InstagramGrid
-              tiles={tiles}
-              accountName={plan.client.name}
-              logoUrl={plan.client.logoUrl}
-              caption={`${tiles.length} contenuti Instagram del piano`}
-            />
-          </section>
 
           {plan.comments.length > 0 && (
             <section className="panel space-y-3 p-4 sm:p-5" aria-labelledby="plan-comments-title">
@@ -295,6 +287,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
 function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: string; action?: React.ReactNode }) {
   const { cover } = coverOf(post);
   const comments = post._count.comments;
+  const clientVisible = post.status === "IN_REVIEW" || post.status === "CHANGES_REQUESTED";
   return (
     <li className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap" data-testid="plan-post-row">
       <span className="h-14 w-14 shrink-0 overflow-hidden rounded bg-surface-sunken">
@@ -320,7 +313,12 @@ function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: st
           )}
         </span>
       </span>
-      {action && <span className="w-full pl-[4.25rem] sm:w-auto sm:pl-0">{action}</span>}
+      {(action || clientVisible) && (
+        <div className="flex w-full flex-wrap items-start justify-end gap-2 pl-[4.25rem] sm:w-auto sm:pl-0">
+          {action}
+          {clientVisible && <QuickReviewLink kind="post" id={post.id} />}
+        </div>
+      )}
     </li>
   );
 }

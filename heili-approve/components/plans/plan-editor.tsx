@@ -110,14 +110,15 @@ export default function PlanEditor({
   ].filter(Boolean);
 
   return (
-    <section className="panel space-y-4 p-4 sm:p-5" aria-labelledby="plan-editor" data-testid="plan-editor">
-      <div className="space-y-1">
+    <section className="panel studio-panel space-y-5" aria-labelledby="plan-editor" data-testid="plan-editor">
+      <div className="studio-section-heading">
+        <div>
         <h2 id="plan-editor" className="text-lg font-semibold">
           Prepara e invia
         </h2>
-        <p className="text-sm text-muted">
+        <p>
           Il cliente legge questo messaggio prima dei post. {sent ? "Salvare aggiorna il piano già condiviso senza inviare email né nuove bozze." : "Salvare prepara il piano; l’invio lo rende disponibile al cliente."}
-        </p>
+        </p></div>
       </div>
 
       <label htmlFor={ids.title} className="block space-y-1">
@@ -176,7 +177,7 @@ export default function PlanEditor({
           {pending && !confirming ? "Salvataggio…" : "Salva senza inviare"}
         </button>
       </div>
-      <p className="text-sm text-muted">
+      <p className="rounded-xl bg-surface-hover p-3 text-sm text-muted">
         {toSend === 0
           ? outsideTotal > 0
             ? "Non ci sono nuove bozze da inviare. Usa «Aggiungi al piano» sui post del mese già in revisione o approvati."
@@ -189,7 +190,7 @@ export default function PlanEditor({
       </p>
 
       {confirming && (
-        <div className="inset space-y-3 p-3" role="alertdialog" aria-labelledby="plan-send-confirm-title" data-testid="plan-send-confirmation">
+        <div className="inset space-y-3 p-4" role="alertdialog" aria-labelledby="plan-send-confirm-title" data-testid="plan-send-confirmation">
           <div id="plan-send-confirm-title" className="space-y-1 text-sm">
             <p className="font-semibold">
               {`Stai per inviare ${toSend === 1 ? "1 post" : `${toSend} post`} a ${clientName}.`}

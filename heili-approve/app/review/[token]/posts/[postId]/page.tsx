@@ -31,6 +31,7 @@ import type {
   PortalVersionChanges,
 } from "@/components/portal/types";
 import VersionChanges from "@/components/portal/version-changes";
+import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { coerceAdContent } from "@/lib/content/ads";
 import { coerceBlogContent, locateAnchors, renderMarkdownSafe } from "@/lib/content/blog";
 import type { BlogContent } from "@/lib/content/types";
@@ -47,7 +48,7 @@ import {
   type ReviewerPostVersion,
   type ReviewerRef,
 } from "@/lib/posts";
-import { byPublishAsc, planHeading, planNeighbors } from "@/lib/plan-rules";
+import { byPublishAsc, planHeading, planNeighbors, planProgress } from "@/lib/plan-rules";
 import { getPlanForReviewer } from "@/lib/plans";
 import { isAssistantEnabled } from "@/lib/review-assistant";
 import { getPortalReviewer } from "../../reviewer";
@@ -211,6 +212,12 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
   };
   const listKinds: ContentKind[] = [...new Set([post.kind, ...summaries.map((p) => p.kind)])];
   const assistantEnabled = isAssistantEnabled();
+  const progress = planProgress(summaries.filter(item => !planNav || item.planId === plan?.id).map(item => item.status));
+  const progressSlot = progress.total > 0 ? (
+    <div className="mb-5 ml-auto max-w-sm" aria-label={planNav ? "Avanzamento del piano" : "Avanzamento dei contenuti"}>
+      <PlanProgressBar progress={progress} size="sm" label={`${progress.approved + progress.changes} di ${progress.total} contenuti revisionati`} />
+    </div>
+  ) : null;
 
   const base: PortalItemBase = {
     id: post.id,
@@ -288,6 +295,7 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
 
     return (
       <main>
+        {progressSlot}
         <BlogReview
           token={token}
           post={blogPost}
@@ -322,6 +330,7 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
 
     return (
       <main>
+        {progressSlot}
         <AdsReview
           token={token}
           post={adsPost}
@@ -361,6 +370,7 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
 
   return (
     <main>
+      {progressSlot}
       <PostReview
         token={token}
         post={portalPost}

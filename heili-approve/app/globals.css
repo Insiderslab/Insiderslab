@@ -7,24 +7,24 @@
 
 @theme inline {
   /* Surfaces */
-  --color-background: #f5f6f4; /* surface */
+  --color-background: #f4f7f7; /* Studio canvas */
   --color-surface: #ffffff; /* surface-raised */
-  --color-surface-hover: #eaeeec; /* surface-sunken */
-  --color-surface-sunken: #eaeeec;
-  --color-border: #d3dadd; /* line */
-  --color-border-hover: #7d8a95; /* line-strong */
-  --color-line-strong: #7d8a95;
+  --color-surface-hover: #edf3f3; /* surface-sunken */
+  --color-surface-sunken: #eaf0f0;
+  --color-border: #dbe5e7; /* line */
+  --color-border-hover: #8ca0a6; /* line-strong */
+  --color-line-strong: #8ca0a6;
 
   /* Text */
-  --color-foreground: #16202b; /* ink */
-  --color-muted: #4b5866; /* ink-muted */
+  --color-foreground: #002936; /* ink */
+  --color-muted: #5b7179; /* ink-muted */
 
   /* Brand (ink) and node (AI) */
-  --color-accent: #1f3f73; /* brand */
-  --color-accent-hover: #16305a;
-  --color-accent-soft: #e2e9f5; /* brand-soft */
-  --color-node: #0b6b6a;
-  --color-node-soft: #dcf0ee;
+  --color-accent: #003141; /* brand navy */
+  --color-accent-hover: #002936;
+  --color-accent-soft: #e1eeee; /* brand-soft */
+  --color-node: #126d5f;
+  --color-node-soft: #dff2eb;
 
   /* States: fresh / stale / critical / offline */
   --color-success: #2c6a1f;
@@ -44,14 +44,14 @@
   --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
 
   /* `rounded` = radius-md (controls); cards use .panel / rounded-xl (radius-lg). */
-  --radius: 8px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 12px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 20px;
 
-  --shadow-raised: 0 1px 2px rgba(22, 32, 43, 0.08);
-  --shadow-overlay: 0 8px 24px rgba(22, 32, 43, 0.16);
+  --shadow-raised: 0 8px 28px rgba(0, 49, 65, 0.055);
+  --shadow-overlay: 0 20px 48px rgba(0, 41, 54, 0.18);
 }
 
 html {
@@ -64,6 +64,11 @@ body {
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 22px;
+}
+
+::selection {
+  background: var(--color-node-soft);
+  color: var(--color-foreground);
 }
 
 /* Titles: Schibsted Grotesk (title-1…title-3). */
@@ -107,14 +112,14 @@ select:focus-visible {
 .panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 20px;
   box-shadow: var(--shadow-raised);
 }
 
 /* Inset — area incassata dentro un pannello (no box-in-box borders). */
 .inset {
-  background: var(--color-background);
-  border-radius: 8px;
+  background: var(--color-surface-hover);
+  border-radius: 12px;
 }
 
 /* Section label (label: 12px, 600, uppercase, 0.06em). */
@@ -133,9 +138,9 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 42px;
   padding: 0 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--color-line-strong);
   background: var(--color-surface);
   color: var(--color-foreground);
@@ -197,7 +202,10 @@ select:focus-visible {
     min-height: 44px;
   }
   .btn-sm {
-    min-height: 36px;
+    min-height: 44px;
+  }
+  .studio-view-tab {
+    min-height: 44px;
   }
 }
 
@@ -206,13 +214,20 @@ select:focus-visible {
   width: 100%;
   min-height: 40px;
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--color-line-strong);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-foreground);
   font-size: 15px;
   line-height: 22px;
   outline: none;
+}
+.field:hover:not(:disabled) {
+  border-color: var(--color-line-strong);
+}
+.field:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 .field::placeholder {
   color: var(--color-muted);
@@ -255,6 +270,73 @@ select:focus-visible {
 .chip-node {
   --chip-ink: var(--color-node);
   --chip-soft: var(--color-node-soft);
+}
+
+/* Studio composition helpers: broad surfaces, quiet dividers and clear section hierarchy. */
+.studio-panel {
+  padding: 20px;
+}
+.studio-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.studio-section-heading h2,
+.studio-section-heading h3 {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 650;
+}
+.studio-section-heading p {
+  margin-top: 3px;
+  max-width: 68ch;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+.studio-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border-radius: 16px;
+  background: var(--color-surface);
+  padding: 10px;
+  box-shadow: var(--shadow-raised);
+}
+.studio-view-tabs {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 4px;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: var(--color-surface-sunken);
+  padding: 4px;
+}
+.studio-view-tab {
+  min-height: 40px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  padding: 0 14px;
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+.studio-view-tab[aria-selected="true"] {
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  box-shadow: 0 1px 5px rgba(0, 49, 65, 0.1);
+}
+
+@media (max-width: 640px) {
+  .studio-panel {
+    padding: 16px;
+  }
+  .studio-section-heading {
+    margin-bottom: 14px;
+  }
 }
 
 /* Kept as no-op aliases so existing markup degrades to plain surfaces. */

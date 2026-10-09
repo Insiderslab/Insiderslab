@@ -161,6 +161,7 @@ import {
   afterPlanPostDecided,
   approvePlan,
   getPlanForReviewer,
+  makePlanAvailable,
   sendPlan,
   sweepPlanCompletionNotifications,
 } from "@/lib/plans";
@@ -224,6 +225,23 @@ beforeEach(() => {
 });
 
 describe("portal access to a plan", () => {
+  it("makes an unsent plan with reviewed posts available without resubmitting or inviting", async () => {
+    db.posts.push(post("existing", { planId: "p3" }), post("draft", { planId: "p3", status: "DRAFT" }));
+    await makePlanAvailable("p3", "w1");
+    expect(db.plans.find(p => p.id === "p3")?.sentAt).toBeInstanceOf(Date);
+    expect(db.posts.find(p => p.id === "draft")?.status).toBe("DRAFT");
+    expect(mockPosts.submitForReview).not.toHaveBeenCalled();
+    expect(mockNotify.notifyPlanSent).not.toHaveBeenCalled();
+    const timestamp = db.plans.find(p => p.id === "p3")?.sentAt;
+    await makePlanAvailable("p3", "w1");
+    expect(db.plans.find(p => p.id === "p3")?.sentAt).toBe(timestamp);
+  });
+  it("does not expose draft-only plans or plans of another workspace", async () => {
+    db.posts.push(post("draft", { planId: "p3", status: "DRAFT" }));
+    await expect(makePlanAvailable("p3", "w1")).rejects.toBeInstanceOf(ValidationError);
+    await expect(makePlanAvailable("p3", "w2")).rejects.toBeInstanceOf(NotFoundError);
+    expect(db.plans.find(p => p.id === "p3")?.sentAt).toBeNull();
+  });
   it("shows the reviewer's own sent plan", async () => {
     await expect(getPlanForReviewer("p1", reviewer)).resolves.toMatchObject({ id: "p1", clientId: "c1" });
   });

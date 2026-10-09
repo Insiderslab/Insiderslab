@@ -575,11 +575,11 @@ export function AssistantPanel({
   const approveHighlighted = completed ? session?.verdict === "approve" : readiness === "ready_approve";
 
   return (
-    <section ref={panelRef} className="panel rounded-lg p-4 space-y-3" aria-label="Assistente di revisione">
-      <header className="flex items-start gap-3">
-        <HeiliAssistantIcon className="h-9 w-9" />
+    <section ref={panelRef} className="space-y-3 rounded-xl border border-border bg-background p-3" aria-label="Assistente di revisione">
+      <header className="flex items-start gap-2">
+        <HeiliAssistantIcon className="h-7 w-7" />
         <div className="min-w-0 space-y-1">
-          <h2 className="text-sm font-semibold">Assistente di revisione</h2>
+          <h2 className="text-sm font-semibold">Heili</h2>
           <p className="text-xs text-muted">
             Ti aiuta a spiegare all&apos;agenzia cosa cambiare. Non approva e non invia nulla al posto tuo.
           </p>
@@ -743,11 +743,10 @@ export function AssistantPanel({
               )}
             </div>
 
-            <div className="space-y-3 rounded-lg border border-accent/30 bg-surface p-4">
+            <div className="space-y-3 border-t border-border pt-3">
               <div className="flex items-start gap-3">
-                <HeiliAssistantIcon className="h-8 w-8 shrink-0" />
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold">Parla con Heili</p>
+                  <p className="text-sm font-semibold">Conversazione vocale</p>
                   <p className="text-xs text-muted">
                     Una conversazione naturale sul post: puoi interrompere Heili parlando, anche mentre risponde.
                     La voce è generata dall’AI. Scegli tu quando inviare il feedback.

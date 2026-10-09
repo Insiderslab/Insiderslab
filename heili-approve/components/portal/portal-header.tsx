@@ -8,7 +8,6 @@
  */
 
 import Link from "next/link";
-import { HeiliSymbol } from "@/components/brand";
 import { initials } from "@/components/post-preview/helpers";
 
 export default function PortalHeader({
@@ -27,7 +26,7 @@ export default function PortalHeader({
 }) {
   return (
     <header className="border-b border-border bg-surface">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <Link href={homeHref} className="flex min-w-0 items-center gap-3">
           {logoUrl ? (
             <img
@@ -49,9 +48,9 @@ export default function PortalHeader({
             {tagline && <span className="block text-xs leading-snug text-muted">{tagline}</span>}
           </span>
         </Link>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted" title={productName}>
-          <HeiliSymbol className="h-5 w-5" />
-          <span className="hidden sm:inline">{productName}</span>
+        <span className="flex shrink-0 flex-col text-right sm:flex-row sm:items-baseline sm:gap-2" aria-label={productName}>
+          <span className="font-display text-xl font-semibold tracking-tight text-foreground">approve</span>
+          <span className="text-[11px] text-muted">by heili</span>
         </span>
       </div>
     </header>

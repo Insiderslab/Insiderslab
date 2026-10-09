@@ -45,8 +45,9 @@ export default function PlanCalendar({
   const today = dayKeyIn(now, timeZone);
 
   return (
-    <div className="hidden overflow-hidden rounded-lg border border-border md:block" data-testid="plan-calendar">
-      <div className="grid grid-cols-7 bg-surface-sunken text-xs text-muted">
+    <div className="panel overflow-x-auto" data-testid="plan-calendar">
+      <div className="min-w-[760px] overflow-hidden rounded-[20px]">
+      <div className="grid grid-cols-7 bg-surface-sunken text-xs font-semibold text-muted">
         {WEEKDAY_SHORT.map((label) => (
           <div key={label} className="px-2 py-1.5">
             {label}
@@ -100,6 +101,7 @@ export default function PlanCalendar({
           })}
         </div>
       ))}
+      </div>
     </div>
   );
 }

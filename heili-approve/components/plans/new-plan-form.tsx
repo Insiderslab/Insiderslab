@@ -55,14 +55,14 @@ export default function NewPlanForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3" data-testid="new-plan-form">
+    <form onSubmit={submit} className="space-y-4" data-testid="new-plan-form">
       {highlight && (
         <p className="text-sm text-muted">
           Il piano raccoglie tutti i post social del cliente in quel mese: poi scrivi un messaggio introduttivo e lo invii
           in un colpo solo.
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
+      <div className="grid gap-3 rounded-2xl bg-surface-hover p-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
         <label htmlFor={ids.client} className="block space-y-1">
           <span className="label-caps block">Cliente</span>
           <select id={ids.client} value={client} onChange={(e) => setClient(e.target.value)} className="field min-h-11 text-base">

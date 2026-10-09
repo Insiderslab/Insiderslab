@@ -20,6 +20,19 @@ export interface HelpTopic {
 
 const TOPICS: HelpTopic[] = [
   {
+    id: "client-studio-feedback",
+    audience: "client",
+    title: "Scrivere, dettare o parlare con Heili",
+    summary: "Tre modi per spiegare cosa cambiare, nello stesso spazio feedback.",
+    searchTerms: ["studio", "microfono", "dettare", "voce", "heili", "feedback", "invia commento"],
+    routes: [/\/posts\//],
+    steps: [
+      { title: "Scegli il punto", body: "Tocca un punto della foto, ferma il video sul momento giusto oppure seleziona una frase. Il riferimento compare accanto al tuo feedback." },
+      { title: "Scrivi o parla", body: "Il microfono accanto alla freccia detta nel campo: puoi correggere il testo. «Parla con Heili» apre una conversazione per precisare la richiesta. La freccia salva il commento e lo rende visibile all'agenzia; una bozza sul dispositivo non è ancora inviata." },
+      { title: "Concludi quando sei pronto", body: "Con i commenti salvati, scegli «Chiedi modifiche» per inviare la richiesta senza riscriverli. Se hai usato Heili controlla prima il riepilogo. Oppure approva il contenuto: entrambi gli esiti fanno avanzare la revisione." },
+    ],
+  },
+  {
     id: "client-review-social",
     audience: "client",
     title: "Rivedere e approvare un post",
@@ -37,13 +50,13 @@ const TOPICS: HelpTopic[] = [
     id: "client-plan",
     audience: "client",
     title: "Rivedere il piano del mese",
-    summary: "Controlla insieme calendario, griglia e singoli post del mese.",
+    summary: "Scegli elenco o anteprima Instagram e rivedi i post uno alla volta.",
     searchTerms: ["piano mensile", "approva tutto", "calendario", "griglia instagram", "post del mese"],
     kinds: ["SOCIAL_POST"],
     routes: [/\/piani(?:\/|$)/],
     steps: [
       { title: "Leggi il riepilogo", body: "In cima trovi il messaggio dell’agenzia e lo stato complessivo del piano." },
-      { title: "Apri i post da verificare", body: "Usa calendario e griglia per aprire ogni contenuto. Puoi approvare o chiedere modifiche al singolo post." },
+      { title: "Apri i post da verificare", body: "Scegli «Elenco» oppure «Anteprima Instagram»: sono viste dello stesso piano. La griglia include solo i post Instagram. Apri un contenuto e approva oppure chiedi modifiche." },
       { title: "Conferma il piano", body: "«Approva tutto il piano» conferma insieme soltanto i contenuti ancora approvabili. Prima controlla che non restino note da inviare." },
     ],
   },
@@ -85,7 +98,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Indica il punto", body: "Su una foto tocca il punto interessato; su un video fermati sul secondo giusto; in un articolo seleziona la frase." },
       { title: "Descrivi il risultato che vuoi", body: "Scrivi cosa cambiare e, se puoi, perché: per esempio tono, colore, immagine, frase o invito all’azione." },
-      { title: "Usa l’assistente se serve", body: "Apri «Parla con Heili» per scrivere o conversare a voce, anche interrompendo l’assistente. Controlla il riepilogo, poi invialo all’agenzia: parlare o preparare il riepilogo non invia una richiesta. «Detta il messaggio» trascrive soltanto nel campo di testo." },
+      { title: "Usa l’assistente se serve", body: "Apri «Parla con Heili» nello spazio feedback per scrivere o conversare a voce, anche interrompendo l’assistente. Controlla il riepilogo, poi invialo all’agenzia: parlare o preparare il riepilogo non invia una richiesta. Il microfono accanto all’invio trascrive soltanto nel campo." },
     ],
   },
   {
@@ -167,7 +180,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Apri il mese del cliente", body: "Da «Piani» scegli cliente e mese. Aprire il piano non invia nulla: raccoglie i post social già preparati per quel mese." },
       { title: "Controlla gli stessi post", body: "Elenco, calendario e griglia sono tre viste degli stessi contenuti. I post creati dopo compaiono come «da aggiungere» e vengono inclusi automaticamente al prossimo invio." },
-      { title: "Invia e copia il link", body: "Usa «Controlla e invia il piano», conferma i post e poi scegli il referente nel riquadro «Link diretto del piano» per copiarlo, aprirlo o preparare WhatsApp." },
+      { title: "Invia e copia il link", body: "Usa «Controlla e invia il piano» per inviare nuovi post. Se sono già dal cliente, «Rendi disponibile il piano» prepara il link senza reinviarli: le bozze restano private. Con «Copia link cliente» scegli il referente e condividi il suo accesso personale." },
     ],
   },
   {

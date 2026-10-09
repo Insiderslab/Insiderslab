@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
+import QuickReviewLink from "@/components/share/quick-review-link";
 import { canTransition, type MediaType } from "@/lib/domain";
 import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, timeZoneAbbr } from "./helpers";
 import { KindBadge, KindIcon, KindStatusBadge } from "./kind-badge";
@@ -77,15 +78,24 @@ function Extra({ row }: { row: PostListRow }) {
 }
 
 function OpenAction({ row }: { row: PostListRow }) {
-  const shareable = row.status === "IN_REVIEW" || row.status === "CHANGES_REQUESTED";
   return (
     <Link
-      href={`/posts/${row.id}${shareable ? "?tab=revisione#post-share" : ""}`}
-      className="inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
-      aria-label={shareable ? `Apri ${row.title} e copia il link per il cliente` : `Apri ${row.title}`}
+      href={`/posts/${row.id}`}
+      className="btn btn-quiet btn-sm"
+      aria-label={`Apri ${row.title}`}
     >
-      {shareable ? "Apri e copia link" : "Apri"}
+      Apri
     </Link>
+  );
+}
+
+function RowActions({ row }: { row: PostListRow }) {
+  const clientVisible = row.status === "IN_REVIEW" || row.status === "CHANGES_REQUESTED";
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <OpenAction row={row} />
+      {clientVisible && <QuickReviewLink kind="post" id={row.id} />}
+    </div>
   );
 }
 
@@ -253,7 +263,7 @@ export default function PostList({
                 <td className="px-3 py-3">
                   <KindStatusBadge kind={row.kind} status={row.status} />
                 </td>
-                <td className="whitespace-nowrap px-3 py-1"><OpenAction row={row} /></td>
+                <td className="px-3 py-1"><RowActions row={row} /></td>
               </tr>
             ))}
           </tbody>
@@ -286,7 +296,9 @@ export default function PostList({
               <div className="mt-1 flex flex-col gap-0.5 text-xs">
                 <Extra row={row} />
               </div>
-              <OpenAction row={row} />
+              <div className="mt-2 flex justify-end">
+                <RowActions row={row} />
+              </div>
             </div>
           </li>
         ))}
