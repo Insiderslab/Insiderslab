@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
+import QuickReviewLink from "@/components/share/quick-review-link";
 import { canTransition, type MediaType } from "@/lib/domain";
 import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, timeZoneAbbr } from "./helpers";
 import { KindBadge, KindIcon, KindStatusBadge } from "./kind-badge";
@@ -73,6 +74,28 @@ function Extra({ row }: { row: PostListRow }) {
       )}
       {row.status === "FAILED" && row.lastError && <span className="line-clamp-2 text-error">{row.lastError}</span>}
     </>
+  );
+}
+
+function OpenAction({ row }: { row: PostListRow }) {
+  return (
+    <Link
+      href={`/posts/${row.id}`}
+      className="btn btn-quiet btn-sm"
+      aria-label={`Apri ${row.title}`}
+    >
+      Apri
+    </Link>
+  );
+}
+
+function RowActions({ row }: { row: PostListRow }) {
+  const clientVisible = row.status === "IN_REVIEW" || row.status === "CHANGES_REQUESTED";
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <OpenAction row={row} />
+      {clientVisible && <QuickReviewLink kind="post" id={row.id} />}
+    </div>
   );
 }
 
@@ -201,6 +224,7 @@ export default function PostList({
               <th className="px-3 py-2 font-medium">{detailLabel}</th>
               <th className="px-3 py-2 font-medium">Data</th>
               <th className="px-3 py-2 font-medium">Stato</th>
+              <th className="px-3 py-2 font-medium"><span className="sr-only">Azioni</span></th>
             </tr>
           </thead>
           <tbody>
@@ -239,6 +263,7 @@ export default function PostList({
                 <td className="px-3 py-3">
                   <KindStatusBadge kind={row.kind} status={row.status} />
                 </td>
+                <td className="px-3 py-1"><RowActions row={row} /></td>
               </tr>
             ))}
           </tbody>
@@ -270,6 +295,9 @@ export default function PostList({
               </p>
               <div className="mt-1 flex flex-col gap-0.5 text-xs">
                 <Extra row={row} />
+              </div>
+              <div className="mt-2 flex justify-end">
+                <RowActions row={row} />
               </div>
             </div>
           </li>

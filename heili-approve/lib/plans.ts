@@ -28,7 +28,14 @@ import type { Actor } from "@/lib/actor";
 import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
 import { prisma } from "@/lib/db/client";
 import { CLIENT_VISIBLE_STATUSES } from "@/lib/domain";
-import { ConflictError, InvalidTransitionError, NotFoundError, ValidationError, parseOrThrow } from "@/lib/errors";
+import {
+  BulkApprovalFeedbackConflictError,
+  ConflictError,
+  InvalidTransitionError,
+  NotFoundError,
+  ValidationError,
+  parseOrThrow,
+} from "@/lib/errors";
 import {
   notifyPlanApproved,
   notifyPlanComment,
@@ -36,6 +43,7 @@ import {
   notifyPlanSent,
 } from "@/lib/notifications";
 import {
+  APPROVED_LIKE,
   defaultPlanTitle,
   derivePlanStatus,
   isPlanDecided,
@@ -53,6 +61,10 @@ export const PLAN_KIND: ContentKind = "SOCIAL_POST";
 const MAX_TITLE = 200;
 const MAX_INTRO = 5000;
 export const MAX_PLAN_COMMENT = 5000;
+/** A stopped process cannot keep a completion notification forever. */
+export const PLAN_NOTIFICATION_LEASE_MS = 5 * 60 * 1000;
+/** Back off a known email failure until a later cron sweep. */
+export const PLAN_NOTIFICATION_RETRY_MS = 5 * 60 * 1000;
 
 function assertPlansEnabled(): void {
   if (!isKindEnabled(PLAN_KIND)) throw new NotFoundError("Piano non trovato");
@@ -84,27 +96,130 @@ export async function syncPlanStatus(planId: string): Promise<PlanStatus | null>
  * them, tells the agency — once per send. Returns true when that email went
  * out. Never throws.
  */
-export async function afterPlanPostDecided(planId: string): Promise<boolean> {
+export async function afterPlanPostDecided(planId: string, now: Date = new Date()): Promise<boolean> {
   try {
     await syncPlanStatus(planId);
     const plan = await prisma.contentPlan.findUnique({
       where: { id: planId },
-      select: { sentAt: true, completedNotifiedAt: true, posts: { select: { status: true } } },
+      select: {
+        sentAt: true,
+        completedNotifiedAt: true,
+        completedNotificationClaimedAt: true,
+        completedNotificationRetryAt: true,
+        posts: { select: { status: true } },
+      },
     });
     if (!plan?.sentAt || plan.completedNotifiedAt) return false;
     if (!isPlanDecided(plan.posts.map((p) => p.status))) return false;
-    // Claim the notification: two decisions landing together send it once.
+
+    const leaseExpiredBefore = new Date(now.getTime() - PLAN_NOTIFICATION_LEASE_MS);
+    if (plan.completedNotificationRetryAt && plan.completedNotificationRetryAt > now) return false;
+    if (plan.completedNotificationClaimedAt && plan.completedNotificationClaimedAt > leaseExpiredBefore) return false;
+
+    // Compare the submission timestamp too: a notification belongs to the
+    // exact send that was complete when it was claimed.
     const { count } = await prisma.contentPlan.updateMany({
-      where: { id: planId, completedNotifiedAt: null },
-      data: { completedNotifiedAt: new Date() },
+      where: {
+        id: planId,
+        sentAt: plan.sentAt,
+        completedNotifiedAt: null,
+        AND: [
+          {
+            OR: [
+              { completedNotificationClaimedAt: null },
+              { completedNotificationClaimedAt: { lte: leaseExpiredBefore } },
+            ],
+          },
+          {
+            OR: [
+              { completedNotificationRetryAt: null },
+              { completedNotificationRetryAt: { lte: now } },
+            ],
+          },
+        ],
+      },
+      data: { completedNotificationClaimedAt: now },
     });
     if (count !== 1) return false;
-    await notifyPlanDecided(planId);
-    return true;
+
+    // Never hold a database transaction while the email provider is called.
+    // An unexpected throw leaves the lease in place; its expiry is the crash
+    // recovery path. A confirmed failure is released with a short backoff.
+    const sent = await notifyPlanDecided(planId);
+    if (!sent) {
+      await prisma.contentPlan.updateMany({
+        where: {
+          id: planId,
+          sentAt: plan.sentAt,
+          completedNotifiedAt: null,
+          completedNotificationClaimedAt: now,
+        },
+        data: {
+          completedNotificationClaimedAt: null,
+          completedNotificationRetryAt: new Date(now.getTime() + PLAN_NOTIFICATION_RETRY_MS),
+        },
+      });
+      return false;
+    }
+
+    // If the agency re-sent the plan while the email was in flight, this CAS
+    // deliberately fails: the new submission still needs its own follow-up.
+    const marked = await prisma.contentPlan.updateMany({
+      where: {
+        id: planId,
+        sentAt: plan.sentAt,
+        completedNotifiedAt: null,
+        completedNotificationClaimedAt: now,
+      },
+      data: {
+        completedNotifiedAt: now,
+        completedNotificationClaimedAt: null,
+        completedNotificationRetryAt: null,
+      },
+    });
+    return marked.count === 1;
   } catch (error) {
     console.error(`[plans] Follow-up of plan ${planId} failed:`, error);
     return false;
   }
+}
+
+/** Retry recoverable completion notifications, including already completed plans. */
+export async function sweepPlanCompletionNotifications(now: Date = new Date()): Promise<number> {
+  const leaseExpiredBefore = new Date(now.getTime() - PLAN_NOTIFICATION_LEASE_MS);
+  const plans = await prisma.contentPlan.findMany({
+    where: {
+      sentAt: { not: null },
+      completedNotifiedAt: null,
+      // Keep this predicate equivalent to isPlanDecided: no post is still
+      // with the client, and at least one post has received a decision. The
+      // denormalized plan status can be DRAFT when decided posts coexist with
+      // newly added drafts.
+      posts: {
+        none: { status: "IN_REVIEW" },
+        some: { status: { in: [...APPROVED_LIKE, "CHANGES_REQUESTED"] } },
+      },
+      AND: [
+        {
+          OR: [
+            { completedNotificationClaimedAt: null },
+            { completedNotificationClaimedAt: { lte: leaseExpiredBefore } },
+          ],
+        },
+        {
+          OR: [
+            { completedNotificationRetryAt: null },
+            { completedNotificationRetryAt: { lte: now } },
+          ],
+        },
+      ],
+    },
+    select: { id: true },
+    take: 100,
+  });
+
+  const results = await Promise.all(plans.map((plan) => afterPlanPostDecided(plan.id, now)));
+  return results.filter(Boolean).length;
 }
 
 // ─── Agency ──────────────────────────────────────────────────────────────────
@@ -254,6 +369,24 @@ export interface SendPlanResult {
   clientsWithoutEmail: string[];
 }
 
+/** Expose an existing collection without re-submitting posts or sending review emails. */
+export async function makePlanAvailable(planId: string, workspaceId: string): Promise<void> {
+  const plan = await findPlanForWorkspace(planId, workspaceId);
+  if (plan.client.archivedAt) throw new ValidationError("Il cliente è archiviato");
+  if (plan.sentAt) return;
+  const visible = await prisma.post.findMany({
+    where: { planId, workspaceId, clientId: plan.clientId, status: { in: [...CLIENT_VISIBLE_STATUSES] } },
+    select: { id: true },
+    take: 1,
+  });
+  if (!visible.length) throw new ValidationError("Invia prima almeno un post in revisione. Le bozze rimangono private.");
+  await prisma.contentPlan.updateMany({
+    where: { id: planId, workspaceId, sentAt: null },
+    data: { sentAt: new Date() },
+  });
+  await syncPlanStatus(planId);
+}
+
 /**
  * "Invia il piano al cliente": attaches the month's posts still outside the
  * plan, sends every DRAFT / CHANGES_REQUESTED post of the plan to review in
@@ -295,7 +428,13 @@ export async function sendPlan(
   });
   await prisma.contentPlan.update({
     where: { id: plan.id },
-    data: { sentAt: new Date(), reviewDueAt: reviewDueAt ?? null, completedNotifiedAt: null },
+    data: {
+      sentAt: new Date(),
+      reviewDueAt: reviewDueAt ?? null,
+      completedNotifiedAt: null,
+      completedNotificationClaimedAt: null,
+      completedNotificationRetryAt: null,
+    },
   });
   await syncPlanStatus(plan.id);
   const emailed = await notifyPlanSent(plan.id);
@@ -430,7 +569,16 @@ export async function listPlansForReviewer(reviewer: ReviewerRef) {
   });
 }
 
-/** Open (unresolved) client comments per post, on each post's latest version. */
+/**
+ * Feedback that excludes a post from one-click plan approval, on each post's
+ * latest version. The historical name remains because the portal consumes the
+ * count as an eligibility signal.
+ *
+ * Includes unresolved client comments (and legacy null-version comments), a
+ * conversation with at least one CLIENT message, active voice calls, and
+ * authenticated user speech fragments not projected yet. An assistant-only
+ * greeting is not client feedback.
+ */
 export async function openClientCommentCounts(postIds: string[]): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   if (postIds.length === 0) return counts;
@@ -438,14 +586,37 @@ export async function openClientCommentCounts(postIds: string[]): Promise<Map<st
     where: { id: { in: postIds } },
     select: {
       id: true,
+      currentVersionNumber: true,
       versions: { orderBy: { number: "desc" }, take: 1, select: { id: true } },
       comments: { where: { authorType: "CLIENT", resolvedAt: null }, select: { versionId: true } },
+      reviewSessions: {
+        select: {
+          versionNumber: true,
+          messages: { where: { role: "CLIENT" }, take: 1, select: { id: true } },
+          voiceCalls: {
+            where: {
+              OR: [
+                { status: { in: ["STARTING", "ACTIVE", "CLOSING"] } },
+                { fragments: { some: { speaker: "user" } } },
+              ],
+            },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      },
     },
   });
   for (const post of posts) {
     const current = post.versions[0]?.id;
     // Comments without a version predate versioning: they count for the current one.
-    counts.set(post.id, post.comments.filter((c) => c.versionId === null || c.versionId === current).length);
+    const comments = post.comments.filter((c) => c.versionId === null || c.versionId === current).length;
+    const conversations = post.reviewSessions.filter(
+      (session) =>
+        session.versionNumber === post.currentVersionNumber &&
+        (session.messages.length > 0 || session.voiceCalls.length > 0)
+    ).length;
+    counts.set(post.id, comments + conversations);
   }
   return counts;
 }
@@ -512,9 +683,13 @@ export async function approvePlan(
   const titles = new Map(posts.map((p) => [p.id, p.title]));
   for (const item of selection.approve) {
     try {
-      await approvePost(item.id, reviewer, item.versionNumber, { notify: false });
+      await approvePost(item.id, reviewer, item.versionNumber, { notify: false, bulkSafety: true });
       approved.push(item.id);
     } catch (error) {
+      if (error instanceof BulkApprovalFeedbackConflictError) {
+        skipped.push({ id: item.id, title: titles.get(item.id) ?? "", reason: "comments" });
+        continue;
+      }
       if (error instanceof ConflictError || error instanceof InvalidTransitionError || error instanceof NotFoundError) {
         skipped.push({ id: item.id, title: titles.get(item.id) ?? "", reason: "stale" });
         continue;

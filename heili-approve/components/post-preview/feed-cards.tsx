@@ -27,7 +27,7 @@ export function InstagramFeed(p: MockupProps) {
   return (
     <MockupFrame
       label="Instagram, post"
-      className="max-w-[420px] overflow-hidden rounded-lg border border-[#dbdbdb] bg-white text-black"
+      className="max-w-[560px] overflow-hidden rounded-lg border border-[#dbdbdb] bg-white text-black"
     >
       <header className="flex items-center gap-2.5 px-3 py-2">
         <Avatar name={p.accountName} url={p.accountAvatarUrl} size={32} ring />
@@ -78,7 +78,7 @@ export function FacebookPost(p: MockupProps) {
   return (
     <MockupFrame
       label="Facebook, post"
-      className="max-w-[500px] overflow-hidden rounded-lg border border-[#dadde1] bg-white text-[#050505]"
+      className="max-w-[600px] overflow-hidden rounded-lg border border-[#dadde1] bg-white text-[#050505]"
     >
       <header className="flex items-center gap-2 px-3 pb-2 pt-3">
         <Avatar name={p.accountName} url={p.accountAvatarUrl} size={40} />
@@ -148,7 +148,7 @@ export function LinkedInPost(p: MockupProps) {
   return (
     <MockupFrame
       label="LinkedIn, post"
-      className="max-w-[555px] overflow-hidden rounded-lg border border-[#e0dfdc] bg-white text-[rgba(0,0,0,0.9)]"
+      className="max-w-[600px] overflow-hidden rounded-lg border border-[#e0dfdc] bg-white text-[rgba(0,0,0,0.9)]"
     >
       <header className="flex items-start gap-2 px-3 pb-2 pt-3">
         <Avatar name={p.accountName} url={p.accountAvatarUrl} size={48} square />

@@ -61,7 +61,7 @@ export default function PostFilters({
         event.preventDefault();
         apply({ q });
       }}
-      className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center ${pending ? "opacity-70" : ""}`}
+      className={`studio-toolbar flex-col sm:flex-row ${pending ? "opacity-70" : ""}`}
       role="search"
     >
       {kinds.length > 1 && (
@@ -131,7 +131,7 @@ export default function PostFilters({
             setQ("");
             startTransition(() => router.replace(buildPostsHref({ kind: values.kind })));
           }}
-          className="px-2 py-2 text-left text-sm text-muted hover:text-foreground"
+          className="btn btn-quiet btn-sm"
         >
           Azzera filtri
         </button>

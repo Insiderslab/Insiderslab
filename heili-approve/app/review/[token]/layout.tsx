@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import InvalidLink from "@/components/portal/invalid-link";
 import PortalHeader from "@/components/portal/portal-header";
+import HelpGuide from "@/components/help/help-guide";
 import { portalPath, portalTagline, portalTitle } from "@/components/portal/helpers";
 import { clientServices } from "@/lib/clients";
 import { enabledKinds, productName } from "@/lib/variant";
@@ -52,7 +53,12 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
         productName={productName()}
         tagline={portalTagline(portalServices(reviewer.client))}
       />
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 pb-10 pt-4">{children}</div>
+      <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-10 pt-4 sm:px-6">
+        <div className="mb-4 flex justify-end">
+          <HelpGuide audience="client" services={portalServices(reviewer.client)} />
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

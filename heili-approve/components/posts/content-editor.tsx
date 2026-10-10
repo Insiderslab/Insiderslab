@@ -231,7 +231,11 @@ export default function ContentEditor({
 
       <fieldset disabled={disabled} className="min-w-0 space-y-6">
         {/* ── Client, title, date ── */}
-        <section className="panel grid gap-4 rounded p-4 sm:p-5 lg:grid-cols-3">
+        <section className="panel studio-panel space-y-5">
+          <div className="studio-section-heading">
+            <div><h2>Destinazione e data</h2><p>Questi dati identificano la versione che il cliente riceverà in revisione.</p></div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <label htmlFor="content-client" className={labelClass}>
               Cliente
@@ -313,6 +317,7 @@ export default function ContentEditor({
               {publishAt ? ` (${timeZoneAbbr(timezone, publishAt)})` : ""}
             </p>
           </div>
+          </div>
         </section>
 
         {/* ── The kind's editor ── */}
@@ -336,7 +341,7 @@ export default function ContentEditor({
         )}
 
         {mode === "edit" && hasBeenSubmitted && (
-          <section className="panel rounded p-4 sm:p-5">
+          <section className="panel studio-panel">
             <label htmlFor="content-change-note" className={labelClass}>
               Nota per il cliente <span className="font-normal text-muted">(facoltativa)</span>
             </label>
@@ -360,7 +365,8 @@ export default function ContentEditor({
 
       {/* ── Save ── */}
       {!readOnly && (
-        <div className="space-y-3">
+        <div className="panel studio-panel space-y-3">
+          <div><p className="font-semibold">Concludi la preparazione</p><p className="text-sm text-muted">La bozza resta interna; l’invio apre la revisione del cliente.</p></div>
           {/* The kind's editor already says when it is ready for the client. */}
           {issues.length > 0 && (
             <p className="text-sm text-warning">
@@ -373,7 +379,7 @@ export default function ContentEditor({
             <button
               type="submit"
               disabled={pending || busy || (mode === "edit" && !dirty)}
-              className="rounded border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:border-border-hover disabled:opacity-50"
+              className="btn"
             >
               {pending ? "Salvataggio…" : mode === "create" ? "Salva bozza" : "Salva modifiche"}
             </button>
@@ -382,7 +388,7 @@ export default function ContentEditor({
                 type="button"
                 onClick={() => save(true)}
                 disabled={pending || busy}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {mode === "create" || dirty ? "Salva e invia in revisione" : "Invia in revisione"}
               </button>
@@ -395,7 +401,7 @@ export default function ContentEditor({
                   setError(null);
                 }}
                 disabled={pending}
-                className="px-2 py-2 text-sm text-muted hover:text-foreground"
+                className="btn btn-quiet"
               >
                 Annulla le modifiche
               </button>

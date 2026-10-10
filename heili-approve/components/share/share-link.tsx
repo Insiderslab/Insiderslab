@@ -116,7 +116,7 @@ export default function ShareLink({
     }
   }
 
-  const size = compact ? "btn btn-sm" : "btn";
+  const size = compact ? "btn btn-sm min-h-11" : "btn";
 
   return (
     <div className="space-y-2" data-testid="share-link">
@@ -129,7 +129,7 @@ export default function ShareLink({
         value={url}
         onFocus={(event) => event.currentTarget.select()}
         onClick={(event) => event.currentTarget.select()}
-        className={`field font-mono ${compact ? "!min-h-9 !py-1.5 text-xs" : "text-sm"}`}
+        className={`field min-w-0 font-mono ${compact ? "!min-h-11 !py-2 text-base" : "text-base"}`}
         data-testid="share-link-url"
       />
       {/* Phones: WhatsApp full width on top, the rest two per row. */}

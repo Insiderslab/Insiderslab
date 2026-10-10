@@ -3,8 +3,11 @@
 import { useState } from "react";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/top-bar";
+import HelpGuide from "@/components/help/help-guide";
 import type { SwitcherClient } from "@/components/client-switcher";
 import type { AppVariant } from "@/lib/variant";
+import { enabledKinds } from "@/lib/variant";
+import type { ContentKind } from "@/app/generated/prisma/client";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -16,6 +19,8 @@ interface DashboardShellProps {
   /** Clients for the selector in the menu (not archived), and the one picked. */
   clients: SwitcherClient[];
   currentClientId: string | null;
+  /** Active services of the selected client; all variant kinds when viewing every client. */
+  currentClientServices?: readonly ContentKind[];
 }
 
 export default function DashboardShell({
@@ -26,6 +31,7 @@ export default function DashboardShell({
   variant,
   clients,
   currentClientId,
+  currentClientServices,
 }: DashboardShellProps) {
   const currentClient = clients.find((c) => c.id === currentClientId) ?? null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -51,8 +57,14 @@ export default function DashboardShell({
           currentClientName={currentClient?.name ?? null}
         />
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:py-6 lg:px-8">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
+          <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-7 lg:px-10 lg:py-8">
+            <div className="mb-5 flex justify-end">
+              <HelpGuide
+                audience="agency"
+                services={currentClientId ? (currentClientServices ?? enabledKinds(variant)) : enabledKinds(variant)}
+              />
+            </div>
             {children}
           </div>
         </main>

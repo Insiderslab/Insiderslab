@@ -1,0 +1,2 @@
+# Shell scripts run in Linux containers, including archives made on Windows.
+*.sh text eol=lf

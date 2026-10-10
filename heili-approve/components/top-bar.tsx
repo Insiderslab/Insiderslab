@@ -39,7 +39,7 @@ export function pageTitleFor(pathname: string, kinds: readonly ContentKind[], re
 function PageTitle({ variant, requestedKind }: { variant: AppVariant; requestedKind: ContentKind | null }) {
   const pathname = usePathname();
   return (
-    <h1 className="truncate text-lg font-semibold sm:text-xl">
+    <h1 className="truncate text-lg font-semibold tracking-[-0.02em] sm:text-xl">
       {pageTitleFor(pathname, enabledKinds(variant), requestedKind)}
     </h1>
   );
@@ -70,7 +70,7 @@ export default function TopBar({
 
   return (
     <header
-      className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-sm lg:px-8"
+      className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur-md sm:px-6 lg:px-10"
       style={{
         height: "calc(4rem + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",

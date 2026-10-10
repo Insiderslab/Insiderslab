@@ -12,6 +12,8 @@ import { formatLongDate } from "@/components/clients/helpers";
 import { secretTail } from "@/components/settings/helpers";
 import MetricoolSettings from "@/components/settings/metricool-settings";
 import TeamSettings from "@/components/settings/team-settings";
+import AutomationSettings from "@/components/settings/automation-settings";
+import { prisma } from "@/lib/db/client";
 import { decryptSecret } from "@/lib/crypto";
 import { isMetricoolFake } from "@/lib/metricool/client";
 import { contentWords } from "@/components/posts/helpers";
@@ -40,9 +42,15 @@ export default async function SettingsPage() {
   const token = storedTokenTail(workspace.metricoolTokenEncrypted);
   const canManage = canManageWorkspace(context.role);
   const metricool = isMetricoolEnabled();
+  const tokens = await prisma.automationToken.findMany({
+    where: { workspaceId: context.workspaceId, userId: context.userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" }, take: 10,
+    select: { id: true, name: true, expiresAt: true },
+  });
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
+      <AutomationSettings tokens={tokens.map(token => ({ ...token, expiresAt: token.expiresAt.toISOString() }))} />
       {metricool && (
         <section className="panel rounded p-4 sm:p-6">
           <h2 className="mb-1 text-base font-semibold">Metricool</h2>

@@ -9,10 +9,11 @@
 
 import Link from "next/link";
 import type { ReactNode, RefObject } from "react";
+import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { PortalQueue } from "./types";
 import type { PortalWording } from "./helpers";
 
-/** "← Tutti i post · Post 1 di 3 da approvare · Prossimo post →". */
+/** Clearly labelled controls and progress for the review queue. */
 export function ReviewNav({
   homeHref,
   nextHref,
@@ -27,17 +28,37 @@ export function ReviewNav({
   /** False once the client decided (the success panel takes over). */
   showProgress: boolean;
 }) {
+  const progressLabel =
+    queue.position !== null ? wording.position(queue.position, queue.toReviewCount) : null;
+  const backLabel = wording.backLabel.replace(/^←\s*/, "");
+  const nextLabel = wording.nextLabel.replace(/\s*→$/, "");
+
   return (
-    <nav className="flex flex-wrap items-center justify-between gap-2 text-sm">
-      <Link href={homeHref} className="inline-flex min-h-11 items-center text-muted hover:text-foreground">
-        {wording.backLabel}
+    <nav className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm" aria-label="Navigazione della revisione">
+      <Link
+        href={homeHref}
+        aria-label={backLabel}
+        className="inline-flex min-h-11 min-w-0 items-center justify-start justify-self-start rounded-md border border-border bg-surface px-3 font-medium text-foreground hover:border-border-hover"
+      >
+        <span className="sm:hidden">Elenco</span>
+        <span className="hidden truncate sm:inline">{backLabel}</span>
       </Link>
-      {queue.position !== null && showProgress && (
-        <span className="text-muted">{wording.position(queue.position, queue.toReviewCount)}</span>
+      {progressLabel && showProgress && (
+        <span className="text-center text-muted" aria-label={progressLabel}>
+          <span className="tabular-nums sm:hidden" aria-hidden="true">
+            {queue.position}/{queue.toReviewCount}
+          </span>
+          <span className="hidden sm:inline">{progressLabel}</span>
+        </span>
       )}
       {nextHref && showProgress && (
-        <Link href={nextHref} className="inline-flex min-h-11 items-center font-medium text-accent">
-          {wording.nextLabel}
+        <Link
+          href={nextHref}
+          aria-label={nextLabel}
+          className="inline-flex min-h-11 min-w-0 items-center justify-end justify-self-end rounded-md bg-accent px-3 text-right font-semibold text-white hover:bg-accent-hover"
+        >
+          <span className="sm:hidden">Successivo</span>
+          <span className="hidden truncate sm:inline">{nextLabel}</span>
         </Link>
       )}
     </nav>
@@ -102,14 +123,20 @@ export function SuccessPanel({
   );
 }
 
-/** The big "Non sei sicuro? Parlane con l'assistente" toggle and the panel under it. */
+/** Compact assistant action, kept beside the other feedback tools. */
 export function AssistantToggle({
   open,
+  mounted = open,
+  showButton = true,
   onToggle,
   containerRef,
   children,
 }: {
   open: boolean;
+  /** Keep local feedback while the panel is collapsed, after its first opening. */
+  mounted?: boolean;
+  /** The compact trigger can live inside the manual composer action row. */
+  showButton?: boolean;
   onToggle: () => void;
   containerRef: RefObject<HTMLDivElement | null>;
   /** The panel, rendered while open. */
@@ -117,26 +144,37 @@ export function AssistantToggle({
 }) {
   return (
     <div ref={containerRef} className="scroll-mt-4 space-y-3">
-      <button
+      {showButton && <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 rounded-lg border-2 border-accent bg-background p-4 text-left hover:bg-surface"
+        aria-label={open ? "Chiudi Heili" : "Parla con Heili"}
+        className={`flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${open ? "border-accent bg-accent/5" : "border-border bg-background hover:border-accent"}`}
       >
-        <span className="space-y-0.5">
-          <span className="block text-base font-semibold text-accent">
-            {open ? "Chiudi l'assistente" : "Non sei sicuro? Parlane con l'assistente"}
-          </span>
-          <span className="block text-sm text-muted">
-            Ti aiuta a capire cosa cambiare, anche a voce. La decisione resta sempre tua.
-          </span>
+        <HeiliAssistantIcon className="h-7 w-7" />
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-foreground">{open ? "Torna al commento manuale" : "Parla con Heili"}</span>
+          <span className="block truncate text-xs text-muted">Conversazione guidata, anche a voce</span>
         </span>
-        <span aria-hidden="true" className="text-xl text-accent">
-          {open ? "−" : "+"}
-        </span>
-      </button>
-      {open && children}
+        <span className="ml-auto text-lg text-muted" aria-hidden="true">{open ? "←" : "→"}</span>
+      </button>}
+      {mounted && <div hidden={!open}>{children}</div>}
     </div>
+  );
+}
+
+/** Compact conversational action shown inside the manual feedback composer. */
+export function AssistantActionButton({ onToggle }: { onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label="Parla con Heili"
+      className="inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-accent hover:bg-accent/5"
+    >
+      <HeiliAssistantIcon className="h-6 w-6" />
+      <span className="truncate">Parla con Heili</span>
+    </button>
   );
 }
 
@@ -144,12 +182,40 @@ export function AssistantToggle({
 export function DecisionBar({ children }: { children: ReactNode }) {
   return (
     <div
-      className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background px-4 pt-3"
+      className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       {children}
     </div>
   );
+}
+
+/** Why the saved-feedback decision cannot run yet. */
+export function savedFeedbackBlocker(hasUnsavedDraft: boolean, savedCommentCount: number): string | null {
+  if (hasUnsavedDraft) {
+    return "Hai un commento ancora da inviare. Premi «Invia commento» oppure annullalo prima di chiedere le modifiche.";
+  }
+  if (savedCommentCount < 1) {
+    return "Non hai ancora indicato modifiche. Aggiungi e invia almeno un commento prima di continuare.";
+  }
+  return null;
+}
+
+export const UNSAVED_COMMENT_MESSAGE = "Hai un commento ancora da inviare. Invia il commento oppure annullalo prima di concludere la revisione.";
+
+/** Every reviewer's current feedback matters before an explicit override. */
+export function OpenFeedbackNotice({ comments, ads = false }: {
+  comments: Array<{ authorType: string; authorName: string; resolved: boolean; fromVersion?: number | null }>;
+  ads?: boolean;
+}) {
+  const open = comments.filter((comment) => comment.authorType === "CLIENT" && !comment.resolved && comment.fromVersion == null);
+  if (!open.length) return null;
+  const authors = [...new Set(open.map((comment) => comment.authorName))].join(", ");
+  return <p className="text-sm text-warning">
+    {open.length === 1 ? "C’è 1 commento aperto" : `Ci sono ${open.length} commenti aperti`} di {authors} su questa versione.
+    {ads ? " Confermando invii le decisioni sulle varianti." : " Se approvi, il contenuto viene approvato così com’è."}
+    {" Per richiedere interventi sui commenti, scegli «Chiedi modifiche»."}
+  </p>;
 }
 
 export function SheetError({ error, stale, onReload }: { error: string | null; stale: boolean; onReload: () => void }) {

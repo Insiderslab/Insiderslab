@@ -339,7 +339,7 @@ export function selectApproveAll(
 
 /** Why a post was left out, as the client reads it. */
 export const SKIP_REASON_LABELS: Record<ApproveAllSkipReason, string> = {
-  comments: "ha un commento aperto: decidilo dalla sua pagina",
+  comments: "ha commenti o una conversazione da verificare: decidilo dalla sua pagina",
   changes: "hai chiesto modifiche",
   stale: "l'agenzia l'ha aggiornato: riaprilo per vedere la nuova versione",
 };

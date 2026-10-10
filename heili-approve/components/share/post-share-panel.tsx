@@ -17,9 +17,10 @@ import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
 import { getReviewPostUrl } from "@/lib/reviewers";
 import { postLinkMessage } from "./messages";
-import ShareLink from "./share-link";
+import ReviewerSharePicker, { type ReviewerShareChoice } from "./reviewer-share-picker";
 
 interface PostSharePanelProps {
+  workspaceId: string;
   post: { id: string; title: string; kind: ContentKind; status: PostStatus };
   client: { id: string; name: string; archivedAt: Date | null };
 }
@@ -43,31 +44,50 @@ function safePostUrl(reviewer: { tokenEncrypted: string }, postId: string): stri
   }
 }
 
-export default async function PostSharePanel({ post, client }: PostSharePanelProps) {
+export default async function PostSharePanel({ workspaceId, post, client }: PostSharePanelProps) {
   const shareable = SHARE_STATUSES.includes(post.status);
   if (client.archivedAt || (!shareable && post.status !== "DRAFT")) return null;
 
   const reviewers = await prisma.clientReviewer.findMany({
-    where: { clientId: client.id, active: true },
+    where: { clientId: client.id, active: true, client: { workspaceId } },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, email: true, tokenEncrypted: true },
   });
 
   const addReviewer = (
-    <Link href={`/clients/${client.id}#referenti`} className="btn btn-sm" data-testid="share-add-reviewer">
+    <Link href={`/clients/${client.id}#referenti`} className="btn btn-sm min-h-11" data-testid="share-add-reviewer">
       Aggiungi chi approva
     </Link>
   );
+
+  const choices: ReviewerShareChoice[] = reviewers.map((reviewer) => {
+    const url = safePostUrl(reviewer, post.id);
+    return {
+      id: reviewer.id,
+      name: reviewer.name,
+      email: reviewer.email,
+      url,
+      message: url
+        ? postLinkMessage({
+            kind: post.kind,
+            status: post.status,
+            reviewerName: reviewer.name,
+            title: post.title,
+            url,
+          })
+        : null,
+    };
+  });
 
   return (
     <section className="panel space-y-3 p-4 sm:p-5" aria-labelledby="post-share" data-testid="post-share-panel">
       <div className="space-y-1">
         <h3 id="post-share" className="text-lg font-semibold">
-          Condividi con il cliente
+          Link diretto per il cliente
         </h3>
         {shareable && reviewers.length > 0 && (
           <p className="text-sm text-muted">
-            Il link apre direttamente {THE[post.kind]} nella revisione di {client.name}, senza password.
+            Copia o apri il link che porta direttamente a {THE[post.kind]} nella revisione di {client.name}.
           </p>
         )}
       </div>
@@ -80,45 +100,25 @@ export default async function PostSharePanel({ post, client }: PostSharePanelPro
           {addReviewer}
         </div>
       ) : !shareable ? (
-        <p className="text-sm text-muted" data-testid="post-share-draft-hint">
-          Il link per il cliente compare qui dopo «Invia in revisione».
-        </p>
+        <div className="inset space-y-1 p-3" data-testid="post-share-draft-hint">
+          <p className="text-sm font-medium">La bozza non è ancora visibile al cliente.</p>
+          <p className="text-sm text-muted">
+            Usa «Invia in revisione» quando è pronta. Solo allora compariranno qui i pulsanti per copiare e aprire il link.
+          </p>
+        </div>
       ) : (
-        <ul className="space-y-3">
-          {reviewers.map((reviewer) => {
-            const url = safePostUrl(reviewer, post.id);
-            return (
-              <li key={reviewer.id} className="inset space-y-2 p-3" data-testid="post-share-row">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="font-semibold">{reviewer.name}</p>
-                  {!reviewer.email && <span className="chip chip-offline">Nessuna email</span>}
-                </div>
-                {url ? (
-                  <ShareLink
-                    url={url}
-                    reviewerName={reviewer.name}
-                    message={postLinkMessage({
-                      kind: post.kind,
-                      status: post.status,
-                      reviewerName: reviewer.name,
-                      title: post.title,
-                      url,
-                    })}
-                    compact
-                  />
-                ) : (
-                  <p className="text-sm text-warning">
-                    Link non leggibile: crea un nuovo link per {reviewer.name} nella{" "}
-                    <Link href={`/clients/${client.id}#referenti`} className="underline">
-                      scheda del cliente
-                    </Link>
-                    .
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="inset p-3" data-testid="post-share-row">
+          <ReviewerSharePicker choices={choices} previewLabel="Apri come cliente" />
+          {choices.some((choice) => !choice.url) && (
+            <p className="mt-2 text-xs text-muted">
+              Gestisci o rinnova i link nella{" "}
+              <Link href={`/clients/${client.id}#referenti`} className="text-accent hover:underline">
+                scheda del cliente
+              </Link>
+              .
+            </p>
+          )}
+        </div>
       )}
     </section>
   );

@@ -60,7 +60,8 @@ export function timeZoneOffsetLabel(timeZone: string, at: Date = new Date()): st
     const part = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" })
       .formatToParts(at)
       .find((p) => p.type === "timeZoneName")?.value;
-    if (!part || part === "GMT") return "UTC";
+    // ICU on Windows can spell a zero offset as GMT+0 rather than GMT.
+    if (!part || /^GMT(?:[+−-]0(?::00)?)?$/.test(part)) return "UTC";
     return part.replace("GMT", "UTC").replace("-", "−");
   } catch {
     return "";

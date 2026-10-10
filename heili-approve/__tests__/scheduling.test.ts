@@ -9,6 +9,7 @@ const { mockPrisma, mockTx, mockSchedulePost, mockRecordEvent, mockNotify } = vi
     mockTx,
     mockPrisma: {
       post: { findUnique: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
+      client: { updateMany: vi.fn() },
       postEvent: { count: vi.fn() },
       $transaction: vi.fn(async (fn: (tx: typeof mockTx) => unknown) => fn(mockTx)),
     },
@@ -45,6 +46,7 @@ import { SchedulerPayloadError } from "@/lib/metricool/payload";
 import {
   CLAIM_STALE_MS,
   MAX_REMINDERS_PER_SUBMISSION,
+  REMINDER_CLAIM_LEASE_MS,
   attemptInfo,
   describeSchedulingError,
   isClaim,
@@ -302,15 +304,20 @@ describe("sendReviewReminders", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.client.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it("sends one reminder per client listing every due post, not one per post", async () => {
-    mockPrisma.post.findMany.mockResolvedValueOnce([
+    const candidates = [
       candidate("a1", "client-a"),
       candidate("a2", "client-a"),
       candidate("a3", "client-a"),
       candidate("b1", "client-b"),
-    ]);
+    ];
+    mockPrisma.post.findMany
+      .mockResolvedValueOnce(candidates)
+      .mockResolvedValueOnce(candidates.slice(0, 3))
+      .mockResolvedValueOnce(candidates.slice(3));
     mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) =>
       new Set(ids.filter((id) => id !== "b1"))
     );
@@ -335,14 +342,115 @@ describe("sendReviewReminders", () => {
         ],
       })
     );
-    mockPrisma.post.findMany.mockResolvedValueOnce(exhausted).mockResolvedValueOnce([candidate("new-1", "client-a")]);
+    mockPrisma.post.findMany
+      .mockResolvedValueOnce(exhausted)
+      .mockResolvedValueOnce([candidate("new-1", "client-a")])
+      .mockResolvedValueOnce([candidate("new-1", "client-a")]);
     mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) => new Set(ids));
 
     const result = await sendReviewReminders(NOW);
 
-    expect(mockPrisma.post.findMany).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.post.findMany).toHaveBeenCalledTimes(3);
     expect(mockPrisma.post.findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: "old-199" }, skip: 1 });
     expect(mockNotify.notifyReviewReminder).toHaveBeenCalledWith(["new-1"]);
     expect(result).toMatchObject({ checked: 201, sent: 1 });
+  });
+
+  it("claims a client before sending, so overlapping cron runs send only once", async () => {
+    let leaseHeld = false;
+    mockPrisma.post.findMany.mockImplementation(async () => [candidate("a1", "client-a")]);
+    mockPrisma.client.updateMany.mockImplementation(async ({ data }: { data: { reviewReminderClaimedAt: Date | null } }) => {
+      if (data.reviewReminderClaimedAt) {
+        if (leaseHeld) return { count: 0 };
+        leaseHeld = true;
+        return { count: 1 };
+      }
+      leaseHeld = false;
+      return { count: 1 };
+    });
+    mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) => new Set(ids));
+
+    const [first, second] = await Promise.all([sendReviewReminders(NOW), sendReviewReminders(NOW)]);
+
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledTimes(1);
+    expect(first.sent + second.sent).toBe(1);
+  });
+
+  it("re-reads after claiming and ignores a stale discovery from a previous cron", async () => {
+    let reminderRecorded = false;
+    mockPrisma.post.findMany.mockImplementation(async (args: { where: { clientId?: string } }) => {
+      if (!args.where.clientId) return [candidate("a1", "client-a")];
+      return [
+        candidate("a1", "client-a", {
+          events: reminderRecorded ? [{ createdAt: NOW }] : [],
+        }),
+      ];
+    });
+    mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) => new Set(ids));
+    mockRecordEvent.mockImplementation(async () => {
+      reminderRecorded = true;
+    });
+
+    await sendReviewReminders(NOW);
+    await sendReviewReminders(NOW);
+
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledTimes(1);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the lease after an event failure so a later run can retry", async () => {
+    mockPrisma.post.findMany.mockImplementation(async () => [candidate("a1", "client-a")]);
+    mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) => new Set(ids));
+    mockRecordEvent.mockRejectedValueOnce(new Error("database unavailable")).mockResolvedValueOnce(undefined);
+
+    const first = await sendReviewReminders(NOW);
+    const second = await sendReviewReminders(NOW);
+
+    expect(first.sent).toBe(0);
+    expect(second.sent).toBe(1);
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.client.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { reviewReminderClaimedAt: null } })
+    );
+  });
+
+  it("can take over a claim left by a crashed run once the lease is stale", async () => {
+    let activeClaim: Date | null = new Date(Date.now() - REMINDER_CLAIM_LEASE_MS - 1);
+    const abandonedClaim = activeClaim;
+    mockPrisma.post.findMany
+      .mockResolvedValueOnce([candidate("a1", "client-a")])
+      .mockResolvedValueOnce([candidate("a1", "client-a")]);
+    mockPrisma.client.updateMany.mockImplementation(
+      async ({ where, data }: { where: Record<string, unknown>; data: { reviewReminderClaimedAt: Date | null } }) => {
+        if (data.reviewReminderClaimedAt) {
+          const cutoff = (
+            where.OR as Array<{ reviewReminderClaimedAt: null | { lte: Date } }>
+          )[1].reviewReminderClaimedAt as { lte: Date };
+          if (activeClaim && activeClaim > cutoff.lte) return { count: 0 };
+          activeClaim = data.reviewReminderClaimedAt;
+          return { count: 1 };
+        }
+        if (where.reviewReminderClaimedAt !== activeClaim) return { count: 0 };
+        activeClaim = null;
+        return { count: 1 };
+      }
+    );
+    mockNotify.notifyReviewReminder.mockImplementation(async (ids: string[]) => new Set(ids));
+
+    await sendReviewReminders(NOW);
+
+    expect(abandonedClaim).not.toBeNull();
+    expect(activeClaim).toBeNull();
+    expect(mockNotify.notifyReviewReminder).toHaveBeenCalledTimes(1);
+  });
+
+  it("records nothing when no active reviewer receives the message", async () => {
+    mockPrisma.post.findMany.mockResolvedValueOnce([candidate("a1", "client-a")]).mockResolvedValueOnce([candidate("a1", "client-a")]);
+    mockNotify.notifyReviewReminder.mockResolvedValue(new Set());
+
+    const result = await sendReviewReminders(NOW);
+
+    expect(result.sent).toBe(0);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
   });
 });

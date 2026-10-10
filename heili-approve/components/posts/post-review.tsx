@@ -29,6 +29,10 @@ export interface ReviewVersionView {
   text: string;
   firstCommentText: string | null;
   media: MediaItem[];
+  /** Schedule snapshot approved with this version (legacy rows may omit it). */
+  networks?: Network[];
+  networkOptions?: unknown;
+  publishAt?: Date | string;
   /** Sent to the client at least once. */
   sent: boolean;
   createdAt: Date | string;
@@ -127,6 +131,17 @@ export default function PostReview({
       timeSec: t.root.timeSec,
       timeEndSec: t.root.timeEndSec,
     }));
+
+  if (target?.pinX !== undefined && target.pinY !== undefined) {
+    pins.push({
+      id: "draft",
+      mediaIndex: target.mediaIndex,
+      x: target.pinX,
+      y: target.pinY,
+      label: "+",
+      timeSec: target.timeSec,
+    });
+  }
 
   const markers: PreviewVideoMarker[] = [
     ...visibleThreads
@@ -235,9 +250,9 @@ export default function PostReview({
     : null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(480px,600px)_minmax(0,1fr)]">
       {/* ── Preview ── */}
-      <div className="min-w-0 space-y-3 lg:sticky lg:top-4 lg:self-start">
+      <div className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start">
         {versions.length > 1 && (
           <label className="block text-sm">
             <span className="sr-only">Versione mostrata</span>
@@ -260,14 +275,14 @@ export default function PostReview({
           </label>
         )}
         <NetworkPreviewTabs
-          networks={networks}
-          networkOptions={networkOptions}
+          networks={version.networks ?? networks}
+          networkOptions={version.networkOptions ?? networkOptions}
           text={version.text}
           firstCommentText={version.firstCommentText}
           media={media}
           accountName={accountName}
           accountAvatarUrl={accountAvatarUrl}
-          publishAt={publishAt}
+          publishAt={version.publishAt ?? publishAt}
           timeZone={timezone}
           pins={pins}
           markers={markers}

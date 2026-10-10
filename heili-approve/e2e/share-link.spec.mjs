@@ -137,15 +137,16 @@ test("scheda cliente: link pronti per ogni referente, anche senza email", async 
   await context.close();
 });
 
-test("post in revisione: «Condividi con il cliente» porta dritto al post", async ({ browser }) => {
+test("post in revisione: il link diretto porta dritto al post", async ({ browser }) => {
   const post = data.multi.posts.find((p) => p.kind === "SOCIAL_POST");
   const context = await agencyContext(browser, data, { options: MOBILE });
   const page = await context.newPage();
   await page.goto(`/posts/${post.id}`);
 
   const panel = page.getByTestId("post-share-panel");
-  await expect(panel.getByRole("heading", { name: "Condividi con il cliente" })).toBeVisible();
-  const row = panel.getByTestId("post-share-row").filter({ hasText: "Chiara Fabbri" });
+  await expect(panel.getByRole("heading", { name: "Link diretto per il cliente" })).toBeVisible();
+  const row = panel.getByTestId("post-share-row");
+  await expect(row).toContainText("Chiara Fabbri");
   const url = await row.getByTestId("share-link-url").inputValue();
   expect(url).toBe(`${data.multi.client.reviewUrl}/posts/${post.id}`);
   const text = decodeURIComponent(
@@ -168,9 +169,7 @@ test("bozza: il link compare dopo l'invio; elenco clienti con «Copia link»", a
   const context = await agencyContext(browser, data, { options: DESKTOP });
   const page = await context.newPage();
   await page.goto(`/posts/${draft.id}`);
-  await expect(page.getByTestId("post-share-draft-hint")).toHaveText(
-    "Il link per il cliente compare qui dopo «Invia in revisione»."
-  );
+  await expect(page.getByTestId("post-share-draft-hint")).toContainText("La bozza non è ancora visibile al cliente.");
   await expect(page.getByTestId("share-link-url")).toHaveCount(0);
 
   await page.goto("/clients");

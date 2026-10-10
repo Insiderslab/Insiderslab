@@ -95,9 +95,9 @@ type MediaRef = AssistantMediaRef;
  * list's only video.
  */
 function placeOnMedia(
-  item: Pick<ActionItem, "mediaIndex" | "timeSec" | "timeEndSec">,
+  item: Pick<ActionItem, "mediaIndex" | "timeSec" | "timeEndSec" | "pinX" | "pinY">,
   media: MediaRef[]
-): Pick<ActionItem, "mediaIndex" | "timeSec" | "timeEndSec"> {
+): Pick<ActionItem, "mediaIndex" | "timeSec" | "timeEndSec" | "pinX" | "pinY"> {
   const videoIndexes = media.flatMap((m, index) => (m.type === "video" ? [index] : []));
   let mediaIndex =
     item.mediaIndex !== null && Number.isInteger(item.mediaIndex) && item.mediaIndex >= 0 && item.mediaIndex < media.length
@@ -124,7 +124,23 @@ function placeOnMedia(
     }
   }
   if (timeSec !== null && timeEndSec !== null && timeEndSec <= timeSec) timeEndSec = null;
-  return { mediaIndex, timeSec, timeEndSec };
+  const validPin =
+    mediaIndex !== null &&
+    item.pinX !== null &&
+    item.pinY !== null &&
+    Number.isFinite(item.pinX) &&
+    Number.isFinite(item.pinY) &&
+    item.pinX >= 0 &&
+    item.pinX <= 1 &&
+    item.pinY >= 0 &&
+    item.pinY <= 1;
+  return {
+    mediaIndex,
+    timeSec,
+    timeEndSec,
+    pinX: validPin ? Math.round(item.pinX! * 10_000) / 10_000 : null,
+    pinY: validPin ? Math.round(item.pinY! * 10_000) / 10_000 : null,
+  };
 }
 
 /**
@@ -138,7 +154,7 @@ export function sanitizeActionItems(items: ActionItem[], media: MediaRef[]): Act
   return sanitizeActionItemsFor(items, { kind: "SOCIAL_POST", media });
 }
 
-const NO_PLACE = { mediaIndex: null, timeSec: null, timeEndSec: null } as const;
+const NO_PLACE = { mediaIndex: null, timeSec: null, timeEndSec: null, pinX: null, pinY: null } as const;
 
 /** Variant an item names: by id (any case), else by name; the only one when there is one. */
 function matchVariant<T extends { id: string; name: string }>(variants: T[], variantId: string | null): T | null {
@@ -188,7 +204,15 @@ export function sanitizeActionItemsFor(items: ActionItem[], target: AssistantIte
       cleaned = { ...item, request, ...placeOnMedia(item, target.media), variantId: null, anchorQuote: null };
     }
 
-    const key = `${cleaned.variantId ?? ""}|${cleaned.anchorQuote?.toLowerCase() ?? ""}|${request.toLowerCase()}`;
+    const key = [
+      cleaned.variantId ?? "",
+      cleaned.anchorQuote?.toLowerCase() ?? "",
+      cleaned.mediaIndex ?? "",
+      cleaned.timeSec ?? "",
+      cleaned.pinX ?? "",
+      cleaned.pinY ?? "",
+      request.toLowerCase(),
+    ].join("|");
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(cleaned);

@@ -20,7 +20,18 @@
  * the chat and tell the model exactly what the client means.
  */
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { useSpeechInput } from "@/components/voice/use-speech-input";
+import { useLiveConversation } from "@/components/voice/use-live-conversation";
+import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
 import {
@@ -31,6 +42,7 @@ import {
   VERDICT_LABELS,
   actionItemPlaceTags,
   passageMarker,
+  pointMarker,
   shortQuote,
   splitMessageMarkers,
   variantMarker,
@@ -63,6 +75,46 @@ export interface AssistantPanelProps {
   getContext?: () => AssistantAdsContext | null;
   /** Ads: variant names by id, for the summary's tags. */
   variantNames?: Record<string, string>;
+  /** Point currently selected on an image or paused video frame. */
+  getPointContext?: () => {
+    mediaIndex: number;
+    x: number;
+    y: number;
+    variantId?: string | null;
+    timeSec?: number | null;
+  } | null;
+  /** Lets the persistent portal footer reuse this panel's guarded actions. */
+  controlRef?: Ref<AssistantPanelHandle>;
+  /** Existing saved-comment flow, used when this assistant has no feedback yet. */
+  onRequestSavedChanges?: () => Promise<void>;
+}
+
+export interface AssistantPanelHandle {
+  isLoadingFeedback(): boolean;
+  hasPendingFeedback(): boolean;
+  requestChanges(): Promise<void>;
+  approve(): Promise<void>;
+  close(): Promise<boolean>;
+}
+
+type ComposerAction = "prepare" | "send" | "approve";
+
+export function composerBlockingMessage(
+  draft: string,
+  listening: boolean,
+  action: ComposerAction
+): string | null {
+  if (!draft.trim() && !listening) return null;
+  const next =
+    action === "approve"
+      ? "approvare"
+      : action === "send"
+        ? "inviare le modifiche"
+        : "preparare il riepilogo";
+  if (listening) {
+    return `Ferma la dettatura, poi invia o svuota il messaggio prima di ${next}.`;
+  }
+  return `Invia o svuota il messaggio ancora in bozza prima di ${next}: non è ancora incluso nel riepilogo.`;
 }
 
 /** How often the chips re-read the player / selection / variant on screen. */
@@ -107,57 +159,6 @@ function adsContextLabel(context: AssistantAdsContext): string {
     .join(" · ");
 }
 
-// ─── Speech recognition (not in every browser, not in TS's DOM lib) ──────────
-
-interface SpeechRecognitionResultLike {
-  isFinal: boolean;
-  0: { transcript: string };
-}
-
-interface SpeechRecognitionEventLike {
-  results: ArrayLike<SpeechRecognitionResultLike>;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-function getSpeechRecognition(): SpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-const noopSubscribe = () => () => {};
-
-function useVoiceSupported(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
-    () => getSpeechRecognition() !== null,
-    () => false
-  );
-}
-
-const VOICE_ERRORS: Record<string, string> = {
-  "not-allowed": "Per dettare devi consentire l'uso del microfono al browser.",
-  "service-not-allowed": "Per dettare devi consentire l'uso del microfono al browser.",
-  "audio-capture": "Non trovo nessun microfono su questo dispositivo.",
-  network: "La dettatura non è disponibile senza connessione.",
-};
-
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
@@ -194,6 +195,9 @@ export function AssistantPanel({
   getSelection,
   getContext,
   variantNames,
+  getPointContext,
+  controlRef,
+  onRequestSavedChanges,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const labels: ActionItemLabels = { variantNames };
@@ -213,20 +217,37 @@ export function AssistantPanel({
   const [changesDraft, setChangesDraft] = useState<string | null>(null);
   const [done, setDone] = useState<null | "changes" | "approved">(null);
 
-  const [listening, setListening] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const voiceSupported = useVoiceSupported();
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const draftBeforeVoiceRef = useRef("");
-
   const [videoTime, setVideoTime] = useState<number | null>(null);
   const selection = usePolled(getSelection, (anchor) => `${anchor.blockIndex}|${anchor.prefix}|${anchor.quote}`);
   const adsContext = usePolled(
     getContext,
     (c) => `${c.variantId}|${c.placement}|${c.timeSec === null ? "" : Math.floor(c.timeSec)}|${c.variantName}`
   );
+  const pointContext = usePolled(
+    getPointContext,
+    (point) =>
+      `${point.variantId ?? ""}|${point.mediaIndex}|${point.x.toFixed(4)}|${point.y.toFixed(4)}|${point.timeSec ?? ""}`
+  );
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const draftRef = useRef(draft);
+  const contextRef = useRef({ videoTime, selection, adsContext, pointContext });
+  const speechInput = useSpeechInput({
+    value: draft,
+    onChange: (value) => {
+      draftRef.current = value;
+      setDraft(value);
+      setDictated(true);
+    },
+    maxLength: MAX_CLIENT_MESSAGE_LENGTH,
+  });
+  const cancelSpeechInput = speechInput.cancel;
+
+  useEffect(() => {
+    draftRef.current = draft;
+    contextRef.current = { videoTime, selection, adsContext, pointContext };
+  }, [adsContext, draft, pointContext, selection, videoTime]);
 
   const applyState = useCallback((state: AssistantStateResponse) => {
     setSession(state.session);
@@ -241,6 +262,17 @@ export function AssistantPanel({
     applyState(state);
     return state;
   }, [applyState, stateUrl]);
+
+  const reloadAfterVoice = useCallback(async () => {
+    const state = await reload();
+    // A new voice call can create a new review session. Never keep the
+    // editable text from the previously completed session over the new one.
+    if (state.session?.status !== "COMPLETED" || state.session.id !== session?.id || state.session.changesMessage !== session?.changesMessage) {
+      setChangesDraft(null);
+    }
+    setReadiness(null);
+    return state;
+  }, [reload, session?.id, session?.changesMessage]);
 
   // Resume the conversation for this version, if any.
   useEffect(() => {
@@ -277,9 +309,17 @@ export function AssistantPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [session?.messages.length, pendingMessage, busy]);
 
-  // Stop dictation when the panel goes away.
-  useEffect(() => () => recognitionRef.current?.abort(), []);
+  // The parent keys this panel by post/version. Cleanup makes sure a route or
+  // version change never leaves the microphone or a spoken reply running.
+  useEffect(
+    () => () => {
+      cancelSpeechInput();
+    },
+    [cancelSpeechInput, postId, versionNumber]
+  );
 
+  const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reloadAfterVoice });
+  const voiceBusy = live.phase !== "idle";
   const messages = session?.messages ?? [];
   const lastMessage = messages.at(-1);
   const hasClientMessages = messages.some((m) => m.role === "CLIENT");
@@ -288,48 +328,65 @@ export function AssistantPanel({
     !busy && session?.status === "OPEN" && lastMessage?.role === "CLIENT" && pendingMessage === null;
   const messagesLeft = session ? session.clientMessagesLeft : null;
   const outOfSessions = !session && sessionsLeft === 0;
-  const composerDisabled = !canChat || done !== null || busy !== null || outOfSessions || messagesLeft === 0;
+  const composerDisabled = voiceBusy || !canChat || done !== null || busy !== null || outOfSessions || messagesLeft === 0;
 
-  // ─── Voice ─────────────────────────────────────────────────────────────────
-
-  function startListening() {
-    const Recognition = getSpeechRecognition();
-    if (!Recognition) return;
-    setVoiceError(null);
-    const recognition = new Recognition();
-    recognition.lang = "it-IT";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    draftBeforeVoiceRef.current = draft.trimEnd();
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
-      const base = draftBeforeVoiceRef.current;
-      const spoken = transcript.trim();
-      setDraft((base && spoken ? `${base} ${spoken}` : base || spoken).slice(0, MAX_CLIENT_MESSAGE_LENGTH));
-      if (spoken) setDictated(true);
-    };
-    recognition.onerror = (event) => {
-      if (event.error !== "aborted" && event.error !== "no-speech") {
-        setVoiceError(VOICE_ERRORS[event.error] ?? "La dettatura si è interrotta. Riprova o scrivi il messaggio.");
-      }
-    };
-    recognition.onend = () => {
-      setListening(false);
-      recognitionRef.current = null;
-    };
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setListening(true);
-    } catch {
-      recognitionRef.current = null;
-      setVoiceError("Non riesco ad avviare la dettatura. Riprova o scrivi il messaggio.");
+  function guardComposer(action: ComposerAction): boolean {
+    if (loading) {
+      setError("Sto recuperando i tuoi commenti e la conversazione. Attendi il caricamento prima di concludere la revisione.");
+      return false;
     }
+    const message = composerBlockingMessage(draftRef.current, speechInput.listening, action);
+    if (!message) return true;
+    setError(message);
+    textareaRef.current?.focus();
+    return false;
+  }
+  function currentContextMarker(context = contextRef.current): string {
+    const {
+      adsContext: currentAdsContext,
+      selection: currentSelection,
+      videoTime: currentVideoTime,
+      pointContext: currentPointContext,
+    } = context;
+    const markers: string[] = [];
+    if (currentAdsContext && !currentPointContext) {
+      markers.push(
+        variantMarker({
+          variantId: currentAdsContext.variantId,
+          variantName: currentAdsContext.variantName,
+          placementLabel: currentAdsContext.placementLabel,
+          timeSec: currentAdsContext.timeSec,
+        })
+      );
+    }
+    if (currentSelection) markers.push(passageMarker(currentSelection.quote));
+    if (currentPointContext) {
+      markers.push(pointMarker(currentPointContext));
+    } else if (!currentAdsContext && currentVideoTime !== null) {
+      markers.push(videoMomentMarker(currentVideoTime));
+    }
+    return markers.join(" ");
   }
 
-  function stopListening() {
-    recognitionRef.current?.stop();
+  const selectedContextMarker = currentContextMarker({ adsContext, selection, videoTime, pointContext });
+  const updateVoiceContext = live.updateContext;
+  useEffect(() => {
+    if (live.phase !== "active") return;
+    const timer = window.setTimeout(() => { void updateVoiceContext(selectedContextMarker); }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [live.phase, selectedContextMarker, updateVoiceContext]);
+
+  function startConversation() {
+    if (composerDisabled) return;
+    if (draft.trim()) {
+      setError("Invia prima il messaggio scritto oppure svuotalo, poi avvia la conversazione vocale.");
+      textareaRef.current?.focus();
+      return;
+    }
+    speechInput.cancel();
+    setError(null);
+    setReadiness(null);
+    void live.start(currentContextMarker());
   }
 
   // ─── Actions ───────────────────────────────────────────────────────────────
@@ -363,10 +420,17 @@ export function AssistantPanel({
     );
   }
 
-  async function sendMessage(retry = false) {
+  function insertPointContext() {
+    if (!pointContext) return;
+    insertMarker(pointMarker(pointContext));
+  }
+
+  async function sendMessage(
+    retry = false,
+  ) {
     const message = draft.trim();
-    if (busy || (!retry && !message)) return;
-    stopListening();
+    if (busy || voiceBusy || (!retry && !message)) return;
+    speechInput.cancel();
     const inputMode: ReviewInputModeValue = dictated ? "VOICE" : "TEXT";
 
     setBusy("send");
@@ -417,22 +481,24 @@ export function AssistantPanel({
     return result;
   }
 
-  async function prepareSummary() {
-    if (busy) return;
-    stopListening();
+  async function prepareSummary(): Promise<boolean> {
+    if (busy || !guardComposer("prepare")) return false;
     setBusy("finalize");
     setError(null);
     try {
+      await live.stop();
       await finalize();
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Non sono riuscito a preparare il riepilogo. Riprova.");
+      return false;
     } finally {
       setBusy(null);
     }
   }
 
   async function submitChanges() {
-    if (busy || !session) return;
+    if (busy || !session || !guardComposer("send")) return;
     const message = (changesDraft ?? session.changesMessage ?? "").trim();
     if (!message) {
       setError("Il messaggio per l'agenzia è vuoto.");
@@ -451,11 +517,11 @@ export function AssistantPanel({
   }
 
   async function approve() {
-    if (busy) return;
-    stopListening();
+    if (busy || !guardComposer("approve")) return;
     setBusy("approve");
     setError(null);
     try {
+      await live.stop();
       // Best effort: leave the agency a summary of the conversation too.
       if (session?.status === "OPEN" && hasClientMessages) {
         await finalize().catch(() => undefined);
@@ -469,18 +535,77 @@ export function AssistantPanel({
     }
   }
 
+  async function requestChanges() {
+    if (busy || !guardComposer("send")) return;
+    if (voiceBusy || (session?.status === "OPEN" && hasClientMessages)) {
+      const prepared = await prepareSummary();
+      if (prepared) {
+        window.requestAnimationFrame(() =>
+          panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        );
+      }
+      return;
+    }
+    if (completed) {
+      await submitChanges();
+      return;
+    }
+    if (onRequestSavedChanges) {
+      await onRequestSavedChanges();
+      return;
+    }
+    setError("Scrivi un messaggio o aggiungi un commento al contenuto prima di chiedere modifiche.");
+    textareaRef.current?.focus();
+  }
+
+  async function close(): Promise<boolean> {
+    if (busy) return false;
+    speechInput.cancel();
+    try {
+      await live.stop();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function hasPendingFeedback(): boolean {
+    if (done !== null) return false;
+    return Boolean(
+      draftRef.current.trim() ||
+        pendingMessage !== null ||
+        busy !== null ||
+        voiceBusy ||
+        speechInput.listening ||
+        hasClientMessages ||
+        completed ||
+        live.clientText.trim()
+    );
+  }
+
+  useImperativeHandle(controlRef, () => ({
+    isLoadingFeedback: () => loading,
+    hasPendingFeedback,
+    requestChanges,
+    approve,
+    close,
+  }));
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const sendHighlighted = completed ? session?.verdict === "changes" : readiness === "ready_changes";
   const approveHighlighted = completed ? session?.verdict === "approve" : readiness === "ready_approve";
 
   return (
-    <section className="panel rounded-lg p-4 space-y-3" aria-label="Assistente di revisione">
-      <header className="space-y-1">
-        <h2 className="text-sm font-semibold">Assistente di revisione</h2>
-        <p className="text-xs text-muted">
-          Ti aiuta a spiegare all&apos;agenzia cosa cambiare. Non approva e non invia nulla al posto tuo.
-        </p>
+    <section ref={panelRef} className="space-y-3 rounded-xl border border-border bg-background p-3" aria-label="Assistente di revisione">
+      <header className="flex items-start gap-2">
+        <HeiliAssistantIcon className="h-7 w-7" />
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-sm font-semibold">Heili</h2>
+          <p className="text-xs text-muted">
+            Ti aiuta a spiegare all&apos;agenzia cosa cambiare. Non approva e non invia nulla al posto tuo.
+          </p>
+        </div>
       </header>
 
       <div
@@ -492,7 +617,9 @@ export function AssistantPanel({
           <p className="text-sm text-muted">Caricamento…</p>
         ) : (
           <>
-            <Bubble role="ASSISTANT" content={copy.intro} />
+            {messages.length === 0 && !voiceBusy && !live.clientText && !live.assistantText && (
+              <Bubble role="ASSISTANT" content={copy.intro} />
+            )}
             {messages.map((m) => (
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
             ))}
@@ -524,7 +651,16 @@ export function AssistantPanel({
           session={session}
           changesDraft={changesDraft ?? session.changesMessage ?? ""}
           onChangesDraft={setChangesDraft}
-          disabled={busy !== null || !canChat}
+          disabled={busy !== null || !canChat || voiceBusy || Boolean(draft.trim()) || speechInput.listening}
+          disabledReason={
+            voiceBusy
+              ? "Termina la conversazione vocale: il riepilogo verrà aggiornato con ciò che state dicendo."
+              : draft.trim() || speechInput.listening
+                ? "Invia o svuota il messaggio qui sotto: questa bozza non è ancora inclusa nel riepilogo."
+                : !canChat
+                  ? "La revisione non è più modificabile."
+                  : null
+          }
           labels={labels}
         />
       )}
@@ -544,7 +680,7 @@ export function AssistantPanel({
           )}
 
           <div className="space-y-2">
-            {(videoTime !== null || selection || adsContext) && (
+            {(videoTime !== null || selection || adsContext || pointContext) && (
               <div className="flex flex-wrap gap-2">
                 {videoTime !== null && (
                   <Chip onClick={insertVideoMoment} disabled={composerDisabled}>
@@ -563,12 +699,21 @@ export function AssistantPanel({
                     <span className="text-muted">({adsContextLabel(adsContext)})</span>
                   </Chip>
                 )}
+                {pointContext && (
+                  <Chip onClick={insertPointContext} disabled={composerDisabled}>
+                    Usa il punto selezionato ({Math.round(pointContext.x * 100)}%, {Math.round(pointContext.y * 100)}%)
+                  </Chip>
+                )}
               </div>
             )}
             <textarea
               ref={textareaRef}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                draftRef.current = e.target.value;
+                setDraft(e.target.value);
+                setDictated(false);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
@@ -580,29 +725,38 @@ export function AssistantPanel({
               disabled={composerDisabled}
               placeholder={completed ? "Vuoi aggiungere qualcosa? Scrivilo qui…" : copy.placeholder}
               aria-label="Messaggio per l'assistente"
-              className="w-full resize-y rounded border border-border bg-background p-3 text-sm outline-none focus:border-accent disabled:opacity-60"
+              className="w-full resize-y rounded border border-border bg-background p-3 text-base outline-none focus:border-accent disabled:opacity-60"
             />
-            {listening && <p className="text-xs text-accent">Ti ascolto… tocca «Stop» quando hai finito.</p>}
-            {voiceError && <p className="text-xs text-error">{voiceError}</p>}
+            {speechInput.error && (
+              <p className="text-xs text-error" role="alert">
+                {speechInput.error}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              {voiceSupported && (
+              {speechInput.supported && !voiceBusy && (
                 <button
                   type="button"
-                  onClick={listening ? stopListening : startListening}
-                  disabled={!listening && composerDisabled}
-                  aria-pressed={listening}
-                  className={`rounded border px-3 py-2 text-sm disabled:opacity-50 ${
-                    listening ? "border-accent text-accent" : "border-border hover:border-border-hover"
+                  onClick={() =>
+                    speechInput.listening
+                      ? speechInput.stop()
+                      : speechInput.start({ continuous: true, submitOnEnd: false })
+                  }
+                  disabled={!speechInput.listening && composerDisabled}
+                  aria-pressed={speechInput.listening}
+                  className={`min-h-11 rounded border px-3 text-sm disabled:opacity-50 ${
+                    speechInput.listening ? "border-accent text-accent" : "border-border hover:border-border-hover"
                   }`}
                 >
-                  {listening ? "Stop" : "Detta a voce"}
+                  {speechInput.listening ? "Ferma dettatura" : "Detta il messaggio"}
                 </button>
               )}
               <button
                 type="button"
-                onClick={() => sendMessage()}
+                onClick={() => {
+                  void sendMessage();
+                }}
                 disabled={composerDisabled || !draft.trim()}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                className="min-h-11 rounded bg-accent px-4 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {busy === "send" ? "Invio…" : "Invia"}
               </button>
@@ -610,26 +764,92 @@ export function AssistantPanel({
                 <span className="text-xs text-muted">Messaggi rimasti: {messagesLeft}</span>
               )}
             </div>
+
+            <div className="space-y-3 border-t border-border pt-3">
+              <div className="flex items-start gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Conversazione vocale</p>
+                  <p className="text-xs text-muted">
+                    Una conversazione naturale sul post: puoi interrompere Heili parlando, anche mentre risponde.
+                    La voce è generata dall’AI. Scegli tu quando inviare il feedback.
+                  </p>
+                </div>
+              </div>
+              {live.error && <p className="text-sm text-error" role="alert">{live.error}</p>}
+              {!live.supported ? (
+                <p className="text-xs text-muted">La chiamata richiede un browser con microfono e una connessione sicura. Puoi sempre usare la chat.</p>
+              ) : !voiceBusy ? (
+                <button type="button" onClick={startConversation} disabled={composerDisabled}
+                  className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50">
+                  Inizia conversazione vocale
+                </button>
+              ) : (
+                <>
+                  <p className="text-sm font-medium" role="status">
+                    {live.phase === "preparing" ? "Sto preparando il contesto delle immagini e dei video… Il microfono è ancora spento." : live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
+                  </p>
+                  {live.phase === "active" && live.remainingSeconds !== null && (
+                    <p className="text-xs text-muted" role="timer" aria-live="off">
+                      Tempo rimasto: {formatCountdown(live.remainingSeconds)}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {live.phase === "active" && (
+                      <button type="button" onClick={live.toggleMicrophone} aria-pressed={live.muted}
+                        className="min-h-11 rounded-md border border-border bg-background px-3 text-sm">
+                        {live.muted ? "Riattiva microfono" : "Disattiva microfono"}
+                      </button>
+                    )}
+                    {live.playbackBlocked && (
+                      <button type="button" onClick={() => void live.enablePlayback()} className="min-h-11 rounded-md border border-accent px-3 text-sm text-accent">Attiva audio</button>
+                    )}
+                    <button type="button" onClick={() => void live.stop().catch(() => {})} disabled={live.phase === "closing"}
+                      className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50">
+                      {live.phase === "preparing" ? "Annulla preparazione" : live.phase === "connecting" ? "Annulla collegamento" : "Termina conversazione"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l’agenzia.</p>
+                </>
+              )}
+              {(live.clientText || live.assistantText) && (
+                <details className="text-sm" open>
+                  <summary className="cursor-pointer text-xs text-muted">Trascrizione in diretta</summary>
+                  <div className="mt-2 max-h-60 space-y-2 overflow-y-auto" aria-live="off">
+                    {live.clientText && <p><strong>Tu: </strong>{live.clientText}</p>}
+                    {live.assistantText && <p><strong>Heili: </strong>{live.assistantText}</p>}
+                  </div>
+                </details>
+              )}
+            </div>
           </div>
 
-          {(hasClientMessages || completed) && (
+          {(hasClientMessages || completed || live.clientText) && (
             <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:flex-wrap">
-              {completed ? (
-                <ActionButton onClick={submitChanges} disabled={busy !== null} primary={sendHighlighted}>
+              {completed && controlRef ? (
+                <p className="text-sm text-muted">Controlla il riepilogo, poi premi «Chiedi modifiche» nella barra in basso per inviarlo all’agenzia.</p>
+              ) : completed ? (
+                <ActionButton onClick={submitChanges} disabled={busy !== null || voiceBusy} primary={sendHighlighted}>
                   {busy === "submit" ? "Invio…" : "Invia le modifiche all'agenzia"}
                 </ActionButton>
               ) : (
                 <ActionButton
                   onClick={prepareSummary}
-                  disabled={busy !== null || session?.status !== "OPEN"}
+                  disabled={busy !== null || live.phase === "preparing" || live.phase === "connecting" || live.phase === "closing" || (!voiceBusy && session?.status !== "OPEN")}
                   primary={readiness === "ready_changes"}
                 >
                   {busy === "finalize" ? "Preparo il riepilogo…" : "Prepara il riepilogo per l'agenzia"}
                 </ActionButton>
               )}
-              <ActionButton onClick={approve} disabled={busy !== null} primary={approveHighlighted} success>
+              {!controlRef && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
                 {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
-              </ActionButton>
+              </ActionButton>}
+              {(voiceBusy || draft.trim() || speechInput.listening) && (
+                <p className="basis-full text-xs text-muted">
+                  {voiceBusy
+                    ? "Termina la conversazione vocale prima di inviare o approvare."
+                    : "Il messaggio in bozza va inviato o svuotato prima dell’azione finale."}
+                </p>
+              )}
             </div>
           )}
         </>
@@ -646,7 +866,7 @@ function Chip({ onClick, disabled, children }: { onClick: () => void; disabled: 
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="max-w-full truncate rounded-full border border-border px-3 py-1 text-left text-xs hover:border-border-hover disabled:opacity-50"
+      className="min-h-11 max-w-full truncate rounded-full border border-border px-3 py-1 text-left text-xs hover:border-border-hover disabled:opacity-50"
     >
       {children}
     </button>
@@ -671,6 +891,13 @@ function MessageText({ content }: { content: string }) {
           return (
             <span key={i} className={`${chip} italic`} title={segment.quote}>
               Passaggio {shortQuote(segment.quote, 60)}
+            </span>
+          );
+        }
+        if (segment.type === "point") {
+          return (
+            <span key={i} className={chip}>
+              {segment.label}
             </span>
           );
         }
@@ -715,19 +942,21 @@ function SummaryCard({
   changesDraft,
   onChangesDraft,
   disabled,
+  disabledReason,
   labels,
 }: {
   session: AssistantSessionView;
   changesDraft: string;
   onChangesDraft: (value: string) => void;
   disabled: boolean;
+  disabledReason: string | null;
   labels: ActionItemLabels;
 }) {
   return (
     <div className="space-y-3 rounded border border-border bg-background p-3">
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
-          Riepilogo{session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""}
+          Riepilogo{session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
         </p>
         <p className="whitespace-pre-wrap text-sm">{session.summary}</p>
       </div>
@@ -752,15 +981,18 @@ function SummaryCard({
         </ul>
       )}
       <label className="block space-y-1">
-        <span className="text-xs text-muted">Messaggio che riceverà l&apos;agenzia (puoi modificarlo)</span>
+        <span className="text-xs text-muted">
+          Messaggio da inviare all&apos;agenzia (non ancora inviato; puoi modificarlo qui)
+        </span>
         <textarea
           value={changesDraft}
           onChange={(e) => onChangesDraft(e.target.value)}
           rows={5}
           maxLength={5000}
           disabled={disabled}
-          className="w-full resize-y rounded border border-border bg-background p-2 text-sm outline-none focus:border-accent disabled:opacity-60"
+          className="w-full resize-y rounded border border-border bg-background p-2 text-base outline-none focus:border-accent disabled:opacity-60"
         />
+        {disabled && disabledReason && <span className="block text-xs text-muted">{disabledReason}</span>}
       </label>
     </div>
   );
@@ -789,7 +1021,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded border px-4 py-2 text-sm font-medium disabled:opacity-50 ${tone}`}
+      className={`min-h-11 rounded border px-4 py-2 text-sm font-medium disabled:opacity-50 ${tone}`}
     >
       {children}
     </button>
@@ -797,3 +1029,9 @@ function ActionButton({
 }
 
 export default AssistantPanel;
+
+export function formatCountdown(seconds: number): string {
+  const safe = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(safe / 60);
+  return `${minutes}:${String(safe % 60).padStart(2, "0")}`;
+}

@@ -13,6 +13,7 @@ import { notFound, redirect } from "next/navigation";
 import { PlanProgressBar, PlanStatusChip } from "@/components/plans/plan-bits";
 import NewPlanForm from "@/components/plans/new-plan-form";
 import { formatDateTime } from "@/components/posts/helpers";
+import QuickReviewLink from "@/components/share/quick-review-link";
 import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { addPlanMonths, parsePlanMonth, planMonthOf, planMonthTitle, planProgress } from "@/lib/plan-rules";
@@ -56,16 +57,35 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-6">
-      <section className="panel space-y-4 p-4 sm:p-5" aria-labelledby="new-plan">
-        <div className="space-y-1">
+      <section className="panel studio-panel space-y-5" aria-labelledby="new-plan">
+        <div className="studio-section-heading">
+          <div>
           <h2 id="new-plan" className="text-lg font-semibold">
             Prepara il piano del mese
           </h2>
-          <p className="text-sm text-muted">
-            Presenta al cliente tutti i post social del mese insieme: li rivede in una sola pagina, vede la griglia del
-            profilo e li approva anche tutti in una volta.
+          <p>
+            Il piano raccoglie gli stessi post del calendario in un unico percorso di revisione. La griglia è solo una
+            vista del risultato su Instagram: non crea copie e non invia nulla da sola.
           </p>
+          </div>
         </div>
+        <ol className="grid gap-2 sm:grid-cols-3" aria-label="Come funziona il piano del mese">
+          {[
+            ["1", "Apri il mese", "Scegli cliente e mese: trovi i post già preparati."],
+            ["2", "Completa i post", "Crea quelli mancanti e controlla calendario e griglia."],
+            ["3", "Invia al cliente", "Un solo invio apre la revisione di tutti i post pronti."],
+          ].map(([number, title, body]) => (
+            <li key={number} className="inset flex gap-3 p-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+                {number}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{title}</span>
+                <span className="block text-xs leading-relaxed text-muted">{body}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
         <NewPlanForm
           clients={socialClients.map((c) => ({ id: c.id, name: c.name }))}
           clientId={scoped && socialClients.some((c) => c.id === scoped.id) ? scoped.id : ""}
@@ -96,36 +116,42 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
               const progress = planProgress(plan.posts.map((p) => p.status));
               const zone = plan.client.timezone;
               return (
-                <li key={plan.id}>
-                  <Link
-                    href={`/plans/${plan.id}`}
-                    className="grid gap-3 p-4 hover:bg-surface-hover md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.2fr)] md:items-center"
-                    data-testid="plan-row"
-                  >
-                    <span className="min-w-0 space-y-1">
+                <li
+                  key={plan.id}
+                  className="grid gap-4 p-4 transition-colors hover:bg-surface-hover md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_auto] md:items-center"
+                  data-testid="plan-row"
+                >
+                    <div className="min-w-0 space-y-1">
                       <span className="label-caps block">{planMonthTitle(plan.month)}</span>
-                      <span className="block truncate text-base font-semibold">{plan.title}</span>
+                      <Link href={`/plans/${plan.id}`} className="block truncate text-base font-semibold hover:underline">
+                        {plan.title}
+                      </Link>
                       <span className="flex flex-wrap items-center gap-2 text-sm text-muted">
                         {plan.client.name}
                         <PlanStatusChip status={plan.status} sent={Boolean(plan.sentAt)} />
                       </span>
-                    </span>
-                    <span className="min-w-0">
+                    </div>
+                    <div className="min-w-0">
                       {progress.total === 0 ? (
                         <span className="text-sm text-muted">Nessun post nel mese</span>
                       ) : (
                         <PlanProgressBar progress={progress} size="sm" />
                       )}
-                    </span>
-                    <span className="space-y-0.5 text-sm text-muted md:text-right">
+                    </div>
+                    <div className="space-y-2 text-sm text-muted md:text-right">
+                      <div>
                       <span className="block">
-                        {plan.sentAt ? `Inviato ${formatDateTime(plan.sentAt, zone, { year: false })}` : "Non ancora inviato"}
+                        {plan.sentAt ? `Inviato ${formatDateTime(plan.sentAt, zone, { year: false })}` : "Da preparare e inviare"}
                       </span>
                       {plan.reviewDueAt && (
                         <span className="block">Risposta entro {formatDateTime(plan.reviewDueAt, zone, { year: false })}</span>
                       )}
-                    </span>
-                  </Link>
+                      </div>
+                      <div className="flex flex-wrap items-start gap-2 md:justify-end">
+                        <Link href={`/plans/${plan.id}`} className="btn btn-quiet btn-sm">Apri</Link>
+                        {plan.sentAt && <QuickReviewLink kind="plan" id={plan.id} />}
+                      </div>
+                    </div>
                 </li>
               );
             })}

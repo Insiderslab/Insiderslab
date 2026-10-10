@@ -129,7 +129,7 @@ export async function runAssistantFinalize(
     schema: finalOutputSchema,
     schemaName: "review_summary",
     system: buildFinalizeSystemPrompt(ctx),
-    messages: buildFinalizeMessages(history),
+    messages: buildFinalizeMessages(history, ctx),
     effort: "medium",
     maxTokens: FINAL_MAX_TOKENS,
     timeoutMs: FINAL_TIMEOUT_MS,

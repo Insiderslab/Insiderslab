@@ -35,6 +35,7 @@ model User {
   events           PostEvent[]
   plansCreated     ContentPlan[]         @relation("PlanCreatedBy")
   planComments     ContentPlanComment[]
+  automationTokens AutomationToken[]
 }
 
 model Account {
@@ -98,6 +99,9 @@ model Workspace {
   posts       Post[]
   media       MediaAsset[]
   plans       ContentPlan[]
+  automationTokens AutomationToken[]
+  automationUploads AutomationUploadReservation[]
+  mediaAnalysisAttempts MediaAnalysisAttempt[]
 
   @@index([ownerId])
 }
@@ -154,6 +158,7 @@ enum WorkspaceInvitationStatus {
 // ─── Clienti (= brand Metricool) ─────────────────────────────────────────────
 
 model Client {
+  reviewReminderClaimedAt DateTime?
   id              String        @id @default(cuid())
   workspaceId     String
   name            String
@@ -239,6 +244,10 @@ enum PostStatus {
 }
 
 model Post {
+  /// Stable import identity scoped to the agency; prevents duplicate draft creation.
+  importKey String?
+  importHash String?
+  @@unique([workspaceId, importKey])
   id             String      @id @default(cuid())
   workspaceId    String
   clientId       String
@@ -422,6 +431,8 @@ model MediaAsset {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  analysis MediaAnalysis?
+
   @@index([workspaceId])
 }
 
@@ -443,12 +454,23 @@ enum ReviewInputMode {
   VOICE
 }
 
+enum ReviewVoiceCallStatus {
+  STARTING
+  ACTIVE
+  CLOSING
+  CLOSED
+  EXPIRED
+  FAILED
+}
+
 /// Conversazione guidata tra il cliente e l'assistente AI su una versione di
 /// un post. L'assistente fa domande quando il feedback è vago ("mmh, non mi
 /// convince") finché non è azionabile; alla fine produce un riepilogo
 /// strutturato che diventa la richiesta di modifiche per l'agenzia.
 /// Tutto resta registrato (audit + storico del cliente).
 model ReviewSession {
+  providerAttempts ReviewProviderAttempt[]
+  voiceCalls       ReviewVoiceCall[]
   id            String              @id @default(cuid())
   postId        String
   reviewerId    String
@@ -476,6 +498,133 @@ model ReviewSession {
   @@index([reviewerId])
 }
 
+/// A bounded GPT-Live call attached to one review conversation. The provider
+/// session ID stays server-side; the public portal only receives this row's ID.
+model ReviewVoiceCall {
+  id                String                @id @default(cuid())
+  sessionId         String
+  providerSessionId String?               @unique
+  status            ReviewVoiceCallStatus @default(STARTING)
+  model             String
+  voice             String
+  startedAt         DateTime              @default(now())
+  expiresAt         DateTime
+  providerExpiresAt DateTime?
+  closedAt          DateTime?
+  lastContextAt     DateTime?
+  currentContextMarker String?
+  audioSeconds      Int                   @default(0)
+  closeReason       String?
+  failureCode       String?
+
+  session   ReviewSession                   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  fragments ReviewVoiceTranscriptFragment[]
+  segments  ReviewVoiceTranscriptSegment[]
+
+  @@index([sessionId, startedAt])
+  @@index([status, expiresAt])
+}
+
+/// Raw, provider-authenticated transcript fragments received on the trusted
+/// sideband. The unique provider event ID makes reconnects idempotent.
+model ReviewVoiceTranscriptFragment {
+  id        String   @id @default(cuid())
+  callId    String
+  eventId   String
+  speaker   String
+  delta     String
+  startMs   Int
+  endMs     Int
+  contextMarker String?
+  createdAt DateTime @default(now())
+
+  call ReviewVoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, eventId])
+  @@index([callId, startMs, endMs])
+}
+
+/// Idempotency bridge between grouped Live speech and the normal assistant
+/// transcript. ReviewMessage remains the only transcript consumed by finalize.
+model ReviewVoiceTranscriptSegment {
+  id        String   @id @default(cuid())
+  callId    String
+  ordinal   Int
+  messageId String   @unique
+  startMs   Int
+  endMs     Int
+  createdAt DateTime @default(now())
+
+  call    ReviewVoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  message ReviewMessage   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, ordinal])
+  @@index([callId])
+}
+
+model ReviewProviderAttempt {
+  id String @id @default(cuid())
+  sessionId String
+  createdAt DateTime @default(now())
+  session ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([createdAt])
+}
+
+model AutomationUploadReservation {
+  id String @id @default(cuid())
+  workspaceId String
+  sizeBytes Int
+  expiresAt DateTime
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, expiresAt])
+}
+
+/// Internal evidence for the assistant. Never returned by public media/post APIs.
+model MediaAnalysis {
+  assetId String @id
+  revision String
+  status String @default("PENDING")
+  result Json?
+  failureCode String?
+  startedAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+/// Charged before provider calls; failures and uncertain requests consume budget.
+model MediaAnalysisAttempt {
+  id String @id @default(cuid())
+  workspaceId String
+  assetId String
+  audioSeconds Int @default(0)
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+model AutomationToken {
+  id String @id @default(cuid())
+  workspaceId String
+  userId String
+  name String
+  tokenHash String @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId])
+}
+
 model ReviewMessage {
   id        String            @id @default(cuid())
   sessionId String
@@ -485,6 +634,7 @@ model ReviewMessage {
   createdAt DateTime          @default(now())
 
   session ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  voiceSegment ReviewVoiceTranscriptSegment?
 
   @@index([sessionId, createdAt])
 }
@@ -558,6 +708,11 @@ model ContentPlan {
   /// Avviso all'agenzia "il cliente ha deciso tutti i post" già mandato per
   /// l'ultimo invio (una volta sola; azzerato a ogni nuovo invio).
   completedNotifiedAt DateTime?
+  /// Lease breve per impedire che due decisioni/cron inviino lo stesso avviso.
+  /// Se il processo muore durante l'invio, la lease scade e il cron riprova.
+  completedNotificationClaimedAt DateTime?
+  /// Dopo un fallimento definitivo dell'email, non riprovare prima di qui.
+  completedNotificationRetryAt DateTime?
   createdById         String?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -570,6 +725,7 @@ model ContentPlan {
 
   @@unique([clientId, kind, month])
   @@index([workspaceId, month])
+  @@index([completedNotifiedAt, completedNotificationRetryAt], map: "ContentPlan_completion_notification_retry_idx")
 }
 
 /// Commento generale del cliente (o risposta dell'agenzia) sul piano intero,

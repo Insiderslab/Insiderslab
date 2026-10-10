@@ -21,6 +21,8 @@ export interface PlanEditorCounts {
   approved: number;
   /** Posts of the month not in the plan yet: sending adds them. */
   outside: number;
+  /** Includes outside posts already in review/approved; they are attached, not resent. */
+  outsideTotal?: number;
 }
 
 export default function PlanEditor({
@@ -55,6 +57,7 @@ export default function PlanEditor({
   const [pending, startTransition] = useTransition();
 
   const toSend = counts.drafts + counts.changes + counts.outside;
+  const outsideTotal = counts.outsideTotal ?? counts.outside;
   const dirty = values.title !== title || values.intro !== intro || values.dueDate !== dueDate;
 
   function dueIso(): string | null | undefined {
@@ -102,19 +105,20 @@ export default function PlanEditor({
 
   const parts = [
     counts.drafts > 0 ? `${counts.drafts} ${counts.drafts === 1 ? "bozza" : "bozze"}` : null,
-    counts.outside > 0 ? `${counts.outside} post del mese ancora fuori dal piano` : null,
+    counts.outside > 0 ? `${counts.outside} post da inviare tra quelli fuori dal piano` : null,
     counts.changes > 0 ? `${counts.changes} con modifiche richieste` : null,
   ].filter(Boolean);
 
   return (
-    <section className="panel space-y-4 p-4 sm:p-5" aria-labelledby="plan-editor" data-testid="plan-editor">
-      <div className="space-y-1">
+    <section className="panel studio-panel space-y-5" aria-labelledby="plan-editor" data-testid="plan-editor">
+      <div className="studio-section-heading">
+        <div>
         <h2 id="plan-editor" className="text-lg font-semibold">
-          Messaggio e invio
+          Prepara e invia
         </h2>
-        <p className="text-sm text-muted">
-          Il cliente legge questo messaggio in cima al piano, prima dei post.
-        </p>
+        <p>
+          Il cliente legge questo messaggio prima dei post. {sent ? "Salvare aggiorna il piano già condiviso senza inviare email né nuove bozze." : "Salvare prepara il piano; l’invio lo rende disponibile al cliente."}
+        </p></div>
       </div>
 
       <label htmlFor={ids.title} className="block space-y-1">
@@ -124,7 +128,7 @@ export default function PlanEditor({
           value={values.title}
           maxLength={200}
           onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-          className="field"
+          className="field min-h-11 text-base"
         />
       </label>
 
@@ -137,7 +141,7 @@ export default function PlanEditor({
           rows={6}
           onChange={(e) => setValues((v) => ({ ...v, intro: e.target.value }))}
           placeholder={`Per esempio: a ${monthName} puntiamo sulla stagionalità e sui volti del team. Tre post a settimana, il martedì un Reel.`}
-          className="field resize-y"
+          className="field resize-y text-base"
         />
       </label>
 
@@ -149,7 +153,7 @@ export default function PlanEditor({
             type="date"
             value={values.dueDate}
             onChange={(e) => setValues((v) => ({ ...v, dueDate: e.target.value }))}
-            className="field !w-auto"
+            className="field min-h-11 !w-auto text-base"
           />
           {values.dueDate && (
             <span className="text-xs text-muted">
@@ -167,32 +171,41 @@ export default function PlanEditor({
           className="btn btn-primary"
           data-testid="plan-send"
         >
-          Invia il piano al cliente
+          {sent && toSend > 0 ? `Controlla e invia ${toSend} post da rivedere` : "Controlla e invia il piano"}
         </button>
         <button type="button" onClick={save} disabled={pending || !dirty} className="btn">
-          {pending && !confirming ? "Salvataggio…" : "Salva"}
+          {pending && !confirming ? "Salvataggio…" : "Salva senza inviare"}
         </button>
       </div>
-      <p className="text-sm text-muted">
+      <p className="rounded-xl bg-surface-hover p-3 text-sm text-muted">
         {toSend === 0
-          ? counts.inReview > 0
+          ? outsideTotal > 0
+            ? "Non ci sono nuove bozze da inviare. Usa «Aggiungi al piano» sui post del mese già in revisione o approvati."
+            : counts.inReview > 0
             ? "Tutti i post sono già dal cliente: niente di nuovo da inviare."
             : counts.approved > 0
               ? "Tutti i post del piano sono approvati."
               : "Prepara i post del mese nel calendario: compariranno qui."
-          : `Da inviare: ${parts.join(", ")}.`}
+          : `Con il prossimo invio: ${parts.join(", ")}.`}
       </p>
 
       {confirming && (
-        <div className="inset space-y-3 p-3" role="alertdialog" aria-labelledby="plan-send-confirm">
-          <p id="plan-send-confirm" className="text-sm">
-            {`Invii ${toSend === 1 ? "1 post" : `${toSend} post`} a ${clientName} in un unico piano`}
-            {sent ? " (i post già approvati o in revisione restano come sono)" : ""}. Chi approva riceve una sola email con il
-            link al piano.
-          </p>
+        <div className="inset space-y-3 p-4" role="alertdialog" aria-labelledby="plan-send-confirm-title" data-testid="plan-send-confirmation">
+          <div id="plan-send-confirm-title" className="space-y-1 text-sm">
+            <p className="font-semibold">
+              {`Stai per inviare ${toSend === 1 ? "1 post" : `${toSend} post`} a ${clientName}.`}
+            </p>
+            <p className="text-muted">
+              {outsideTotal > 0
+                ? `${outsideTotal === 1 ? "Il post fuori dal piano verrà aggiunto" : `I ${outsideTotal} post fuori dal piano verranno aggiunti`} automaticamente. `
+                : ""}
+              {sent ? "I post già approvati o già in revisione non cambiano. " : ""}
+              Ogni referente con email riceve un solo messaggio con il link al piano.
+            </p>
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <button type="button" onClick={send} disabled={pending} className="btn btn-primary" data-testid="plan-send-confirm">
-              {pending ? "Invio…" : `Sì, invia ${toSend === 1 ? "1 post" : `${toSend} post`}`}
+              {pending ? "Invio…" : `Invia ora ${toSend === 1 ? "1 post" : `${toSend} post`}`}
             </button>
             <button type="button" onClick={() => setConfirming(false)} disabled={pending} className="btn btn-quiet">
               Annulla

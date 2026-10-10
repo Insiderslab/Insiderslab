@@ -15,7 +15,7 @@ import type { ActionResult } from "@/components/posts/types";
 import { nobodyEmailed, submitFollowUp } from "@/components/share/messages";
 import { userActor } from "@/lib/actor";
 import { isDomainError, parseOrThrow, publicErrorMessage } from "@/lib/errors";
-import { addPostsToPlan, createPlan, sendPlan, updatePlan } from "@/lib/plans";
+import { addPostsToPlan, createPlan, makePlanAvailable, sendPlan, updatePlan } from "@/lib/plans";
 import { getCurrentWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-access";
 
 const idSchema = z.string().trim().min(1).max(64);
@@ -30,6 +30,15 @@ const updateSchema = z.object({
 });
 
 const SESSION_EXPIRED = "Sessione scaduta: accedi di nuovo.";
+
+export async function makePlanAvailableAction(planId: string): Promise<ActionResult> {
+  return withWorkspace(async ({ workspaceId }) => {
+    const id = parseOrThrow(idSchema, planId);
+    await makePlanAvailable(id, workspaceId);
+    revalidatePlans(id);
+    return { ok: true, data: undefined, message: "Piano disponibile. Puoi copiare il link: nessun post reinviato e nessuna email di invito inviata." };
+  });
+}
 
 async function withWorkspace<T>(fn: (context: WorkspaceContext) => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
   const context = await getCurrentWorkspaceContext();

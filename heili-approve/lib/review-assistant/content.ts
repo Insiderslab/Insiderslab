@@ -165,6 +165,8 @@ export function toRequestChangesItems(
     mediaIndex: kind === "BLOG_ARTICLE" ? null : item.mediaIndex,
     timeSec: kind === "BLOG_ARTICLE" ? null : item.timeSec,
     timeEndSec: kind === "BLOG_ARTICLE" ? null : item.timeEndSec,
+    pinX: kind === "BLOG_ARTICLE" ? null : item.pinX,
+    pinY: kind === "BLOG_ARTICLE" ? null : item.pinY,
     request: item.request,
     priority: item.priority,
     variantId: kind === "AD_CREATIVE" ? item.variantId : null,

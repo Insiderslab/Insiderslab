@@ -17,9 +17,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { addPlanCommentAction, approvePlanAction } from "@/app/review/[token]/actions";
-import { PlanProgressBar } from "@/components/plans/plan-bits";
+import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
+import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
 import { SKIP_REASON_LABELS, planProgress, selectApproveAll, type ApproveAllSkipReason } from "@/lib/plan-rules";
 import BottomSheet from "./bottom-sheet";
@@ -50,6 +51,7 @@ export default function PlanReview({
   gridSlot: ReactNode;
 }) {
   const router = useRouter();
+  const commentRef = useRef<HTMLTextAreaElement>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export default function PlanReview({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentNotice, setCommentNotice] = useState<string | null>(null);
   const [commentPending, startComment] = useTransition();
+  const [dictating, setDictating] = useState(false);
 
   const progress = planProgress(plan.posts.map((p) => p.status));
   const selection = selectApproveAll(
@@ -77,33 +80,46 @@ export default function PlanReview({
   const firstToReview = plan.posts.find((p) => p.canAct);
   const waiting = plan.posts.filter((p) => p.canAct).length;
 
+  function blockDraft(): boolean {
+    if (!comment.trim() && !commentPending && !dictating) return false;
+    setCommentError("Hai un commento ancora da inviare. Invialo oppure svuota il campo prima di approvare il piano.");
+    commentRef.current?.focus();
+    return true;
+  }
+
   function openSheet() {
+    if (blockDraft()) return;
     setSheetError(null);
     setSheetOpen(true);
   }
 
   async function approveAll() {
-    if (busy) return;
+    if (busy || blockDraft()) return;
     setBusy(true);
     setSheetError(null);
-    const result = await approvePlanAction(token, {
-      planId: plan.id,
-      posts: plan.posts.map((p) => ({ postId: p.id, versionNumber: p.versionNumber })),
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setSheetError(result.error);
-      return;
+    try {
+      const result = await approvePlanAction(token, {
+        planId: plan.id,
+        posts: plan.posts.map((p) => ({ postId: p.id, versionNumber: p.versionNumber })),
+      });
+      if (!result.ok) {
+        setSheetError(result.error);
+        return;
+      }
+      setSheetOpen(false);
+      setOutcome({ approved: result.data.approved.length, skipped: result.data.skipped });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      router.refresh();
+    } catch {
+      setSheetError("La connessione si è interrotta. Controlla lo stato del piano e riprova.");
+    } finally {
+      setBusy(false);
     }
-    setSheetOpen(false);
-    setOutcome({ approved: result.data.approved.length, skipped: result.data.skipped });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    router.refresh();
   }
 
   function sendComment() {
     const body = comment.trim();
-    if (!body) return;
+    if (!body || dictating || commentPending) return;
     setCommentError(null);
     setCommentNotice(null);
     startComment(async () => {
@@ -169,7 +185,7 @@ export default function PlanReview({
               <button
                 type="button"
                 onClick={openSheet}
-                className="min-h-12 rounded-lg bg-success px-5 text-base font-semibold text-white hover:opacity-90"
+                className="btn min-h-12 order-2"
                 data-testid="plan-approve-all"
               >
                 Approva tutto il piano ({toApprove})
@@ -178,7 +194,7 @@ export default function PlanReview({
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                className="inline-flex min-h-12 items-center justify-center rounded-lg border-2 border-foreground px-5 text-base font-semibold hover:bg-surface-hover"
+                className="btn btn-primary min-h-12 order-1"
               >
                 Rivedi uno per uno
               </Link>
@@ -187,17 +203,17 @@ export default function PlanReview({
         )}
       </header>
 
-      <section className="space-y-3" aria-labelledby="plan-grid">
+      <PlanViews instagram={<section className="space-y-3" aria-labelledby="plan-grid">
         <div className="space-y-1">
           <h2 id="plan-grid" className="text-lg font-semibold">
-            Il tuo profilo a {plan.monthName}
+            Post Instagram del piano
           </h2>
-          <p className="text-sm text-muted">Così apparirà la griglia di Instagram, dal post più recente. Tocca un post per aprirlo.</p>
+          <p className="text-sm text-muted">Anteprima dei soli post Instagram inclusi nel piano, dal più recente. Non include i contenuti già presenti sul profilo. Tocca un post per aprirlo.</p>
         </div>
         {gridSlot}
-      </section>
+      </section>}
 
-      <section className="space-y-3" aria-labelledby="plan-posts">
+      list={<section className="space-y-3" aria-labelledby="plan-posts">
         <h2 id="plan-posts" className="flex items-center gap-2 text-lg font-semibold">
           I post del mese
           <span className="chip chip-offline">{plan.posts.length}</span>
@@ -209,9 +225,9 @@ export default function PlanReview({
             </li>
           ))}
         </ol>
-      </section>
+      </section>} />
 
-      <section className="space-y-3" aria-labelledby="plan-comment">
+      <section className="panel space-y-3 p-5" aria-labelledby="plan-comment">
         <div className="space-y-1">
           <h2 id="plan-comment" className="text-lg font-semibold">
             Commento sul piano
@@ -235,21 +251,26 @@ export default function PlanReview({
         <label className="block space-y-2">
           <span className="sr-only">Commento sul piano</span>
           <textarea
+            ref={commentRef}
             value={comment}
+            disabled={commentPending || busy}
             onChange={(e) => setComment(e.target.value.slice(0, 5000))}
             rows={3}
             placeholder="Per esempio: mi piace il ritmo, ma vorrei più foto del locale."
             className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
           />
         </label>
+        <div className="flex items-center justify-end gap-2">
+        <DictationButton value={comment} onChange={setComment} maxLength={5000} compact disabled={commentPending || busy} onListeningChange={setDictating} />
         <button
           type="button"
           onClick={sendComment}
-          disabled={commentPending || comment.trim() === ""}
-          className="min-h-11 rounded-md border border-border px-4 text-sm font-medium hover:border-border-hover disabled:opacity-50"
+          disabled={commentPending || dictating || comment.trim() === ""}
+          className="btn btn-primary min-h-11"
         >
           {commentPending ? "Invio…" : "Invia il commento"}
         </button>
+        </div>
         {commentError && (
           <p className="text-sm text-error" role="alert">
             {commentError}
@@ -267,7 +288,7 @@ export default function PlanReview({
           <button
             type="button"
             onClick={openSheet}
-            className="min-h-12 w-full rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90"
+            className="btn min-h-12 w-full"
           >
             Approva tutto il piano ({toApprove})
           </button>
@@ -286,6 +307,7 @@ export default function PlanReview({
             : `Approvi ${postsWord(toApprove)} così come li vedi: l'agenzia li programmerà per le loro date.`}
         </p>
         <p className="text-sm text-muted">Ogni post viene approvato nella versione che vedi adesso.</p>
+        {plan.comments.some((c) => !c.fromAgency) && <p className="text-sm text-warning">Ci sono note generali sul piano. Approvare autorizza a procedere con i post così come sono: per richiedere una modifica, apri il singolo post e scegli «Chiedi modifiche».</p>}
         {selection.skipped.length > 0 && (
           <SkippedList skipped={selection.skipped} title="Non li approvo in blocco:" />
         )}

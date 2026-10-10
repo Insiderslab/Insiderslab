@@ -21,9 +21,10 @@ fi
 
 call() {
   route="$1"
+  timeout="${2:-180}"
   stamp=$(date -u '+%Y-%m-%d %H:%M:%S')
 
-  if body=$(wget -q -O- --timeout=180 \
+  if body=$(wget -q -O- --timeout="$timeout" \
       --header="Authorization: Bearer $SECRET" \
       "$BASE_URL/api/cron/$route" 2>&1); then
     echo "[cron] $stamp $route ok $body"
@@ -43,6 +44,10 @@ while true; do
   hhmm=${now#* }
   minute=${hhmm#*:}
   hour_slot=${now%:*}
+
+  # Voice calls are limited to a few minutes. This closes abandoned sessions
+  # after a web-process restart and rechecks revoked links every 30 seconds.
+  call voice 20
 
   # sweep every 5 minutes: approved posts left behind and lost jobs reach
   # Metricool within minutes, well before their publication time.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/ops/cron-auth";
+import { sweepPlanCompletionNotifications } from "@/lib/plans";
 import { sweepApprovedPosts } from "@/lib/scheduling";
 
 export const runtime = "nodejs";
@@ -12,8 +13,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await sweepApprovedPosts();
-    return NextResponse.json({ success: true, data });
+    const [data, planNotifications] = await Promise.all([
+      sweepApprovedPosts(),
+      sweepPlanCompletionNotifications(),
+    ]);
+    return NextResponse.json({ success: true, data, planNotifications });
   } catch (error) {
     console.error("[Cron sweep] Failed:", error instanceof Error ? error.message : error);
     return NextResponse.json({ success: false, error: "Sweep failed" }, { status: 500 });

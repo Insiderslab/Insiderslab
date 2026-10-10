@@ -122,6 +122,8 @@ export function describeSchedulingError(error: unknown): SchedulingErrorInfo {
 
 export const REMINDER_STALE_AFTER_MS = 48 * HOUR_MS;
 export const REMINDER_MIN_INTERVAL_MS = 24 * HOUR_MS;
+/** A dead reminder run may be taken over after this interval. */
+export const REMINDER_CLAIM_LEASE_MS = 15 * MINUTE_MS;
 /** Per submission: after this many the agency should pick up the phone. */
 export const MAX_REMINDERS_PER_SUBMISSION = 3;
 const REMINDER_LOCAL_HOURS = { from: 8, to: 20 };
@@ -606,7 +608,7 @@ const REMINDER_PAGE_SIZE = 200;
  */
 export async function sendReviewReminders(now: Date = new Date()): Promise<ReminderRunResult> {
   const result: ReminderRunResult = { checked: 0, sent: 0, outsideHours: 0 };
-  const dueByClient = new Map<string, Array<{ id: string; versionNumber: number; reminderNumber: number }>>();
+  const dueClients = new Set<string>();
 
   let cursor: string | undefined;
   for (;;) {
@@ -659,15 +661,91 @@ export async function sendReviewReminders(now: Date = new Date()): Promise<Remin
         result.outsideHours++;
         continue;
       }
-      const list = dueByClient.get(post.clientId) ?? [];
-      list.push({ id: post.id, versionNumber: post.currentVersionNumber, reminderNumber: sinceSubmission.length + 1 });
-      dueByClient.set(post.clientId, list);
+      dueClients.add(post.clientId);
     }
     if (page.length < REMINDER_PAGE_SIZE) break;
   }
 
-  for (const [clientId, posts] of dueByClient) {
+  for (const clientId of dueClients) {
+    const claimedAt = new Date();
+    const claim = await prisma.client.updateMany({
+      where: {
+        id: clientId,
+        archivedAt: null,
+        OR: [
+          { reviewReminderClaimedAt: null },
+          { reviewReminderClaimedAt: { lte: new Date(claimedAt.getTime() - REMINDER_CLAIM_LEASE_MS) } },
+        ],
+      },
+      data: { reviewReminderClaimedAt: claimedAt },
+    });
+    if (claim.count === 0) continue;
+
     try {
+      // Discovery above can be stale: another cron may have sent while this
+      // run was waiting for the client lease. Re-read the posts and events
+      // only after the claim, then notify from that fresh snapshot.
+      const posts: Array<{ id: string; versionNumber: number; reminderNumber: number }> = [];
+      let clientCursor: string | undefined;
+      for (;;) {
+        const fresh = await prisma.post.findMany({
+          where: {
+            clientId,
+            status: "IN_REVIEW",
+            client: { archivedAt: null },
+            OR: [
+              { reviewDueAt: { lte: now } },
+              { submittedAt: { lte: new Date(now.getTime() - REMINDER_STALE_AFTER_MS) } },
+            ],
+          },
+          select: {
+            id: true,
+            submittedAt: true,
+            reviewDueAt: true,
+            currentVersionNumber: true,
+            client: { select: { timezone: true } },
+            events: {
+              where: { type: "REMINDER_SENT" },
+              orderBy: { createdAt: "desc" },
+              select: { createdAt: true },
+              take: MAX_REMINDERS_PER_SUBMISSION + 1,
+            },
+          },
+          orderBy: { id: "asc" },
+          take: REMINDER_PAGE_SIZE,
+          ...(clientCursor ? { cursor: { id: clientCursor }, skip: 1 } : {}),
+        });
+        if (fresh.length === 0) break;
+        clientCursor = fresh[fresh.length - 1].id;
+
+        for (const post of fresh) {
+          const sinceSubmission = post.events.filter(
+            (event) => !post.submittedAt || event.createdAt >= post.submittedAt
+          );
+          if (
+            !isReminderDue(
+              {
+                submittedAt: post.submittedAt,
+                reviewDueAt: post.reviewDueAt,
+                lastReminderAt: post.events[0]?.createdAt ?? null,
+                remindersSinceSubmission: sinceSubmission.length,
+              },
+              now
+            ) ||
+            !isWithinReminderHours(now, post.client.timezone)
+          ) {
+            continue;
+          }
+          posts.push({
+            id: post.id,
+            versionNumber: post.currentVersionNumber,
+            reminderNumber: sinceSubmission.length + 1,
+          });
+        }
+        if (fresh.length < REMINDER_PAGE_SIZE) break;
+      }
+
+      if (posts.length === 0) continue;
       // The event is the audit trail and the "already reminded" marker, so it
       // is written only for posts listed in an email that actually went out
       // (no active reviewer = nothing sent, nothing recorded).
@@ -685,6 +763,14 @@ export async function sendReviewReminders(now: Date = new Date()): Promise<Remin
       }
     } catch (error) {
       console.error(`[Reminders] Client ${clientId}:`, error instanceof Error ? error.message : error);
+    } finally {
+      // Guard the release with the exact lease timestamp. If this process was
+      // paused long enough for a new run to take over, it cannot clear the new
+      // owner's claim.
+      await prisma.client.updateMany({
+        where: { id: clientId, reviewReminderClaimedAt: claimedAt },
+        data: { reviewReminderClaimedAt: null },
+      });
     }
   }
 

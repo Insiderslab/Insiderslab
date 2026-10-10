@@ -10,9 +10,10 @@
 
 import Link from "next/link";
 import { planLinkMessage } from "@/components/share/messages";
-import ShareLink from "@/components/share/share-link";
+import ReviewerSharePicker, { type ReviewerShareChoice } from "@/components/share/reviewer-share-picker";
 import { prisma } from "@/lib/db/client";
 import { getReviewPlanUrl } from "@/lib/reviewers";
+import PlanAvailabilityButton from "./plan-availability-button";
 
 function safePlanUrl(reviewer: { tokenEncrypted: string }, planId: string): string | null {
   try {
@@ -24,11 +25,13 @@ function safePlanUrl(reviewer: { tokenEncrypted: string }, planId: string): stri
 }
 
 export default async function PlanSharePanel({
+  workspaceId,
   plan,
   client,
   planName,
   toReview,
 }: {
+  workspaceId: string;
   plan: { id: string; sentAt: Date | null };
   client: { id: string; name: string; archivedAt: Date | null };
   /** "piano social di ottobre". */
@@ -37,19 +40,31 @@ export default async function PlanSharePanel({
 }) {
   if (client.archivedAt) return null;
   const reviewers = await prisma.clientReviewer.findMany({
-    where: { clientId: client.id, active: true },
+    where: { clientId: client.id, active: true, client: { workspaceId } },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, email: true, tokenEncrypted: true },
+  });
+  const choices: ReviewerShareChoice[] = reviewers.map((reviewer) => {
+    const url = safePlanUrl(reviewer, plan.id);
+    return {
+      id: reviewer.id,
+      name: reviewer.name,
+      email: reviewer.email,
+      url,
+      message: url
+        ? planLinkMessage({ reviewerName: reviewer.name, clientName: client.name, planName, toReview, url })
+        : null,
+    };
   });
 
   return (
     <section className="panel space-y-3 p-4 sm:p-5" aria-labelledby="plan-share" data-testid="plan-share-panel">
       <div className="space-y-1">
         <h2 id="plan-share" className="text-lg font-semibold">
-          Link del piano
+          Link diretto del piano
         </h2>
         {plan.sentAt && reviewers.length > 0 && (
-          <p className="text-sm text-muted">Apre il piano nella revisione di {client.name}, senza password.</p>
+          <p className="text-sm text-muted">Scegli il referente, poi copia o apri il suo link personale.</p>
         )}
       </div>
       {reviewers.length === 0 ? (
@@ -57,45 +72,31 @@ export default async function PlanSharePanel({
           <p className="text-sm text-muted">
             {client.name} non ha ancora nessuno che approva: aggiungi una persona per avere il link da mandare.
           </p>
-          <Link href={`/clients/${client.id}#referenti`} className="btn btn-sm">
+          <Link href={`/clients/${client.id}#referenti`} className="btn btn-sm min-h-11">
             Aggiungi chi approva
           </Link>
         </div>
       ) : !plan.sentAt ? (
-        <p className="text-sm text-muted" data-testid="plan-share-hint">
-          Il link per il cliente compare qui dopo «Invia il piano al cliente».
-        </p>
+        <div className="inset space-y-1 p-3" data-testid="plan-share-hint">
+          <p className="text-sm font-medium">Il piano non è ancora visibile al cliente.</p>
+          <p className="text-sm text-muted">
+            Se i post sono già in revisione, rendi disponibile il piano senza reinviarli.
+          </p>
+          <PlanAvailabilityButton planId={plan.id} />
+        </div>
       ) : (
-        <ul className="space-y-3">
-          {reviewers.map((reviewer) => {
-            const url = safePlanUrl(reviewer, plan.id);
-            return (
-              <li key={reviewer.id} className="inset space-y-2 p-3" data-testid="plan-share-row">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="font-semibold">{reviewer.name}</p>
-                  {!reviewer.email && <span className="chip chip-offline">Nessuna email</span>}
-                </div>
-                {url ? (
-                  <ShareLink
-                    url={url}
-                    reviewerName={reviewer.name}
-                    message={planLinkMessage({ reviewerName: reviewer.name, clientName: client.name, planName, toReview, url })}
-                    previewLabel="Apri il piano"
-                    compact
-                  />
-                ) : (
-                  <p className="text-sm text-warning">
-                    Link non leggibile: crea un nuovo link per {reviewer.name} nella{" "}
-                    <Link href={`/clients/${client.id}#referenti`} className="underline">
-                      scheda del cliente
-                    </Link>
-                    .
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="inset p-3" data-testid="plan-share-row">
+          <ReviewerSharePicker choices={choices} previewLabel="Apri il piano" />
+          {choices.some((choice) => !choice.url) && (
+            <p className="mt-2 text-xs text-muted">
+              Gestisci o rinnova i link nella{" "}
+              <Link href={`/clients/${client.id}#referenti`} className="text-accent hover:underline">
+                scheda del cliente
+              </Link>
+              .
+            </p>
+          )}
+        </div>
       )}
     </section>
   );

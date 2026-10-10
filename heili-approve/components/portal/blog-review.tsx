@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { ContentKind } from "@/app/generated/prisma/client";
 import { addCommentAction, approvePostAction, requestChangesAction } from "@/app/review/[token]/actions";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
-import AssistantPanel from "@/components/review/assistant-panel";
+import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
 import { buildAnchor } from "@/lib/content/blog-text";
 import type { BlogAnchor } from "@/lib/content/types";
 import BottomSheet from "./bottom-sheet";
@@ -25,12 +25,16 @@ import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
   AssistantToggle,
+  AssistantActionButton,
   DecisionBar,
   ReviewNav,
   SheetButtons,
   SheetError,
   StaleBanner,
   SuccessPanel,
+  savedFeedbackBlocker,
+  UNSAVED_COMMENT_MESSAGE,
+  OpenFeedbackNotice,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
 
@@ -95,21 +99,27 @@ export default function BlogReview({
   const router = useRouter();
   const readerRef = useRef<HTMLDivElement>(null);
   const assistantRef = useRef<HTMLDivElement>(null);
+  const assistantControl = useRef<AssistantPanelHandle>(null);
   const lastSelection = useRef<BlogAnchor | null>(null);
   const assistantApproval = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [draft, setDraft] = useState<CommentDraft | null>(null);
+  const [draft, setDraft] = useState<CommentDraft | null>(
+    post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
+  );
   const [draftKey, setDraftKey] = useState(0);
+  const [commentDirty, setCommentDirty] = useState(false);
+  const [commentListening, setCommentListening] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
 
-  const [sheet, setSheet] = useState<null | "approve" | "changes">(null);
+  const [sheet, setSheet] = useState<null | "approve">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
-  const [changesMessage, setChangesMessage] = useState("");
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [draftSwitchNotice, setDraftSwitchNotice] = useState<string | null>(null);
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
@@ -156,7 +166,15 @@ export default function BlogReview({
   // ─── Comments ──────────────────────────────────────────────────────────────
 
   function openDraft(next: CommentDraft) {
+    if (commentDirty && draft) {
+      setDecisionError("Hai una bozza non inviata. Inviala oppure annullala prima di spostarti su un altro punto.");
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+      return;
+    }
     setNotice(null);
+    setDraftSwitchNotice(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(next);
     setDraftKey((k) => k + 1);
   }
@@ -180,8 +198,14 @@ export default function BlogReview({
       if (result.stale) setStale(true);
       return result.error;
     }
-    setDraft(null);
-    setNotice("Commento inviato: lo vedrà l'agenzia.");
+    setCommentDirty(false);
+    setCommentListening(false);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
+    setDecisionError(null);
+    setNotice(post.status === "CHANGES_REQUESTED"
+      ? "Commento aggiunto alla richiesta di modifiche già inviata."
+      : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
   }
 
@@ -189,15 +213,58 @@ export default function BlogReview({
 
   function finish(result: Outcome) {
     setOutcome(result);
+    setCommentDirty(false);
     setDraft(null);
+    setDecisionError(null);
     setSheet(null);
     setAssistantOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function openSheet(kind: "approve" | "changes") {
+  function openSheet(kind: "approve") {
+    if (blockUnsavedComment()) return;
+    setDecisionError(null);
     setSheetError(null);
     setSheet(kind);
+  }
+
+  function blockUnsavedComment(): boolean {
+    if (!commentDirty) return false;
+    setDecisionError(UNSAVED_COMMENT_MESSAGE);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+    return true;
+  }
+
+  async function requestChangesFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current?.isLoadingFeedback()) {
+      setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
+      return;
+    }
+    setDecisionError(null);
+    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.requestChanges();
+    } else {
+      await requestSavedChanges();
+    }
+  }
+
+  async function approveFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current?.isLoadingFeedback()) {
+      setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
+      return;
+    }
+    setDecisionError(null);
+    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.approve();
+    } else {
+      openSheet("approve");
+    }
   }
 
   function closeSheet() {
@@ -209,7 +276,7 @@ export default function BlogReview({
   }
 
   async function confirmApprove() {
-    if (sheetBusy) return;
+    if (sheetBusy || blockUnsavedComment()) return;
     setSheetBusy(true);
     setSheetError(null);
     const result = await approvePostAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
@@ -230,19 +297,26 @@ export default function BlogReview({
     finish("approved");
   }
 
-  async function confirmChanges() {
-    const message = changesMessage.trim();
-    if (sheetBusy || !message) return;
+  async function requestSavedChanges() {
+    if (sheetBusy) return;
+    setDecisionError(null);
+    const blocker = savedFeedbackBlocker(commentDirty, myOpenComments);
+    if (blocker) {
+      setDecisionError(blocker);
+      return;
+    }
     setSheetBusy(true);
-    setSheetError(null);
-    const result = await requestChangesAction(token, { postId: ref.id, versionNumber: ref.versionNumber, message });
+    const result = await requestChangesAction(token, {
+      postId: ref.id,
+      versionNumber: ref.versionNumber,
+      feedback: "saved-comments",
+    });
     setSheetBusy(false);
     if (!result.ok) {
       if (result.stale) setStale(true);
-      setSheetError(result.error);
+      setDecisionError(result.error);
       return;
     }
-    setChangesMessage("");
     finish("changes");
   }
 
@@ -250,17 +324,23 @@ export default function BlogReview({
   const approveFromAssistant = useCallback(
     () =>
       new Promise<void>((resolve, reject) => {
+        if (commentDirty) {
+          reject(new Error(UNSAVED_COMMENT_MESSAGE));
+          return;
+        }
         assistantApproval.current = { resolve, reject };
         setSheetError(null);
         setSheet("approve");
       }),
-    []
+    [commentDirty]
   );
 
   async function submitFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
+      feedback: "assistant",
       message: input.message,
       reviewSessionId: input.reviewSessionId,
     });
@@ -271,7 +351,13 @@ export default function BlogReview({
     finish("changes");
   }
 
-  function toggleAssistant() {
+  async function toggleAssistant() {
+    if (commentListening) {
+      setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
+      return;
+    }
+    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
     const open = !assistantOpen;
     setAssistantOpen(open);
     if (open) {
@@ -281,7 +367,10 @@ export default function BlogReview({
 
   function reload() {
     setStale(false);
+    setDecisionError(null);
     setSheet(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(null);
     router.refresh();
   }
@@ -298,7 +387,7 @@ export default function BlogReview({
 
       {outcome && (
         <SuccessPanel
-          title={outcome === "approved" ? "Fatto! Articolo approvato." : "Richiesta inviata all'agenzia."}
+          title={outcome === "approved" ? "Fatto! Articolo approvato." : "Modifiche inviate all'agenzia."}
           nextHref={nextHref}
           homeHref={homeHref}
           remaining={Math.max(0, queue.toReviewCount - (queue.position !== null ? 1 : 0))}
@@ -340,66 +429,79 @@ export default function BlogReview({
 
       {outcome === null && !post.canAct && <BlogStatusNotice post={post} />}
 
-      {changesSlot}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)] lg:items-start">
+        <div className="space-y-4">
+          {changesSlot}
+          <section ref={readerRef} aria-label="Articolo" className="scroll-mt-4 rounded-[20px] border border-border bg-background px-4 py-6 sm:px-6">
+            <BlogReader content={post.content} html={post.html} comments={readerComments}
+              onCommentRequest={canComment ? (anchor) => openDraft({ kind: "passage", anchor }) : undefined}
+              onCommentOpen={openComment} activeCommentId={activeCommentId} dateLabel={post.articleDateLabel} />
+          </section>
+          {seoSlot}
+        </div>
 
-      <section ref={readerRef} aria-label="Articolo" className="scroll-mt-4 rounded-lg border border-border bg-background px-4 py-6 sm:px-6">
-        <BlogReader
-          content={post.content}
-          html={post.html}
-          comments={readerComments}
-          onCommentRequest={canComment ? (anchor) => openDraft({ kind: "passage", anchor }) : undefined}
-          onCommentOpen={openComment}
-          activeCommentId={activeCommentId}
-          dateLabel={post.articleDateLabel}
-        />
-      </section>
-
-      {seoSlot}
-
-      {notice && (
-        <p className="text-sm text-success" role="status">
-          {notice}
-        </p>
-      )}
-
-      {canAct && assistantEnabled && (
-        <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-          <AssistantPanel
-            token={token}
-            postId={post.id}
-            versionNumber={post.versionNumber}
-            onSubmitChanges={submitFromAssistant}
-            onApprove={approveFromAssistant}
-            kind="BLOG_ARTICLE"
-            getSelection={getSelection}
-          />
-        </AssistantToggle>
-      )}
-
-      <section className="space-y-3" aria-labelledby="comments-title">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="comments-title" className="text-base font-semibold">
-            Commenti{post.comments.length > 0 ? ` (${post.comments.length})` : ""}
-          </h2>
+      <section className="space-y-4 rounded-[20px] border border-border bg-surface p-4 sm:p-5" aria-labelledby="comments-title">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
+            <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
+            <p className="mt-1 text-sm text-muted">Scrivilo, dettalo oppure parlane con Heili.</p>
+          </div>
+          {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
+        </div>
           {canComment && draft?.kind !== "general" && (
             <button
               type="button"
               onClick={() => openDraft({ kind: "general" })}
-              className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:border-border-hover"
+              className="min-h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium hover:border-border-hover"
             >
               Commento generale
             </button>
           )}
-        </div>
+        {canAct && assistantEnabled && (
+          <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+            <AssistantPanel
+              key={`${post.id}-${post.versionNumber}`}
+              controlRef={assistantControl}
+              onRequestSavedChanges={requestSavedChanges}
+              token={token}
+              postId={post.id}
+              versionNumber={post.versionNumber}
+              onSubmitChanges={submitFromAssistant}
+              onApprove={approveFromAssistant}
+              kind="BLOG_ARTICLE"
+              getSelection={getSelection}
+            />
+          </AssistantToggle>
+        )}
+        <div hidden={assistantOpen}>
         {draft?.kind === "general" && canComment && (
           <CommentComposer
             key={draftKey}
             draft={draft}
             mediaLabel={null}
+            draftStorageScope={`${token}:${post.id}:${post.versionNumber}:general`}
             onSubmit={submitComment}
-            onCancel={() => setDraft(null)}
+            onDirtyChange={setCommentDirty}
+            onListeningChange={setCommentListening}
+            assistantAction={
+              canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+            }
+            onCancel={() => {
+              setCommentDirty(false);
+              setCommentListening(false);
+              setDraft({ kind: "general" });
+              setDraftKey((key) => key + 1);
+              setDecisionError(null);
+              setDraftSwitchNotice(null);
+            }}
+            framed={false}
           />
         )}
+        </div>
+        {notice && <p className="text-sm text-success" role="status">{notice}</p>}
+        <div className="border-t border-border pt-4">
+          <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
         <BlogCommentList
           passages={passageComments}
           general={generalComments}
@@ -411,45 +513,84 @@ export default function BlogReview({
               : "Nessun commento su questa versione."
           }
         />
+        </div>
       </section>
+      </div>
 
       {historySlot}
 
       {canAct && (
         <DecisionBar>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => openSheet("changes")}
-              className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface"
-            >
-              Chiedi modifiche
-            </button>
-            <button
-              type="button"
-              onClick={() => openSheet("approve")}
-              className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90"
-            >
-              Approva
-            </button>
+          <div className="space-y-2">
+            {decisionError && (
+              <div className="rounded-md border border-error/40 bg-surface p-3 text-sm text-error" role="alert" aria-live="polite">
+                {decisionError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={requestChangesFromBar}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg bg-accent px-3 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {sheetBusy ? "Invio…" : "Chiedi modifiche"}
+              </button>
+              <button
+                type="button"
+                onClick={approveFromBar}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg border border-border bg-background px-3 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50"
+              >
+                Approva
+              </button>
+            </div>
           </div>
         </DecisionBar>
       )}
 
       <BottomSheet
-        open={draft?.kind === "passage" && canComment}
+        open={draft?.kind === "passage" && canComment && !assistantOpen}
         title="Commenta il passaggio"
-        onClose={() => setDraft(null)}
+        onClose={() => {
+          if (commentDirty) {
+            setDraftSwitchNotice("Hai una bozza non inviata. Inviala oppure annullala prima di chiudere.");
+            requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+            return;
+          }
+          setDraft({ kind: "general" });
+          setDraftKey((key) => key + 1);
+        }}
       >
         {draft?.kind === "passage" && (
+          <>
+          {draftSwitchNotice && (
+            <p className="rounded-md border border-error/40 bg-surface p-3 text-sm text-error" role="alert">
+              {draftSwitchNotice}
+            </p>
+          )}
           <CommentComposer
             key={draftKey}
             draft={draft}
             mediaLabel={null}
+            draftStorageScope={`${token}:${post.id}:${post.versionNumber}:passage`}
             onSubmit={submitComment}
-            onCancel={() => setDraft(null)}
+            onDirtyChange={setCommentDirty}
+            onListeningChange={setCommentListening}
+            assistantAction={
+              canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+            }
+            onCancel={() => {
+              setCommentDirty(false);
+              setCommentListening(false);
+              setDraft({ kind: "general" });
+              setDraftKey((key) => key + 1);
+              setDecisionError(null);
+              setDraftSwitchNotice(null);
+            }}
             framed={false}
           />
+          </>
         )}
       </BottomSheet>
 
@@ -458,13 +599,7 @@ export default function BlogReview({
         <p className="text-sm text-muted">
           Stai approvando la versione {post.versionNumber}: verrà pubblicato esattamente il testo che vedi.
         </p>
-        {myOpenComments > 0 && (
-          <p className="text-sm text-warning">
-            {myOpenComments === 1
-              ? "Hai lasciato un commento su questa versione: se approvi, l'articolo uscirà così com'è."
-              : `Hai lasciato ${myOpenComments} commenti su questa versione: se approvi, l'articolo uscirà così com'è.`}
-          </p>
-        )}
+        {canAct && <OpenFeedbackNotice comments={post.comments} />}
         <SheetError error={sheetError} stale={stale} onReload={reload} />
         <SheetButtons
           busy={sheetBusy}
@@ -475,36 +610,6 @@ export default function BlogReview({
         />
       </BottomSheet>
 
-      <BottomSheet open={sheet === "changes"} title="Cosa vorresti cambiare?" onClose={closeSheet} busy={sheetBusy}>
-        <label className="block space-y-2">
-          <span className="block text-sm text-muted">
-            Scrivi all&apos;agenzia cosa non ti convince: preparerà una nuova versione da rivedere.
-          </span>
-          <textarea
-            value={changesMessage}
-            onChange={(e) => setChangesMessage(e.target.value.slice(0, 5000))}
-            rows={5}
-            placeholder="Per esempio: accorcerei l'introduzione e userei un tono più diretto."
-            className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
-          />
-        </label>
-        {myOpenComments > 0 && (
-          <p className="text-sm text-muted">
-            {myOpenComments === 1
-              ? "Il commento che hai lasciato sull'articolo arriverà all'agenzia insieme a questo messaggio."
-              : `I ${myOpenComments} commenti che hai lasciato sull'articolo arriveranno all'agenzia insieme a questo messaggio.`}
-          </p>
-        )}
-        <SheetError error={sheetError} stale={stale} onReload={reload} />
-        <SheetButtons
-          busy={sheetBusy}
-          disabled={changesMessage.trim() === ""}
-          onCancel={closeSheet}
-          onConfirm={confirmChanges}
-          confirmLabel={sheetBusy ? "Invio…" : "Invia la richiesta"}
-          confirmClass="bg-foreground text-background hover:opacity-90"
-        />
-      </BottomSheet>
     </div>
   );
 }
@@ -515,7 +620,7 @@ function BlogStatusNotice({ post }: { post: PortalBlogPost }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text =
-      "Hai chiesto delle modifiche: l'agenzia sta preparando una nuova versione e ti scriverà quando sarà pronta. Se ti viene in mente altro, aggiungi pure un commento.";
+      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando la nuova versione dell'articolo sarà pronta.";
   } else if (post.status === "DELIVERED") {
     text = "L'articolo è stato pubblicato sul sito. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {
@@ -523,7 +628,7 @@ function BlogStatusNotice({ post }: { post: PortalBlogPost }) {
   } else {
     text = `${post.approvedLabel ? `Hai approvato questo articolo ${post.approvedLabel}. ` : "Questo articolo è approvato. "}L'agenzia lo pubblicherà sul sito (pubblicazione prevista ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
   }
-  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed">{text}</p>;
+  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }
 
 function BlogCommentList({

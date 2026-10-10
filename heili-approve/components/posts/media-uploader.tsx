@@ -35,7 +35,7 @@ interface MediaUploaderProps {
 }
 
 const smallButton =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded border border-border bg-background px-2 text-xs text-muted hover:text-foreground disabled:opacity-40";
+  "inline-flex h-11 min-w-11 items-center justify-center rounded-xl border border-border bg-background px-2 text-sm text-muted hover:text-foreground disabled:opacity-40";
 
 export default function MediaUploader({ media, onChange, onBusyChange, disabled = false }: MediaUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -181,8 +181,8 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
         onDragOver={onZoneDragOver}
         onDragLeave={() => setDropActive(false)}
         onDrop={onZoneDrop}
-        className={`rounded border border-dashed p-4 text-center text-sm transition-colors ${
-          dropActive ? "border-accent bg-accent/5" : "border-border bg-background"
+        className={`rounded-2xl border border-dashed p-6 text-center text-sm transition-colors ${
+          dropActive ? "border-accent bg-accent-soft" : "border-border bg-surface-hover"
         } ${disabled ? "opacity-60" : ""}`}
       >
         <p className="text-muted">
@@ -191,7 +191,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
             type="button"
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
-            className="font-medium text-accent hover:underline disabled:no-underline"
+            className="inline-flex min-h-11 items-center rounded-lg px-2 font-medium text-accent hover:bg-accent-soft disabled:no-underline"
           >
             scegli dal computer
           </button>
@@ -239,7 +239,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
                 </div>
               )}
               <div className="mt-2 flex justify-end">
-                <button type="button" onClick={() => cancelUpload(upload)} className="text-xs text-muted hover:text-foreground">
+                <button type="button" onClick={() => cancelUpload(upload)} className="btn btn-quiet btn-sm">
                   {upload.error ? "Chiudi" : "Annulla"}
                 </button>
               </div>
@@ -256,7 +256,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
               onDragOver={(event) => onItemDragOver(event, index)}
               onDrop={(event) => onItemDrop(event, index)}
               onDragEnd={onItemDragEnd}
-              className={`flex gap-3 rounded border bg-background p-2 ${
+              className={`flex gap-3 rounded-xl border bg-background p-2 ${
                 overIndex === index ? "border-accent" : "border-border"
               }`}
             >
@@ -328,7 +328,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
                   type="button"
                   disabled={disabled}
                   onClick={() => remove(index)}
-                  className="text-xs text-error hover:underline disabled:opacity-40"
+                  className="inline-flex min-h-11 items-center rounded-lg px-2 text-xs text-error hover:bg-error-soft disabled:opacity-40"
                 >
                   Rimuovi
                 </button>

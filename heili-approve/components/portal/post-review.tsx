@@ -6,8 +6,8 @@
  * The client sees the post as it will appear on each network, can drop a
  * note on a point of an image or on a moment of a video, write general
  * comments, and then decides with two big buttons: "Approva" (after a
- * confirmation that says when it will be published) or "Chiedi modifiche"
- * (a message is required). Unsure clients can talk it through with the AI
+ * confirmation that says when it will be published) or "Chiedi modifiche",
+ * which sends the comments already saved on the post. Unsure clients can talk it through with the AI
  * assistant, which never decides for them. Each post is approved on its own;
  * after a decision the page offers the next post to review.
  */
@@ -18,7 +18,7 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { ContentKind } from "@/app/generated/prisma/client";
 import { approvePostAction, addCommentAction, requestChangesAction } from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
-import AssistantPanel from "@/components/review/assistant-panel";
+import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
@@ -26,12 +26,16 @@ import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWordi
 import KindLabel from "./kind-label";
 import {
   AssistantToggle,
+  AssistantActionButton,
   DecisionBar,
   ReviewNav,
   SheetButtons,
   SheetError,
   StaleBanner,
   SuccessPanel,
+  savedFeedbackBlocker,
+  UNSAVED_COMMENT_MESSAGE,
+  OpenFeedbackNotice,
 } from "./review-pieces";
 import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
 
@@ -72,21 +76,26 @@ export default function PostReview({
   const router = useRouter();
   const previewRef = useRef<HTMLDivElement>(null);
   const assistantRef = useRef<HTMLDivElement>(null);
+  const assistantControl = useRef<AssistantPanelHandle>(null);
   const timeGetter = useRef<(() => number) | null>(null);
   const assistantApproval = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [draft, setDraft] = useState<CommentDraft | null>(null);
+  const [draft, setDraft] = useState<CommentDraft | null>(
+    post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
+  );
   const [draftKey, setDraftKey] = useState(0);
+  const [commentDirty, setCommentDirty] = useState(false);
+  const [commentListening, setCommentListening] = useState(false);
   const [seek, setSeek] = useState<PreviewSeek | undefined>(undefined);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
 
-  const [sheet, setSheet] = useState<null | "approve" | "changes">(null);
+  const [sheet, setSheet] = useState<null | "approve">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
-  const [changesMessage, setChangesMessage] = useState("");
+  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
@@ -160,6 +169,17 @@ export default function PostReview({
     return get ? get() : null;
   }, []);
 
+  const getPointContext = useCallback(() => {
+    if (!draft || (draft.kind !== "pin" && draft.kind !== "moment")) return null;
+    if (draft.kind === "moment" && (draft.x === undefined || draft.y === undefined)) return null;
+    return {
+      mediaIndex: draft.mediaIndex,
+      x: draft.kind === "pin" ? draft.x : (draft.x ?? 0),
+      y: draft.kind === "pin" ? draft.y : (draft.y ?? 0),
+      timeSec: draft.kind === "moment" ? draft.timeSec : null,
+    };
+  }, [draft]);
+
   function seekTo(comment: PortalComment) {
     if (comment.timeSec === null) return;
     setSeek({ timeSec: comment.timeSec, nonce: Date.now(), mediaIndex: comment.mediaIndex ?? undefined });
@@ -169,7 +189,14 @@ export default function PostReview({
   // ─── Comments ──────────────────────────────────────────────────────────────
 
   function openDraft(next: CommentDraft) {
+    if (commentDirty && draft) {
+      setDecisionError("Hai una bozza non inviata. Inviala oppure annullala prima di spostarti su un altro punto.");
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+      return;
+    }
     setNotice(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(next);
     setDraftKey((k) => k + 1);
   }
@@ -180,8 +207,14 @@ export default function PostReview({
       if (result.stale) setStale(true);
       return result.error;
     }
-    setDraft(null);
-    setNotice("Commento inviato: lo vedrà l'agenzia.");
+    setCommentDirty(false);
+    setCommentListening(false);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
+    setDecisionError(null);
+    setNotice(post.status === "CHANGES_REQUESTED"
+      ? "Commento aggiunto alla richiesta di modifiche già inviata."
+      : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
   }
 
@@ -189,15 +222,58 @@ export default function PostReview({
 
   function finish(result: Outcome) {
     setOutcome(result);
+    setCommentDirty(false);
     setDraft(null);
+    setDecisionError(null);
     setSheet(null);
     setAssistantOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function openSheet(kind: "approve" | "changes") {
+  function openSheet(kind: "approve") {
+    if (blockUnsavedComment()) return;
+    setDecisionError(null);
     setSheetError(null);
     setSheet(kind);
+  }
+
+  function blockUnsavedComment(): boolean {
+    if (!commentDirty) return false;
+    setDecisionError(UNSAVED_COMMENT_MESSAGE);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-feedback-composer="active"] textarea')?.focus());
+    return true;
+  }
+
+  async function requestChangesFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current?.isLoadingFeedback()) {
+      setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
+      return;
+    }
+    setDecisionError(null);
+    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.requestChanges();
+    } else {
+      await requestSavedChanges();
+    }
+  }
+
+  async function approveFromBar() {
+    if (blockUnsavedComment() || sheetBusy) return;
+    if (assistantControl.current?.isLoadingFeedback()) {
+      setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
+      return;
+    }
+    setDecisionError(null);
+    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
+      setAssistantOpen(true);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await assistantControl.current?.approve();
+    } else {
+      openSheet("approve");
+    }
   }
 
   function closeSheet() {
@@ -209,7 +285,7 @@ export default function PostReview({
   }
 
   async function confirmApprove() {
-    if (sheetBusy) return;
+    if (sheetBusy || blockUnsavedComment()) return;
     setSheetBusy(true);
     setSheetError(null);
     const result = await approvePostAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
@@ -230,23 +306,26 @@ export default function PostReview({
     finish("approved");
   }
 
-  async function confirmChanges() {
-    const message = changesMessage.trim();
-    if (sheetBusy || !message) return;
+  async function requestSavedChanges() {
+    if (sheetBusy) return;
+    setDecisionError(null);
+    const blocker = savedFeedbackBlocker(commentDirty, myOpenComments);
+    if (blocker) {
+      setDecisionError(blocker);
+      return;
+    }
     setSheetBusy(true);
-    setSheetError(null);
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
-      message,
+      feedback: "saved-comments",
     });
     setSheetBusy(false);
     if (!result.ok) {
       if (result.stale) setStale(true);
-      setSheetError(result.error);
+      setDecisionError(result.error);
       return;
     }
-    setChangesMessage("");
     finish("changes");
   }
 
@@ -254,17 +333,23 @@ export default function PostReview({
   const approveFromAssistant = useCallback(
     () =>
       new Promise<void>((resolve, reject) => {
+        if (commentDirty) {
+          reject(new Error(UNSAVED_COMMENT_MESSAGE));
+          return;
+        }
         assistantApproval.current = { resolve, reject };
         setSheetError(null);
         setSheet("approve");
       }),
-    []
+    [commentDirty]
   );
 
   async function submitFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
     const result = await requestChangesAction(token, {
       postId: ref.id,
       versionNumber: ref.versionNumber,
+      feedback: "assistant",
       message: input.message,
       reviewSessionId: input.reviewSessionId,
     });
@@ -275,7 +360,13 @@ export default function PostReview({
     finish("changes");
   }
 
-  function toggleAssistant() {
+  async function toggleAssistant() {
+    if (commentListening) {
+      setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
+      return;
+    }
+    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
     const open = !assistantOpen;
     setAssistantOpen(open);
     if (open) {
@@ -285,7 +376,10 @@ export default function PostReview({
 
   function reload() {
     setStale(false);
+    setDecisionError(null);
     setSheet(null);
+    setCommentDirty(false);
+    setCommentListening(false);
     setDraft(null);
     router.refresh();
   }
@@ -310,7 +404,7 @@ export default function PostReview({
 
       {outcome && (
         <SuccessPanel
-          title={outcome === "approved" ? "Fatto! Post approvato." : "Richiesta inviata all'agenzia."}
+          title={outcome === "approved" ? "Fatto! Post approvato." : "Modifiche inviate all'agenzia."}
           nextHref={nextHref}
           homeHref={homeHref}
           remaining={Math.max(0, queue.toReviewCount - (queue.position !== null ? 1 : 0))}
@@ -324,145 +418,197 @@ export default function PostReview({
         </SuccessPanel>
       )}
 
-      <header className="space-y-2">
-        {mixedList && <KindLabel kind="SOCIAL_POST" />}
-        <h1 className="text-xl font-semibold leading-snug sm:text-2xl">{post.title}</h1>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <span className={`font-medium ${post.canAct ? "text-accent" : post.status === "CHANGES_REQUESTED" ? "text-warning" : "text-success"}`}>
-            {outcome === "approved"
-              ? "Approvato"
-              : outcome === "changes"
-                ? "Modifiche richieste"
-                : PORTAL_STATUS_LABELS[post.status]}
-          </span>
-          <span className="text-muted">Versione {post.versionNumber}</span>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,640px)_minmax(300px,1fr)] lg:grid-rows-[auto_1fr] lg:items-start">
+        <div className="space-y-4 lg:col-start-2 lg:row-start-1">
+          <header className="space-y-2">
+            {mixedList && <KindLabel kind="SOCIAL_POST" />}
+            <h1 className="text-xl font-semibold leading-snug sm:text-2xl">{post.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span className={`font-medium ${post.canAct ? "text-accent" : post.status === "CHANGES_REQUESTED" ? "text-warning" : "text-success"}`}>
+                {outcome === "approved"
+                  ? "Approvato"
+                  : outcome === "changes"
+                    ? "Modifiche richieste"
+                    : PORTAL_STATUS_LABELS[post.status]}
+              </span>
+              <span className="text-muted">Versione {post.versionNumber}</span>
+            </div>
+            <p className="text-base">
+              <span className="text-muted">Pubblicazione: </span>
+              <span className="font-medium">{post.publishLabel}</span>
+            </p>
+            {post.canAct && post.reviewDueLabel && outcome === null && (
+              <p className="text-sm font-medium text-warning">Ti chiediamo di rispondere entro {post.reviewDueLabel}.</p>
+            )}
+          </header>
+
+          {outcome === null && !post.canAct && <StatusNotice post={post} />}
         </div>
-        <p className="text-base">
-          <span className="text-muted">Pubblicazione: </span>
-          <span className="font-medium">{post.publishLabel}</span>
-        </p>
-        {post.canAct && post.reviewDueLabel && outcome === null && (
-          <p className="text-sm font-medium text-warning">Ti chiediamo di rispondere entro {post.reviewDueLabel}.</p>
-        )}
-      </header>
 
-      {outcome === null && !post.canAct && <StatusNotice post={post} />}
-
-      {changesSlot}
-
-      <section ref={previewRef} className="scroll-mt-4 space-y-3" aria-label="Anteprima del post">
-        {canComment && (
-          <p className="text-sm text-muted">
-            {hasVideo
-              ? "Metti in pausa o tocca «Commenta» sul video per lasciare una nota su un momento preciso."
-              : post.media.length > 0
-                ? "Tocca un punto dell'immagine per lasciare una nota proprio lì."
-                : "Leggi il testo e lasciaci un commento se vuoi cambiare qualcosa."}
-          </p>
-        )}
-        <NetworkPreviewTabs
-          networks={post.networks}
-          networkOptions={post.networkOptions}
-          text={post.text}
-          firstCommentText={post.firstCommentText}
-          media={post.media}
-          accountName={client.name}
-          accountAvatarUrl={client.logoUrl}
-          publishAt={post.publishAt}
-          timeZone={post.timeZone}
-          pins={pins}
-          markers={markers}
-          onMediaClick={canComment ? (p) => openDraft({ kind: "pin", mediaIndex: p.mediaIndex, x: p.x, y: p.y }) : undefined}
-          onRequestComment={
-            canComment
-              ? (p) => openDraft({ kind: "moment", mediaIndex: p.mediaIndex, timeSec: p.timeSec, x: p.x, y: p.y })
-              : undefined
-          }
-          registerTimeGetter={hasVideo ? registerTimeGetter : undefined}
-          seekTo={seek}
-        />
-      </section>
-
-      {draft && canComment && (
-        <CommentComposer
-          key={draftKey}
-          draft={draft}
-          mediaLabel={
-            draftIndex !== null && post.media.length > 1
-              ? mediaName(draftMedia?.type, draftIndex, post.media.length)
-              : null
-          }
-          durationSec={draftMedia?.durationSec}
-          onSubmit={submitComment}
-          onCancel={() => setDraft(null)}
-        />
-      )}
-
-      {notice && (
-        <p className="text-sm text-success" role="status">
-          {notice}
-        </p>
-      )}
-
-      {canAct && assistantEnabled && (
-        <AssistantToggle open={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-          <AssistantPanel
-            token={token}
-            postId={post.id}
-            versionNumber={post.versionNumber}
-            onSubmitChanges={submitFromAssistant}
-            onApprove={approveFromAssistant}
-            getVideoTime={hasVideo ? getVideoTime : undefined}
-          />
-        </AssistantToggle>
-      )}
-
-      <section className="space-y-3" aria-labelledby="comments-title">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="comments-title" className="text-base font-semibold">
-            Commenti{post.comments.length > 0 ? ` (${post.comments.length})` : ""}
-          </h2>
-          {canComment && draft?.kind !== "general" && (
-            <button
-              type="button"
-              onClick={() => openDraft({ kind: "general" })}
-              className="min-h-11 rounded-md border border-border px-3 text-sm font-medium hover:border-border-hover"
-            >
-              Scrivi un commento
-            </button>
+        <section
+          ref={previewRef}
+          className="scroll-mt-4 space-y-3 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:rounded-xl lg:border lg:border-border lg:bg-surface lg:p-5"
+          aria-label="Anteprima del post"
+        >
+          {canComment && (
+            <p className="text-sm text-muted">
+              {hasVideo
+                ? "Metti in pausa o tocca «Commenta» sul video per lasciare una nota su un momento preciso."
+                : post.media.length > 0
+                  ? "Tocca un punto dell'immagine per lasciare una nota proprio lì."
+                  : "Leggi il testo e lasciaci un commento se vuoi cambiare qualcosa."}
+            </p>
           )}
+          <NetworkPreviewTabs
+            networks={post.networks}
+            networkOptions={post.networkOptions}
+            text={post.text}
+            firstCommentText={post.firstCommentText}
+            media={post.media}
+            accountName={client.name}
+            accountAvatarUrl={client.logoUrl}
+            publishAt={post.publishAt}
+            timeZone={post.timeZone}
+            pins={pins}
+            markers={markers}
+            onMediaClick={canComment ? (p) => openDraft({ kind: "pin", mediaIndex: p.mediaIndex, x: p.x, y: p.y }) : undefined}
+            onRequestComment={
+              canComment
+                ? (p) => openDraft({ kind: "moment", mediaIndex: p.mediaIndex, timeSec: p.timeSec, x: p.x, y: p.y })
+                : undefined
+            }
+            registerTimeGetter={hasVideo ? registerTimeGetter : undefined}
+            seekTo={seek}
+          />
+        </section>
+
+        <div className="space-y-4 lg:col-start-2 lg:row-start-2">
+          {(post.text || post.firstCommentText) && (
+            <details className="rounded-lg border border-border bg-surface">
+              <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+                Leggi il testo completo
+              </summary>
+              <div className="space-y-4 border-t border-border p-4">
+                {post.text && (
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-semibold">Testo del post</h2>
+                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+                  </div>
+                )}
+                {post.firstCommentText && (
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-semibold">Primo commento</h2>
+                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.firstCommentText}</p>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
+          {changesSlot && (
+            <details className="rounded-lg border border-accent/40 bg-surface">
+              <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
+                Modifiche dalla versione precedente
+              </summary>
+              <div className="border-t border-border p-2 sm:p-3">{changesSlot}</div>
+            </details>
+          )}
+          <section className="space-y-4 rounded-[20px] border border-border bg-surface p-4 sm:p-5" aria-labelledby="comments-title">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
+                <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
+                <p className="mt-1 text-sm text-muted">Scrivilo, dettalo oppure parlane con Heili.</p>
+              </div>
+              {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
+            </div>
+            {canAct && assistantEnabled && (
+              <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
+                <AssistantPanel
+                  key={`${post.id}-${post.versionNumber}`}
+                  controlRef={assistantControl}
+                  onRequestSavedChanges={requestSavedChanges}
+                  token={token}
+                  postId={post.id}
+                  versionNumber={post.versionNumber}
+                  onSubmitChanges={submitFromAssistant}
+                  onApprove={approveFromAssistant}
+                  getVideoTime={hasVideo ? getVideoTime : undefined}
+                  getPointContext={getPointContext}
+                />
+              </AssistantToggle>
+            )}
+            <div hidden={assistantOpen}>
+            {draft && canComment ? (
+              <CommentComposer
+                key={draftKey}
+                draft={draft}
+                mediaLabel={draftIndex !== null && post.media.length > 1 ? mediaName(draftMedia?.type, draftIndex, post.media.length) : null}
+                durationSec={draftMedia?.durationSec}
+                draftStorageScope={`${token}:${post.id}:${post.versionNumber}`}
+                onSubmit={submitComment}
+                onDirtyChange={setCommentDirty}
+                onListeningChange={setCommentListening}
+                assistantAction={
+                  canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                }
+                onCancel={() => {
+                  setCommentDirty(false);
+                  setCommentListening(false);
+                  setDraft({ kind: "general" });
+                  setDraftKey((key) => key + 1);
+                  setDecisionError(null);
+                }}
+                framed={false}
+              />
+            ) : canComment ? (
+              <button type="button" onClick={() => openDraft({ kind: "general" })}
+                className="min-h-12 w-full rounded-xl border border-border bg-background px-4 text-left text-sm text-muted hover:border-border-hover">
+                Scrivi un commento per l&apos;agenzia…
+              </button>
+            ) : null}
+            </div>
+            {notice && <p className="text-sm text-success" role="status">{notice}</p>}
+            <div className="border-t border-border pt-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Richieste raccolte</h3>
+                <span className="text-xs text-muted">{post.comments.length}</span>
+              </div>
+              <CommentList comments={post.comments} media={post.media} onSeek={hasVideo ? seekTo : undefined}
+                emptyText={canComment ? "Qui ritrovi i commenti salvati, anche quelli preparati con Heili." : "Nessun commento su questa versione."} />
+            </div>
+          </section>
         </div>
-        <CommentList
-          comments={post.comments}
-          media={post.media}
-          onSeek={hasVideo ? seekTo : undefined}
-          emptyText={
-            canComment
-              ? "Ancora nessun commento su questa versione."
-              : "Nessun commento su questa versione."
-          }
-        />
-      </section>
+      </div>
 
       {historySlot}
 
       {canAct && (
         <DecisionBar>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => openSheet("changes")}
-              className="min-h-12 flex-1 rounded-lg border-2 border-foreground bg-background px-3 text-base font-semibold hover:bg-surface"
-            >
-              Chiedi modifiche
-            </button>
-            <button
-              type="button"
-              onClick={() => openSheet("approve")}
-              className="min-h-12 flex-1 rounded-lg bg-success px-3 text-base font-semibold text-white hover:opacity-90"
-            >
-              Approva
-            </button>
+          <div className="space-y-2">
+            {decisionError && (
+              <div className="rounded-md border border-error/40 bg-surface p-3 text-sm text-error" role="alert" aria-live="polite">
+                {decisionError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={requestChangesFromBar}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg bg-accent px-3 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {sheetBusy ? "Invio…" : "Chiedi modifiche"}
+              </button>
+              <button
+                type="button"
+                onClick={approveFromBar}
+                disabled={sheetBusy}
+                className="min-h-12 flex-1 rounded-lg border border-border bg-background px-3 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50"
+              >
+                Approva
+              </button>
+            </div>
           </div>
         </DecisionBar>
       )}
@@ -477,13 +623,7 @@ export default function PostReview({
             La data di pubblicazione è già passata: l&apos;agenzia ti proporrà un nuovo orario.
           </p>
         )}
-        {myOpenComments > 0 && (
-          <p className="text-sm text-warning">
-            {myOpenComments === 1
-              ? "Hai lasciato un commento su questa versione: se approvi, il post uscirà così com'è."
-              : `Hai lasciato ${myOpenComments} commenti su questa versione: se approvi, il post uscirà così com'è.`}
-          </p>
-        )}
+        {canAct && <OpenFeedbackNotice comments={post.comments} />}
         <SheetError error={sheetError} stale={stale} onReload={reload} />
         <SheetButtons
           busy={sheetBusy}
@@ -494,36 +634,6 @@ export default function PostReview({
         />
       </BottomSheet>
 
-      <BottomSheet open={sheet === "changes"} title="Cosa vorresti cambiare?" onClose={closeSheet} busy={sheetBusy}>
-        <label className="block space-y-2">
-          <span className="block text-sm text-muted">
-            Scrivi all&apos;agenzia cosa non ti convince: preparerà una nuova versione da rivedere.
-          </span>
-          <textarea
-            value={changesMessage}
-            onChange={(e) => setChangesMessage(e.target.value.slice(0, 5000))}
-            rows={5}
-            placeholder="Per esempio: cambierei la prima frase e userei una foto più luminosa."
-            className="w-full resize-y rounded-md border border-border bg-background p-3 text-base outline-none focus:border-accent"
-          />
-        </label>
-        {myOpenComments > 0 && (
-          <p className="text-sm text-muted">
-            {myOpenComments === 1
-              ? "Il commento che hai lasciato sul post arriverà all'agenzia insieme a questo messaggio."
-              : `I ${myOpenComments} commenti che hai lasciato sul post arriveranno all'agenzia insieme a questo messaggio.`}
-          </p>
-        )}
-        <SheetError error={sheetError} stale={stale} onReload={reload} />
-        <SheetButtons
-          busy={sheetBusy}
-          disabled={changesMessage.trim() === ""}
-          onCancel={closeSheet}
-          onConfirm={confirmChanges}
-          confirmLabel={sheetBusy ? "Invio…" : "Invia la richiesta"}
-          confirmClass="bg-foreground text-background hover:opacity-90"
-        />
-      </BottomSheet>
     </div>
   );
 }
@@ -549,7 +659,7 @@ function PlanNav({ plan }: { plan: PortalPlanNav }) {
             href={plan.prevHref}
             className="flex min-h-11 items-center justify-start rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-border-hover"
           >
-            ‹ Post precedente
+            Post precedente
           </Link>
         ) : (
           <span className="flex min-h-11 items-center px-3 text-sm text-muted">Primo del piano</span>
@@ -559,7 +669,7 @@ function PlanNav({ plan }: { plan: PortalPlanNav }) {
             href={plan.nextHref}
             className="flex min-h-11 items-center justify-end rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-border-hover"
           >
-            Post successivo ›
+            Post successivo
           </Link>
         ) : (
           <span className="flex min-h-11 items-center justify-end px-3 text-sm text-muted">Ultimo del piano</span>
@@ -573,7 +683,7 @@ function StatusNotice({ post }: { post: PortalPost }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text =
-      "Hai chiesto delle modifiche: l'agenzia sta preparando una nuova versione e ti scriverà quando sarà pronta. Se ti viene in mente altro, aggiungi pure un commento.";
+      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando la nuova versione sarà pronta.";
   } else if (post.status === "SCHEDULED") {
     text = `Il post è programmato e uscirà ${post.publishLabel}. Per cambiare qualcosa, contatta l'agenzia.`;
   } else if (post.status === "IN_REVIEW") {
@@ -581,5 +691,5 @@ function StatusNotice({ post }: { post: PortalPost }) {
   } else {
     text = `${post.approvedLabel ? `Hai approvato questo post ${post.approvedLabel}. ` : "Questo post è approvato. "}Uscirà ${post.publishLabel}. Per cambiare qualcosa, contatta l'agenzia.`;
   }
-  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed">{text}</p>;
+  return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }

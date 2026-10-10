@@ -85,7 +85,7 @@ export default async function ReviewPlanPage({ params }: ReviewPlanPageProps) {
     })),
   };
 
-  const tiles: GridTile[] = instagramGridOrder(posts).map((p) => {
+  const tiles: GridTile[] = instagramGridOrder(posts.filter((p) => p.networks.includes("instagram"))).map((p) => {
     const tone = portalTone(p.status, p.canAct);
     return {
       id: p.id,
@@ -110,7 +110,7 @@ export default async function ReviewPlanPage({ params }: ReviewPlanPageProps) {
             tiles={tiles}
             accountName={reviewer.client.name}
             logoUrl={reviewer.client.logoUrl}
-            caption={`${posts.length === 1 ? "1 post" : `${posts.length} post`} a ${portalPlan.monthName}`}
+            caption={`${tiles.length} post Instagram del piano`}
           />
         }
       />

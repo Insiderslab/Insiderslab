@@ -37,7 +37,7 @@ export default async function DashboardLayout({
   const [clients, currentClientId] = await Promise.all([
     prisma.client.findMany({
       where: { workspaceId: workspace.id, archivedAt: null },
-      select: { id: true, name: true, logoUrl: true },
+      select: { id: true, name: true, logoUrl: true, services: true },
       orderBy: { name: "asc" },
     }),
     getCurrentClientId(workspace.id),
@@ -59,6 +59,7 @@ export default async function DashboardLayout({
       variant={variant}
       clients={clients}
       currentClientId={currentClientId}
+      currentClientServices={clients.find((client) => client.id === currentClientId)?.services.filter((kind) => enabledKinds(variant).includes(kind))}
     >
       {children}
     </DashboardShell>

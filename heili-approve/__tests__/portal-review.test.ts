@@ -17,12 +17,29 @@ import AdsReview from "@/components/portal/ads-review";
 import BlogReview from "@/components/portal/blog-review";
 import PostCard from "@/components/portal/post-card";
 import PostReview from "@/components/portal/post-review";
+import { OpenFeedbackNotice, savedFeedbackBlocker } from "@/components/portal/review-pieces";
 import type { PortalAdsPost, PortalBlogPost, PortalPost, PortalQueue } from "@/components/portal/types";
 import { emptyAdContent } from "@/lib/content/ads";
 import { emptyBlogContent, renderMarkdownSafe } from "@/lib/content/blog";
 
 const queue: PortalQueue = { nextPostId: "next", toReviewCount: 2, position: 1 };
 const now = new Date("2026-10-05T10:00:00Z");
+
+describe("explicit approval feedback notice", () => {
+  it("warns about other reviewers' current notes without including agency or old/resolved notes", () => {
+    const html = renderToStaticMarkup(createElement(OpenFeedbackNotice, { comments: [
+      { authorType: "CLIENT", authorName: "Altro referente", resolved: false },
+      { authorType: "AGENCY", authorName: "Agenzia", resolved: false },
+      { authorType: "CLIENT", authorName: "Vecchia versione", resolved: false, fromVersion: 1 },
+      { authorType: "CLIENT", authorName: "Già risolto", resolved: true },
+    ] }));
+    expect(html).toContain("1 commento aperto");
+    expect(html).toContain("Altro referente");
+    expect(html).not.toContain("Vecchia versione");
+    expect(html).not.toContain("Già risolto");
+    expect(html).not.toContain("Agenzia");
+  });
+});
 
 const base = {
   id: "p1",
@@ -126,9 +143,9 @@ describe("BlogReview", () => {
     expect(html).toContain("Mostra nel testo");
     expect(html).toContain("Chiedi modifiche");
     expect(html).toContain(">Approva<");
-    expect(html).toContain("Parlane con l&#x27;assistente");
+    expect(html).toContain("Parla con Heili");
     expect(html).toContain("Dettagli per i motori di ricerca");
-    expect(html).toContain("← Tutti gli articoli");
+    expect(html).toContain("Tutti gli articoli");
     expect(html).toContain("Articolo 1 di 2 da approvare");
   });
 
@@ -170,7 +187,7 @@ describe("AdsReview", () => {
     expect(html).toContain('id="variante-C"');
     expect(html).toContain("Invia le mie decisioni");
     expect(html).toContain("Inizio campagna: </span>");
-    expect(html).toContain("Prossimo contenuto →");
+    expect(html).toContain("Prossimo contenuto");
     // Incomplete: the send button is disabled.
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Invia le mie decisioni<\/button>/);
   });
@@ -220,11 +237,52 @@ describe("PostReview (social) keeps its wording", () => {
         publishInPast: false,
       })
     );
-    expect(html).toContain("← Tutti i post");
+    expect(html).toContain("Tutti i post");
     expect(html).toContain("Post 1 di 2 da approvare");
-    expect(html).toContain("Prossimo post →");
+    expect(html).toContain("Prossimo post");
     expect(html).toContain("Pubblicazione: </span>");
     expect(html).not.toContain("Post social");
+  });
+
+  it("puts the preview before collapsed details and keeps the complete copy accessible", () => {
+    const post: PortalPost = {
+      ...base,
+      networks: ["instagram"],
+      networkOptions: {},
+      text: "Prima riga\nSeconda riga completa",
+      firstCommentText: "Link e dettagli nel primo commento",
+      media: [],
+      publishAt: now,
+      comments: [],
+    };
+    const html = renderToStaticMarkup(
+      createElement(PostReview, {
+        token: "tok",
+        post,
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        queue,
+        assistantEnabled: false,
+        publishInPast: false,
+        changesSlot: createElement("div", { "data-testid": "changes-content" }, "Differenze complete"),
+      })
+    );
+
+    const previewAt = html.indexOf('aria-label="Anteprima del post"');
+    const fullTextAt = html.indexOf("Leggi il testo completo");
+    const changesAt = html.indexOf("Modifiche dalla versione precedente");
+    const changesContentAt = html.indexOf('data-testid="changes-content"');
+
+    expect(previewAt).toBeGreaterThan(-1);
+    expect(fullTextAt).toBeGreaterThan(previewAt);
+    expect(changesAt).toBeGreaterThan(fullTextAt);
+    expect(changesContentAt).toBeGreaterThan(changesAt);
+    expect(html).toContain("Prima riga\nSeconda riga completa");
+    expect(html).toContain("Primo commento");
+    expect(html).toContain("Link e dettagli nel primo commento");
+    expect(html).not.toMatch(/<details[^>]*\sopen(?:=|\s|>)/);
+    expect(html).toContain('aria-label="Navigazione della revisione"');
+    expect(html).toContain('aria-label="Tutti i post"');
+    expect(html).toContain('aria-label="Prossimo post"');
   });
 });
 
@@ -266,5 +324,69 @@ describe("PostCard", () => {
     expect(social).toContain("Post social");
     expect(social).toContain("Instagram · Facebook · Versione 1");
     expect(social).toContain("Pubblicazione: </span>");
+  });
+});
+
+describe("saved feedback submission", () => {
+  it("guides an unsaved draft before checking stored comments", () => {
+    expect(savedFeedbackBlocker(true, 2)).toContain("commento ancora da inviare");
+  });
+
+  it("blocks an empty request and allows saved feedback", () => {
+    expect(savedFeedbackBlocker(false, 0)).toContain("Non hai ancora indicato modifiche");
+    expect(savedFeedbackBlocker(false, 1)).toBeNull();
+  });
+
+  it("keeps the change-request confirmation visible after refresh", () => {
+    const socialPost: PortalPost = {
+      ...base,
+      status: "CHANGES_REQUESTED",
+      canAct: false,
+      networks: ["instagram"],
+      networkOptions: {},
+      text: "La nuova colomba!",
+      firstCommentText: null,
+      media: [],
+      publishAt: now,
+      comments: [],
+    };
+    const social = renderToStaticMarkup(
+      createElement(PostReview, {
+        token: "tok",
+        post: socialPost,
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        queue: { ...queue, position: null },
+        assistantEnabled: false,
+        publishInPast: false,
+      })
+    );
+    const blog = renderToStaticMarkup(
+      createElement(BlogReview, {
+        token: "tok",
+        post: blogPost({ status: "CHANGES_REQUESTED", canAct: false }),
+        queue: { ...queue, position: null },
+        listKinds: ["BLOG_ARTICLE"],
+        assistantEnabled: false,
+      })
+    );
+    const ads = renderToStaticMarkup(
+      createElement(AdsReview, {
+        token: "tok",
+        post: adsPost({ status: "CHANGES_REQUESTED", canAct: false }),
+        client: { name: "Rossi Srl", logoUrl: null },
+        queue: { ...queue, position: null },
+        listKinds: ["AD_CREATIVE"],
+        assistantEnabled: false,
+      })
+    );
+
+    expect(social).toContain("Modifiche inviate all&#x27;agenzia");
+    expect(blog).toContain("Modifiche inviate all&#x27;agenzia");
+    expect(ads).toContain("Modifiche inviate all&#x27;agenzia");
+    expect(social).toContain('role="status"');
+    expect(blog).toContain('role="status"');
+    expect(ads).toContain('role="status"');
+    expect(blog).not.toContain("Cosa vorresti cambiare?");
+    expect(ads).not.toContain("Cosa vorresti cambiare?");
   });
 });

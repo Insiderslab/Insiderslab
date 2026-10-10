@@ -184,6 +184,8 @@ const item = (overrides: Partial<ActionItem> = {}): ActionItem => ({
   mediaIndex: null,
   timeSec: null,
   timeEndSec: null,
+  pinX: null,
+  pinY: null,
   request: "Accorciare la frase",
   priority: "media",
   variantId: null,

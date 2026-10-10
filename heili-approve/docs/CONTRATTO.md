@@ -23,6 +23,14 @@ Docker e design system:
 
 **Tutta l'interfaccia è in italiano.** Commenti nel codice in inglese, come in heili-dm.
 
+## Importazione assistita e permessi confermati
+
+I membri del workspace, inclusi i MEMBER, possono gestire i link dei referenti cliente: politica confermata dal titolare durante questa revisione. La gestione resta limitata ai clienti del proprio workspace.
+
+Codex e Claude usano la stessa interfaccia documentata in [AGENT-IMPORT.md](AGENT-IMPORT.md): API versionata `/api/automation/v1` e CLI Python senza dipendenze per Excel/CSV/JSON. L'API usa chiavi personali del workspace, salvate soltanto come hash, con scadenza e revoca; la membership viene ricontrollata a ogni richiesta. Non riutilizzare i link cliente come credenziali di automazione.
+
+L'importazione v1 crea solo bozze social attraverso `createPost`, mantenendo validazione di dominio, versione e audit. Non invia notifiche, non approva, non programma. Il dry-run non scrive. `externalId` è stabile e univoco per workspace: stessa chiave e stessi dati restituiscono il post già creato, dati diversi restituiscono 409. Non sostituire automaticamente un post già presente.
+
 ## Già pronto (non riscrivere)
 
 | File | Cosa |
