@@ -101,15 +101,17 @@ export default function PostReview({
   const canAct = post.canAct && outcome === null;
   const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
   const hasVideo = post.media.some((m) => m.type === "video");
-  const nextHref = queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
+  // Opened from Sfoglia, "next" is the next card; otherwise the next post waiting.
+  const nextHref = plan?.browse ? plan.browse.nextHref : queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
   const homeHref = plan?.href ?? portalPath(token);
   const baseWording = portalWording(listKinds);
-  // Inside a plan the way back is the plan, and "next" stays in the plan.
+  // Inside a plan the way back is the plan (or the month view it came from), and "next" stays in the plan.
+  const backText = plan?.backLabel ?? "Torna al piano";
   const wording = plan
     ? {
         ...baseWording,
-        backLabel: "← Torna al piano",
-        homeLabel: "Torna al piano",
+        backLabel: `← ${backText}`,
+        homeLabel: backText,
         allDone: "Hai rivisto tutti i post del piano in attesa. Grazie!",
       }
     : baseWording;
@@ -642,12 +644,28 @@ export default function PostReview({
 
 /** "Piano social di ottobre · Post 3 di 12" with "Post precedente / successivo del piano". */
 function PlanNav({ plan }: { plan: PortalPlanNav }) {
+  if (plan.browse) {
+    // From Sfoglia: the way back is the card; no previous / next of the plan.
+    return (
+      <nav className="inset space-y-2 p-3" aria-label="Post del piano" data-testid="plan-nav">
+        <p className="label-caps">{plan.heading}</p>
+        <div className="flex flex-wrap items-center justify-between gap-x-3">
+          <Link href={plan.href} className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline">
+            ← {plan.backLabel ?? "Torna a Sfoglia"}
+          </Link>
+          <span className="text-sm text-muted tabular">
+            Post {plan.position} di {plan.total}
+          </span>
+        </div>
+      </nav>
+    );
+  }
   return (
     <nav className="inset space-y-2 p-3" aria-label="Post del piano" data-testid="plan-nav">
       <p className="label-caps">{plan.heading}</p>
       <div className="flex flex-wrap items-center justify-between gap-x-3">
         <Link href={plan.href} className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline">
-          ← Torna al piano
+          ← {plan.backLabel ?? "Torna al piano"}
         </Link>
         <span className="text-sm text-muted tabular">
           Post {plan.position} di {plan.total}

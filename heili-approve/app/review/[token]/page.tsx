@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   formatPortalDate,
   groupPortalPosts,
+  portalMonthPath,
   portalPlanPath,
   parsePortalKind,
   portalKindTabs,
@@ -13,7 +14,8 @@ import KindTabs from "@/components/portal/kind-tabs";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
 import { clientServices } from "@/lib/clients";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
-import { planHeading, planMonthOf, planProgress, type PlanProgress } from "@/lib/plan-rules";
+import { monthOffers, type MonthOffer } from "@/lib/month-rules";
+import { planHeading, planMonthName, planMonthOf, planProgress, type PlanProgress } from "@/lib/plan-rules";
 import { listPlansForReviewer } from "@/lib/plans";
 import { listPostsForReviewer } from "@/lib/posts";
 import { enabledKinds, kindCountPhrase } from "@/lib/variant";
@@ -73,6 +75,11 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const groups = groupPortalPosts(cards, now);
   const standaloneIds = new Set(posts.filter((p) => !p.planId || !visiblePlanIds.has(p.planId)).map((p) => p.id));
   const standaloneGroups = groupPortalPosts(cards.filter((p) => standaloneIds.has(p.id)), now);
+  // Several posts of one month waiting outside any plan: review them together.
+  const offers = monthOffers(
+    posts.filter((p) => standaloneIds.has(p.id)),
+    timeZone
+  );
   // An empty list speaks of the tab, else of what the client gets here.
   const kinds =
     posts.length > 0 ? posts.map((p) => p.kind) : selected ? [selected] : kindsShown.length > 0 ? kindsShown : enabledKinds();
@@ -139,6 +146,14 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
           <p className="text-sm text-muted">Apri un piano per rivedere i suoi post. Gli altri contenuti sono elencati separatamente qui sotto.</p>
           {planCards.map((plan) => (
             <PlanCard key={plan.id} plan={plan} />
+          ))}
+        </section>
+      )}
+
+      {offers.length > 0 && (
+        <section className="space-y-3" aria-label="Rivedi un mese insieme">
+          {offers.map((offer) => (
+            <MonthOfferCard key={offer.month} offer={offer} href={portalMonthPath(token, offer.month)} now={now} timeZone={timeZone} />
           ))}
         </section>
       )}
@@ -234,6 +249,35 @@ function Section({
       </div>
       <div className="space-y-3">{children}</div>
     </section>
+  );
+}
+
+/** "ottobre", with the year when it is not the current one in the client's zone. */
+function offerMonthName(month: string, now: Date, timeZone: string): string {
+  const year = month.slice(0, 4);
+  return `${planMonthName(month)}${year !== planMonthOf(now, timeZone).slice(0, 4) ? ` ${year}` : ""}`;
+}
+
+function MonthOfferCard({ offer, href, now, timeZone }: { offer: MonthOffer; href: string; now: Date; timeZone: string }) {
+  const name = offerMonthName(offer.month, now, timeZone);
+  return (
+    <Link
+      href={href}
+      className="panel block space-y-3 p-4 transition-colors hover:border-line-strong sm:p-5"
+      data-testid="portal-month-offer"
+    >
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <span className="label-caps">Tutti insieme</span>
+        <span className="chip chip-brand">{offer.count} post da approvare</span>
+      </span>
+      <span className="block text-xl font-semibold leading-tight">Rivedi tutto {name} insieme</span>
+      <span className="block text-sm text-muted">
+        I {offer.count} post di {name} in una griglia e uno dopo l&apos;altro, con Approva e Commenta.
+      </span>
+      <span className="flex min-h-12 w-full items-center justify-center rounded-lg border border-border px-4 text-base font-semibold sm:inline-flex sm:w-auto">
+        Rivedi tutto {name} insieme
+      </span>
+    </Link>
   );
 }
 

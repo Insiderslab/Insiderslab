@@ -468,6 +468,11 @@ export function portalPlanPath(token: string, planId: string): string {
   return `${portalPath(token)}/piani/${encodeURIComponent(planId)}`;
 }
 
+/** Path of a month of social posts without a plan (/review/<token>/mese/<YYYY-MM>). */
+export function portalMonthPath(token: string, month: string): string {
+  return `${portalPath(token)}/mese/${encodeURIComponent(month)}`;
+}
+
 /** "ven 9 ottobre · 18:30": a post's slot in a monthly plan, in the client's time zone. */
 export function formatPlanSlot(date: Date, timeZone: string | null | undefined): string {
   const p = dateParts(date, safeTimeZone(timeZone), {

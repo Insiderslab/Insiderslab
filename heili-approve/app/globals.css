@@ -324,7 +324,8 @@ select:focus-visible {
   font-size: 14px;
   font-weight: 650;
 }
-.studio-view-tab[aria-selected="true"] {
+.studio-view-tab[aria-selected="true"],
+.studio-view-tab[aria-current="page"] {
   background: var(--color-surface);
   color: var(--color-foreground);
   box-shadow: 0 1px 5px rgba(0, 49, 65, 0.1);
@@ -355,6 +356,29 @@ select:focus-visible {
 .animate-pulse-glow,
 .stagger > * {
   animation: none;
+}
+
+/* Sfoglia (month fast review): the next card slides in from the side it came
+   from; no motion at all when the person asked for less. */
+@media (prefers-reduced-motion: no-preference) {
+  .browse-card[data-dir="next"] {
+    animation: browse-in-next 180ms ease-out;
+  }
+  .browse-card[data-dir="prev"] {
+    animation: browse-in-prev 180ms ease-out;
+  }
+}
+@keyframes browse-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes browse-in-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

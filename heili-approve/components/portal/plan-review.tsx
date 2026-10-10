@@ -43,12 +43,18 @@ export default function PlanReview({
   plan,
   homeHref,
   gridSlot,
+  modeSlot,
+  quickReviewSlot,
 }: {
   token: string;
   plan: PortalPlan;
   homeHref: string;
   /** Server-rendered Instagram grid. */
   gridSlot: ReactNode;
+  /** "Panoramica · Griglia · Sfoglia" switch, under the way back. */
+  modeSlot?: ReactNode;
+  /** Phones: "Rivedi in modalità veloce", the way into Sfoglia. */
+  quickReviewSlot?: ReactNode;
 }) {
   const router = useRouter();
   const commentRef = useRef<HTMLTextAreaElement>(null);
@@ -142,6 +148,8 @@ export default function PlanReview({
         </Link>
       </nav>
 
+      {modeSlot}
+
       {outcome && (
         <section className="space-y-2 rounded-lg border-2 border-success bg-surface p-5" role="status" aria-live="polite" data-testid="plan-outcome">
           <p className="text-lg font-semibold text-success">
@@ -181,6 +189,7 @@ export default function PlanReview({
           </p>
         ) : (
           <div className="flex flex-col gap-2 sm:flex-row">
+            {quickReviewSlot}
             {toApprove > 0 && (
               <button
                 type="button"
@@ -194,7 +203,8 @@ export default function PlanReview({
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                className="btn btn-primary min-h-12 order-1"
+                // On phones "Rivedi in modalità veloce" is the one primary action.
+                className={`btn btn-primary min-h-12 order-1${quickReviewSlot ? " max-sm:!border-line-strong max-sm:!bg-surface max-sm:!text-foreground" : ""}`}
               >
                 Rivedi uno per uno
               </Link>

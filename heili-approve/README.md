@@ -208,6 +208,27 @@ volta.
   commento aperto o con modifiche richieste restano fuori e sono elencati nella
   conferma. C'è anche un «Commento sul piano» generale. La home del portale
   mette in evidenza il piano da rivedere.
+- **Cliente — vista del mese (`?vista=panoramica|griglia|sfoglia`):** sulla
+  pagina del piano un selettore «Panoramica · Griglia · Sfoglia» (lo stato è
+  nell'URL; su telefono c'è anche «Rivedi in modalità veloce»). **Griglia**: tutti
+  i post del mese nella griglia a tre colonne, dal più recente, con il chip di
+  stato e l'icona di video/carosello; un tocco apre il post (con «Torna alla
+  griglia»). **Sfoglia**: una scheda per post con la vera anteprima, data, reti e
+  due pulsanti, **Approva** (stessa azione e stesse regole del post singolo:
+  versione mostrata, Metricool) e **Commenta** (apre la pagina del post con
+  `?da=sfoglia&i=3`, e «Torna a Sfoglia» riporta alla stessa scheda); dopo
+  ogni approvazione compare il prossimo post ancora da decidere. Scorrimento a
+  dito, frecce a schermo e ← → da tastiera; barra «8 di 12 approvati»; in fondo
+  il riepilogo («10 approvati, 2 con commenti») con **«Approva i rimanenti»** (la
+  stessa «Approva tutto il piano»: restano fuori i post con commenti o modifiche
+  richieste, che si decidono dalla loro pagina). Un post con commenti già lasciati
+  mostra «Decidi dal post» invece di «Approva».
+- **Mese senza piano — `/review/<token>/mese/<YYYY-MM>`:** con almeno due post
+  social in attesa nello stesso mese (fuso del cliente) e fuori da un piano, la
+  home del portale offre «Rivedi tutto <mese> insieme». La pagina ha Griglia e
+  Sfoglia sugli stessi componenti; «Approva i rimanenti» usa le stesse esclusioni
+  del piano. Solo i post visibili del cliente del link (mai bozze o annullati);
+  un mese vuoto, di un altro cliente o malformato risponde 404.
 - **Notifiche all'agenzia:** una email per «Approva tutto» (non una per post) e
   una sola, quando il cliente ha risposto su tutti i post inviati: «Piano di
   ottobre: 10 approvati, 2 con modifiche».
@@ -361,6 +382,11 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   piano), «Approva tutto il piano» approva gli altri tre ed elenca quello
   commentato; il worker li programma; l'ultimo approvato da solo chiude il
   piano; il link di un altro cliente risponde 404;
+- `month-review.spec.mjs` — vista del mese a 390 px: interruttore e «Rivedi in
+  modalità veloce», Sfoglia (approva, commenta e ritorno alla stessa scheda,
+  swipe, frecce, movimento ridotto, riepilogo e «Approva i rimanenti», worker
+  che programma), Griglia con i chip di stato, il mese senza piano dalla home e
+  i 404 (altro cliente, mese vuoto o malformato);
 - `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
   (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
   «Articoli», che non ci sia Metricool e che una creatività ads non si possa

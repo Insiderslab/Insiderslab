@@ -198,7 +198,15 @@ export interface PortalPlan {
 
 /** Navigation of a post that belongs to a plan (post review page). */
 export interface PortalPlanNav {
+  /** Where "Torna al piano" goes (the plan, or the month view the post was opened from). */
   href: string;
+  /** Text of that link; defaults to "Torna al piano". */
+  backLabel?: string;
+  /**
+   * Opened from Sfoglia: the way back is the card, there is no previous /
+   * next of the plan, and after a decision "next" is the next card.
+   */
+  browse?: { nextHref: string | null };
   /** "Piano social di ottobre". */
   heading: string;
   position: number;

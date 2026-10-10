@@ -35,6 +35,7 @@ import {
 } from "@/lib/posts";
 import { toRequestChangesItems } from "@/lib/review-assistant/content";
 import { parseActionItems } from "@/lib/review-assistant/shared";
+import { approveListedPosts } from "@/lib/month-review";
 import { addPlanComment, approvePlan, type ApprovePlanResult } from "@/lib/plans";
 import { resolveReviewerToken } from "@/lib/reviewers";
 
@@ -105,10 +106,16 @@ const approvePlanSchema = z.object({
   posts: z.array(z.object({ postId: idSchema, versionNumber: versionSchema })).max(500),
 });
 
+const approveMonthSchema = z.object({
+  /** The posts the month view showed, at the version shown. */
+  posts: z.array(z.object({ postId: idSchema, versionNumber: versionSchema })).max(200),
+});
+
 const planCommentSchema = z.object({ planId: idSchema, body: z.string().max(10_000) });
 
 export type ApproveInput = z.input<typeof approveSchema>;
 export type ApprovePlanInput = z.input<typeof approvePlanSchema>;
+export type ApproveMonthInput = z.input<typeof approveMonthSchema>;
 export type PlanCommentInput = z.input<typeof planCommentSchema>;
 export type RequestChangesInput = z.input<typeof changesSchema>;
 export type PortalCommentInput = z.input<typeof commentSchema>;
@@ -308,6 +315,24 @@ export async function approvePlanAction(
   const result = await asReviewer(token, async (reviewer) => {
     const { planId, posts } = parseOrThrow(approvePlanSchema, input);
     return approvePlan(planId, reviewer, posts);
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/**
+ * Month route (/mese/<YYYY-MM>, posts without a plan): "Approva i rimanenti"
+ * of Sfoglia. Same rules as the plan's approve-all (lib/month-review): only
+ * posts still waiting at the version shown, never one with feedback already
+ * left, each through approvePost.
+ */
+export async function approveMonthAction(
+  token: string,
+  input: ApproveMonthInput
+): Promise<PortalActionResult<ApprovePlanResult>> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { posts } = parseOrThrow(approveMonthSchema, input);
+    return approveListedPosts(reviewer, posts);
   });
   if (result.ok) refresh();
   return result;

@@ -25,6 +25,8 @@ export interface GridTile {
   dateLabel: string;
   /** Small chip on the tile ("Approvato", "Da approvare"); omit for none. */
   status?: { label: string; tone: "brand" | "fresh" | "stale" | "offline" };
+  /** Small label top left ("Facebook"): for posts that are not on Instagram, in the month view. */
+  badge?: string;
   href?: string;
 }
 
@@ -83,6 +85,8 @@ export default function InstagramGrid({
   accountName,
   logoUrl,
   caption,
+  ariaLabel = "Anteprima dei contenuti Instagram del piano",
+  emptyText = "Nessun contenuto Instagram incluso nel piano. I post delle altre reti sono nell’elenco del piano.",
 }: {
   /** Already in Instagram order (newest first, see instagramGridOrder). */
   tiles: GridTile[];
@@ -90,6 +94,10 @@ export default function InstagramGrid({
   logoUrl?: string | null;
   /** Line under the account name ("12 post a ottobre"). */
   caption: string;
+  /** Name of the list for screen readers. */
+  ariaLabel?: string;
+  /** Shown when there are no tiles. */
+  emptyText?: string;
 }) {
   const initial = accountName.trim().charAt(0).toUpperCase() || "?";
   return (
@@ -108,9 +116,9 @@ export default function InstagramGrid({
         </span>
       </figcaption>
       {tiles.length === 0 ? (
-        <p className="inset p-4 text-sm text-muted">Nessun contenuto Instagram incluso nel piano. I post delle altre reti sono nell’elenco del piano.</p>
+        <p className="inset p-4 text-sm text-muted">{emptyText}</p>
       ) : (
-        <ul className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl bg-surface-sunken p-1" aria-label="Anteprima dei contenuti Instagram del piano">
+        <ul className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl bg-surface-sunken p-1" aria-label={ariaLabel}>
           {tiles.map((tile) => {
             const inner = (
               <>
@@ -124,6 +132,11 @@ export default function InstagramGrid({
                     <ReelIcon />
                   </span>
                 ) : null}
+                {tile.badge && (
+                  <span className="absolute left-1 top-1 max-w-[70%] truncate rounded bg-black/70 px-1.5 text-[10px] font-medium leading-4 text-white">
+                    {tile.badge}
+                  </span>
+                )}
                 {tile.status && (
                   <span className={`${CHIP[tile.status.tone]} absolute bottom-1 left-1 !px-1.5 !py-0 !text-[10px] shadow-sm`}>
                     {tile.status.label}

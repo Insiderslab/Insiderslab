@@ -12,6 +12,7 @@ import {
   formatShortDateTime,
   nextPostToReview,
   numberPassageComments,
+  portalMonthPath,
   portalPath,
   portalPlanPath,
 } from "@/components/portal/helpers";
@@ -48,13 +49,16 @@ import {
   type ReviewerPostVersion,
   type ReviewerRef,
 } from "@/lib/posts";
-import { byPublishAsc, planHeading, planNeighbors, planProgress } from "@/lib/plan-rules";
+import { parsePostReturn, selectMonthPosts, viewPath } from "@/lib/month-rules";
+import { byPublishAsc, planHeading, planMonthName, planMonthOf, planNeighbors, planProgress } from "@/lib/plan-rules";
 import { getPlanForReviewer } from "@/lib/plans";
 import { isAssistantEnabled } from "@/lib/review-assistant";
 import { getPortalReviewer } from "../../reviewer";
 
 type ReviewPostPageProps = {
   params: Promise<{ token: string; postId: string }>;
+  /** `?da=sfoglia|griglia&i=3&mese=2026-10`: opened from a month view, with the way back. */
+  searchParams?: Promise<{ da?: string | string[]; i?: string | string[]; mese?: string | string[] }>;
 };
 
 async function loadPost(postId: string, reviewer: ReviewerRef): Promise<ReviewerPost> {
@@ -142,8 +146,9 @@ function blogContentOf(version: ReviewerPostVersion): BlogContent {
  * what changed since the client last looked, the comments and the decision.
  * Opening it logs CLIENT_VIEWED once per version and reviewer.
  */
-export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
+export default async function ReviewPostPage({ params, searchParams }: ReviewPostPageProps) {
   const { token, postId } = await params;
+  const origin = parsePostReturn((await searchParams) ?? {});
   const reviewer = await getPortalReviewer(token);
   if (!reviewer) return null; // the layout shows the invalid-link page
 
@@ -180,21 +185,43 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
 
   const found = changesBase(post.versions, current, viewedVersions, timeZone);
 
-  // A post of a monthly plan the client can see: navigation stays inside the plan.
+  // A post of a monthly plan the client can see, or opened from a month view
+  // (the month route, posts without a plan): navigation stays in that list.
   const plan = post.kind === "SOCIAL_POST" && post.planId ? await planOf(post.planId, ref) : null;
-  const planPosts = plan
-    ? byPublishAsc(summaries.filter((p) => p.planId === plan.id && p.kind === post.kind)).map((p) => ({ id: p.id, canAct: p.canAct }))
-    : [];
+  const monthPosts =
+    post.kind === "SOCIAL_POST" && origin?.mese ? selectMonthPosts(summaries, origin.mese, timeZone) : [];
+  const fromMonth = origin?.mese != null && monthPosts.some((p) => p.id === post.id);
+  const scope = fromMonth && origin?.mese
+    ? {
+        basePath: portalMonthPath(token, origin.mese),
+        heading: `Post di ${planMonthName(origin.mese)}${origin.mese.slice(0, 4) !== planMonthOf(now, timeZone).slice(0, 4) ? ` ${origin.mese.slice(0, 4)}` : ""}`,
+        posts: monthPosts.map((p) => ({ id: p.id, canAct: p.canAct })),
+      }
+    : plan
+      ? {
+          basePath: portalPlanPath(token, plan.id),
+          heading: planHeading(plan.month, { kind: plan.kind, now, timeZone }),
+          posts: byPublishAsc(summaries.filter((p) => p.planId === plan.id && p.kind === post.kind)).map((p) => ({
+            id: p.id,
+            canAct: p.canAct,
+          })),
+        }
+      : null;
+  const scopePosts = scope?.posts ?? [];
   let planNav: PortalPlanNav | undefined;
-  if (plan) {
+  if (scope) {
     const around = planNeighbors(
-      planPosts.map((p) => p.id),
+      scopePosts.map((p) => p.id),
       post.id
     );
     if (around.position !== null) {
+      const sfoglia = origin?.da === "sfoglia";
+      const position = origin?.i ?? around.position;
       planNav = {
-        href: portalPlanPath(token, plan.id),
-        heading: planHeading(plan.month, { kind: plan.kind, now, timeZone }),
+        href: origin ? viewPath(scope.basePath, origin.da, sfoglia ? position : null) : scope.basePath,
+        ...(origin ? { backLabel: sfoglia ? "Torna a Sfoglia" : "Torna alla griglia" } : {}),
+        ...(sfoglia ? { browse: { nextHref: position < around.total ? viewPath(scope.basePath, "sfoglia", position + 1) : null } } : {}),
+        heading: scope.heading,
         position: around.position,
         total: around.total,
         prevHref: around.prevId ? portalPath(token, around.prevId) : null,
@@ -203,7 +230,7 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
     }
   }
 
-  const toReview = (planNav ? planPosts : summaries).filter((p) => p.canAct).map((p) => p.id);
+  const toReview = (planNav ? scopePosts : summaries).filter((p) => p.canAct).map((p) => p.id);
   const index = toReview.indexOf(post.id);
   const queue: PortalQueue = {
     nextPostId: nextPostToReview(toReview, post.id),
@@ -212,7 +239,8 @@ export default async function ReviewPostPage({ params }: ReviewPostPageProps) {
   };
   const listKinds: ContentKind[] = [...new Set([post.kind, ...summaries.map((p) => p.kind)])];
   const assistantEnabled = isAssistantEnabled();
-  const progress = planProgress(summaries.filter(item => !planNav || item.planId === plan?.id).map(item => item.status));
+  const scopeIds = new Set(scopePosts.map((p) => p.id));
+  const progress = planProgress(summaries.filter(item => !planNav || scopeIds.has(item.id)).map(item => item.status));
   const progressSlot = progress.total > 0 ? (
     <div className="mb-5 ml-auto max-w-sm" aria-label={planNav ? "Avanzamento del piano" : "Avanzamento dei contenuti"}>
       <PlanProgressBar progress={progress} size="sm" label={`${progress.approved + progress.changes} di ${progress.total} contenuti revisionati`} />
