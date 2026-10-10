@@ -1,5 +1,9 @@
 # CRM WhatsApp (Heili Orbit + Whapi) — stato reale e tempi al 5 ottobre 2026
 
+> ⚠️ **Fotografia datata.** Il riferimento aggiornato è `VISIONE-ECOSISTEMA-CRM.md` (10/10/2026).
+
+> Correzione: le organizzazioni di produzione sono "Negocio de Stefano Finoti" e "Hair extension Clinic", non InsidersLab e La Bambola.
+
 **Modalità:** sola lettura. Nessun deploy, nessun segreto letto, nessuna modifica ai repo del CRM.
 **Fonti:** repo `Insiderslab/vocero-crm`, `Insiderslab/wapi`, `Insiderslab/heili-dm`, `Insiderslab/heili-platform` (clonati oggi); audit "Heili — stato reale" del 1/10 su Drive; specifiche `specs/custom-heili/*`; branch di lavoro di oggi `claude/keen-ptolemy-l0kv8g`; Fireflies 19/8 e 14/9; Clientify (capacità account).
 **Non verificato:** i servizi live (`crm.heili.cloud`, `whapi.heili.cloud`) non sono raggiungibili da questo ambiente (proxy 403). Tutto ciò che riguarda la produzione viene dai documenti, non da una prova dal vivo.

@@ -1,5 +1,9 @@
 # Heili CRM — analisi completa e distanza dal 100% operativo (9 ottobre 2026)
 
+> ⚠️ **Fotografia datata.** Il riferimento aggiornato è `VISIONE-ECOSISTEMA-CRM.md` (10/10/2026).
+
+> Superato in parte: C3 (chiave Wapi per organizzazione) e i ruoli sono ora sul branch keen (PR #3); la coexistence è scritta (branch `claude/exciting-rubin-mow1yu`).
+
 **Perimetro:** il CRM WhatsApp di Heili ("Heili Orbit", repo `vocero-crm`) con il gateway Whapi (`wapi`), i pannelli Meta, l'infrastruttura su VPS e i pezzi dell'ecosistema Heili che lo toccano (`heili-dm`, `heili-platform`).
 **Fonti:** repo clonati e aggiornati oggi; audit Heili del 1/10; `REPORT-META-2026-10-05.md`; runbook con registro al 6/10; briefing "Heili CRM" per Mandeep e Juan del 9/10 (Drive); email Meta.
 **Non verificato da qui:** stato dei container e del database in produzione (rete bloccata verso `*.heili.cloud`), esito del test end-to-end dopo il 6/10 (nessun registro nuovo), contenuto del VPS. Dove un dato è dichiarato e non provato lo segno con *(dichiarato)*.
