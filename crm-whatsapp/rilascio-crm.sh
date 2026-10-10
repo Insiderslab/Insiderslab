@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Rilascio del CRM (Heili CRM / vocero-crm) sul VPS — 10/10/2026.
+# Rilascio del CRM (Heili CRM / vocero-crm) sul VPS — 2° rilascio, 11/10/2026.
 #
-#   bash rilascio-crm.sh                      → rilascio di main @ e23332e (PR #3–#6)
+#   bash rilascio-crm.sh                      → rilascio di main @ TARGET (PR #7 livello canali R1 + PR #8 assistente interno)
 #   bash rilascio-crm.sh attiva-pulsante ID   → aggiunge META_APP_ID e META_ES_CONFIG_ID (=ID) e riavvia
 #
 # Si ferma al primo controllo che non torna e spiega cosa fare. Non stampa
@@ -9,7 +9,9 @@
 set -euo pipefail
 
 APP_DIR=${RILASCIO_APP_DIR:-/opt/vocero}
-TARGET=${RILASCIO_TARGET:-e23332ed0bc3a087f0ec915d97488aecc42b6304}   # main dopo la PR #6
+TARGET=${RILASCIO_TARGET:-__TARGET__}   # main dopo la PR #8
+PREV=e23332ed0bc3a087f0ec915d97488aecc42b6304        # rilascio del 10/10 (per tornare indietro)
+MIG_EXPECTED=15                                      # 0000–0014
 APP_ID=609974691965875                               # app Meta del CRM (non segreto)
 PG=vocero-postgres
 APP=vocero-app
@@ -31,6 +33,7 @@ wait_health() {
   return 1
 }
 
+[[ "$TARGET" =~ ^[0-9a-f]{40}$ ]] || stop "script non ancora pronto (manca il commit da rilasciare): aspetta il messaggio di Claude"
 cd "$APP_DIR" || stop "cartella $APP_DIR non trovata"
 
 # ---------------------------------------------------------------------------
@@ -55,7 +58,7 @@ fi
 echo "== 0. Controlli =="
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { git status --short --untracked-files=no; stop "ci sono file modificati nel repo: non li tocco"; }
 CUR=$(git rev-parse HEAD)
-if [ "$CUR" = "$TARGET" ]; then info "il codice è già a e23332e: rifaccio solo build e controlli"; fi
+if [ "$CUR" = "$TARGET" ]; then info "il codice è già a ${TARGET:0:7}: rifaccio solo build e controlli"; fi
 docker ps --format '{{.Names}}' | grep -qx "$PG" || stop "container $PG non in esecuzione"
 info "organizzazioni: $(psqlq "select string_agg(name, ' | ' order by created_at) from organization;")"
 for v in BOT_API_KEY EXPORT_API_KEY; do
@@ -65,6 +68,12 @@ for v in BOT_API_KEY EXPORT_API_KEY; do
 done
 if grep -qE '^WAPI_BASE_URL=.+' .env; then stop "WAPI_BASE_URL è impostata: Wapi è congelato, toglila o chiedi prima di procedere"; fi
 ok "nessuna chiave d'istanza in uso, Wapi spento"
+NMSG=$(psqlq "select count(*) from message;")
+[ "$NMSG" -lt 2000000 ] || stop "$NMSG messaggi: oltre 2 milioni il primo avvio del livello canali è troppo lungo (docs/ops/rilascio-canali.md)"
+ok "messaggi nel database: $NMSG (primo avvio stimato: pochi secondi)"
+long_tx() { psqlq "select count(*) from pg_stat_activity where datname = 'vocero' and xact_start is not null and pid <> pg_backend_pid() and now() - xact_start > interval '10 seconds';"; }
+[ "$(long_tx)" = "0" ] || stop "c'è una transazione aperta da più di 10 secondi sul database (pg_dump o psql?): chiudila e rilancia"
+ok "nessuna transazione lunga sul database"
 
 echo "== 1. Backup =="
 mkdir -p "$BACKUP_DIR"
@@ -78,28 +87,41 @@ ok "backup $DUMP ($(du -h "$DUMP" | cut -f1)), migrazioni applicate: $MIG_BEFORE
 
 echo "== 2. Codice =="
 git fetch -q origin main
-git merge-base --is-ancestor "$TARGET" origin/main || stop "e23332e non è su origin/main"
+git merge-base --is-ancestor "$TARGET" origin/main || stop "${TARGET:0:7} non è su origin/main"
 git checkout -q main 2>/dev/null || git checkout -q -B main origin/main
-git merge -q --ff-only "$TARGET" || stop "non riesco ad avanzare main fino a e23332e senza merge"
-[ "$(git rev-parse HEAD)" = "$TARGET" ] || stop "HEAD diverso da e23332e"
+git merge -q --ff-only "$TARGET" || stop "non riesco ad avanzare main fino a ${TARGET:0:7} senza merge"
+[ "$(git rev-parse HEAD)" = "$TARGET" ] || stop "HEAD diverso da ${TARGET:0:7}"
 ok "codice a $(git log --oneline -1)"
 
 echo "== 3. Build e avvio (qualche minuto) =="
 docker compose build --build-arg SOURCE_COMMIT="$TARGET" app > /tmp/rilascio-build.log 2>&1 || { tail -30 /tmp/rilascio-build.log; stop "build fallita (log completo: /tmp/rilascio-build.log). Il CRM vecchio è ancora acceso."; }
 ok "build"
-docker compose up -d app > /dev/null 2>&1
+[ "$(long_tx)" = "0" ] || stop "c'è una transazione lunga sul database: chiudila e rilancia (il CRM vecchio è ancora acceso)"
+docker compose up -d app > /dev/null 2>&1   # ricrea il container: ferma il vecchio, poi avvia il nuovo (stop-first)
 if ! wait_health; then
   docker compose logs app --since 5m | tail -40
-  stop "il CRM non risponde 200. Per tornare indietro: git checkout 2f4338d && docker compose build app && docker compose up -d app"
+  stop "il CRM non risponde 200. Per tornare indietro (sicuro, senza backup): git checkout $PREV && docker compose build app && docker compose up -d app"
 fi
 if docker compose logs app --since 10m 2>&1 | grep -q "\[migrate\].*fall"; then
   docker compose logs app --since 10m | grep "\[migrate\]" | tail -10
   stop "migrazione fallita: backup in $DUMP"
 fi
 MIG_AFTER=$(psqlq "select count(*) from drizzle.__drizzle_migrations;")
-[ "$MIG_AFTER" = "13" ] || stop "migrazioni applicate: $MIG_AFTER (attese 13)"
-psqlq "select onboarding_mode from meta_credentials limit 1;" > /dev/null || stop "colonna onboarding_mode mancante"
+[ "$MIG_AFTER" = "$MIG_EXPECTED" ] || stop "migrazioni applicate: $MIG_AFTER (attese $MIG_EXPECTED)"
+psqlq "select restrict_to_allowlist from agent_profile limit 1;" > /dev/null || stop "colonna restrict_to_allowlist mancante"
 ok "CRM acceso (200), migrazioni $MIG_BEFORE → $MIG_AFTER"
+
+echo "== 3b. Livello canali =="
+RIEP=$(docker compose logs app --since 15m 2>&1 | grep -o "canali (avvisa): V1=.*" | tail -1)
+VSUM=$(psqlq "select coalesce(sum(anomalie), -1) from channels_legacy_check();")
+FASEB=$(psqlq "select (select count(*) from pg_index i join pg_class c on c.oid = i.indexrelid where c.relname in ('contact_org_id_uq','message_org_channel_ext_uq') and i.indisvalid) || '/' || (select count(*) from pg_constraint where conname in ('contact_identity_contact_fk','message_channel_ck','conversation_channel_account_fk') and convalidated);")
+info "riepilogo avvio: ${RIEP:-non trovato nel log}"
+CANALI_OK=si
+[ "$VSUM" = "0" ] || CANALI_OK=no
+[ "$FASEB" = "2/3" ] || CANALI_OK=no
+case "$RIEP" in *"V1=0 V2=0 V3=0 V4=0 V5=0 V6=0 V7=0"*) ;; *) CANALI_OK=no;; esac
+if [ "$CANALI_OK" = si ]; then ok "livello canali allineato (V1–V7 = 0, indici e vincoli validi)"
+else printf '\033[33m  ATTENZIONE\033[0m livello canali: anomalie V=%s, indici/vincoli=%s (attesi 0 e 2/3). Il CRM funziona lo stesso (legge le colonne vecchie): incolla questo output a Claude.\n' "$VSUM" "$FASEB"; fi
 
 echo "== 4. WhatsApp =="
 if [ -f "$DIAG" ]; then
@@ -109,6 +131,6 @@ else
 fi
 
 printf '\n\033[32m== RILASCIO FATTO ==\033[0m\n'
-echo "  1. Manda \"prova rilascio\" al +1 555 779 6249: deve arrivare nella Posta (Negocio de Stefano Finoti)."
+echo "  1. Manda \"prova rilascio\" al +1 555 779 6249: deve arrivare nella Posta e l'assistente deve rispondere."
 echo "  2. Copia il backup sul tuo PC: scp root@186.241.16.46:$DUMP ."
 echo "  3. Quando hai il Configuration ID da Meta: bash rilascio-crm.sh attiva-pulsante <ID>"
