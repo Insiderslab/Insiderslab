@@ -9,7 +9,7 @@
 set -euo pipefail
 
 APP_DIR=${RILASCIO_APP_DIR:-/opt/vocero}
-TARGET=${RILASCIO_TARGET:-__TARGET__}   # main dopo la PR #8
+TARGET=${RILASCIO_TARGET:-0bc731e3716cdd11855c465be7d2458523b8ed1a}   # main dopo la PR #8
 PREV=e23332ed0bc3a087f0ec915d97488aecc42b6304        # rilascio del 10/10 (per tornare indietro)
 MIG_EXPECTED=15                                      # 0000–0014
 APP_ID=609974691965875                               # app Meta del CRM (non segreto)

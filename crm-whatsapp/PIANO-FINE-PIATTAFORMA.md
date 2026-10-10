@@ -13,7 +13,7 @@ Instagram, Facebook e il sito di La Bambola arrivano nei giorni successivi (vedi
 | CRM in produzione su `e23332e`: più aziende, ruoli, coexistence nel codice | ✅ rilasciato il 10/10 alle 19:50 UTC |
 | Assistente interno sul +1 555 (profilo + 22 voci, chiave OpenRouter con credito) | ✅ risponde |
 | PR #7, livello canali (fondazione invisibile per Instagram/Facebook) | unita, **non ancora in produzione** |
-| PR #8, assistente interno: accesso riservato, rimozione demo, rinomina, pagina Agente corretta, `max_tokens` | aperta; revisione senza bloccanti; correzioni in corso |
+| PR #8, assistente interno: accesso riservato, rimozione demo, rinomina, pagina Agente corretta, `max_tokens` | ✅ unita (`0bc731e`) dopo revisione e 9 correzioni, **non ancora in produzione** |
 | Pulsante «Collega con Meta» per il +39 347 | il codice c'è; manca il **Configuration ID v4** da Meta |
 | App Secret | da **reimpostare** (era finito in chat) |
 
