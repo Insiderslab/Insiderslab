@@ -1,5 +1,7 @@
 # Piano — +39 347 718 5235 (InsidersLab) in coexistence: app WhatsApp Business sul telefono + CRM
 
+> **Aggiornamento 10/10:** la Strada 2 (collegamento guidato nel nostro CRM) è implementata sul branch `claude/exciting-rubin-mow1yu` di `vocero-crm`. La Strada 1 (Clientify) non serve più. Passi operativi: `PERCORSO-COEXISTENCE.md`.
+
 **Data:** 9/10/2026 · **Decisione di Stefano:** il numero resta sull'app del telefono **e** entra nel CRM (coexistence). Niente migrazione "solo API".
 
 ## Cosa sappiamo
