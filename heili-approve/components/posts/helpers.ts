@@ -209,7 +209,7 @@ export function contentWords(kinds: readonly ContentKind[]): {
     case "BLOG_ARTICLE":
       return { plural: "articoli", the: "gli articoli", Plural: "Articoli", all: "Tutti gli articoli" };
     case "AD_CREATIVE":
-      return { plural: "creatività", the: "le creatività", Plural: "Creatività", all: "Tutte le creatività" };
+      return { plural: "creatività", the: "le creatività", Plural: "Creatività ads", all: "Tutte le creatività ads" };
     default:
       return { plural: "post", the: "i post", Plural: "Post", all: "Tutti i post" };
   }

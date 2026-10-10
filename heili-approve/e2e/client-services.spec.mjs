@@ -47,7 +47,7 @@ test("portale unificato: schede per tipo con i conteggi, filtro, mobile", async 
   // Header: the client's name and what they find here.
   const header = page.getByRole("banner");
   await expect(header.getByText(data.multi.client.name)).toBeVisible();
-  await expect(header.getByText("I tuoi contenuti da approvare: post social, articoli e creatività")).toBeVisible();
+  await expect(header.getByText("I tuoi contenuti da approvare: post social, articoli e creatività ads")).toBeVisible();
 
   // Tabs, only the client's services, with the items waiting for them.
   const tabs = page.getByRole("navigation", { name: "Tipo di contenuto" });
@@ -55,7 +55,7 @@ test("portale unificato: schede per tipo con i conteggi, filtro, mobile", async 
   await expect(tabs.getByRole("link", { name: "Tutti: 3 da approvare" })).toHaveAttribute("aria-current", "page");
   await expect(tabs.getByRole("link", { name: "Post social: 1 da approvare" })).toBeVisible();
   await expect(tabs.getByRole("link", { name: "Articoli: 1 da approvare" })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "Creatività: 1 da approvare" })).toBeVisible();
+  await expect(tabs.getByRole("link", { name: "Creatività ads: 1 da approvare" })).toBeVisible();
 
   // "Da approvare" first, every kind together.
   await expect(page.getByText("Ci sono 3 contenuti che aspettano la tua approvazione: 1 post social, 1 articolo e 1 set di creatività.")).toBeVisible();
@@ -76,7 +76,7 @@ test("portale unificato: schede per tipo con i conteggi, filtro, mobile", async 
   await expectNoHorizontalScroll(page);
 
   // Ads: the per-kind item page is the usual one.
-  await tabs.getByRole("link", { name: "Creatività: 1 da approvare" }).click();
+  await tabs.getByRole("link", { name: "Creatività ads: 1 da approvare" }).click();
   await page.waitForURL(/\?tipo=ads$/);
   await expect(page.getByText(titleOf("SOCIAL_POST"))).toHaveCount(0);
   await page.getByText(titleOf("AD_CREATIVE")).click();
@@ -95,11 +95,11 @@ test("agenzia: scheda cliente con un riquadro per servizio", async ({ browser })
   const page = await context.newPage();
   await page.goto(`/clients/${data.multi.client.id}`);
 
-  await expect(page.getByText("Servizi: post social, articoli e creatività")).toBeVisible();
+  await expect(page.getByText("Servizi: post social, articoli e creatività ads")).toBeVisible();
   for (const [slug, label, newLabel] of [
     ["social", "Post social", "Nuovo post"],
     ["blog", "Articoli", "Nuovo articolo"],
-    ["ads", "Creatività", "Nuova creatività"],
+    ["ads", "Creatività ads", "Nuova creatività ads"],
   ]) {
     const card = page.getByTestId(`service-${slug}`);
     await expect(card.getByRole("heading", { name: label })).toBeVisible();
@@ -204,6 +204,6 @@ test("servizio: non si crea un tipo che il cliente non ha", async () => {
     "RESULT ValidationError: Il servizio «Articoli» non è attivo per questo cliente"
   );
   expect(run(data.clients[0].id, "AD_CREATIVE")).toBe(
-    "RESULT ValidationError: Il servizio «Creatività» non è attivo per questo cliente"
+    "RESULT ValidationError: Il servizio «Creatività ads» non è attivo per questo cliente"
   );
 });

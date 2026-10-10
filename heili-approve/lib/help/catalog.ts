@@ -218,7 +218,7 @@ const TOPICS: HelpTopic[] = [
     routes: [/\/clients(?:\/|$)/],
     steps: [
       { title: "Apri la scheda cliente", body: "Da «Clienti» apri il cliente da configurare e modifica i suoi dati." },
-      { title: "Seleziona i servizi", body: "Attiva Post social, Articoli o Creatività in base al lavoro concordato. Le nuove bozze possono usare solo i servizi attivi." },
+      { title: "Seleziona i servizi", body: "Attiva Post social, Articoli o Creatività ads in base al lavoro concordato. Le nuove bozze possono usare solo i servizi attivi." },
       { title: "Salva e verifica", body: "Salva la scheda. I contenuti già esistenti restano visibili anche se in seguito disattivi un servizio." },
     ],
   },

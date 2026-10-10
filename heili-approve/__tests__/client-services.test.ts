@@ -63,7 +63,7 @@ describe("services: validation", () => {
   it("refuses kinds this instance does not handle", () => {
     process.env.APP_VARIANT = "blog";
     expect(() => validateServices(["BLOG_ARTICLE", "AD_CREATIVE"], ["BLOG_ARTICLE"])).toThrow(
-      "Il servizio «Creatività» non è disponibile in Approve by Heili — Blog"
+      "Il servizio «Creatività ads» non è disponibile in Approve by Heili — Blog"
     );
   });
 
@@ -182,7 +182,7 @@ describe("wording for several services", () => {
 
   it("lists services and counts in menu order", () => {
     expect(sortKinds(["AD_CREATIVE", "SOCIAL_POST"])).toEqual(["SOCIAL_POST", "AD_CREATIVE"]);
-    expect(servicesSentence(["AD_CREATIVE", "BLOG_ARTICLE", "SOCIAL_POST"])).toBe("post social, articoli e creatività");
+    expect(servicesSentence(["AD_CREATIVE", "BLOG_ARTICLE", "SOCIAL_POST"])).toBe("post social, articoli e creatività ads");
     expect(kindCountPhrase({ BLOG_ARTICLE: 1, SOCIAL_POST: 2 })).toBe("2 post social e 1 articolo");
     expect(kindCountPhrase({ SOCIAL_POST: 1, BLOG_ARTICLE: 0, AD_CREATIVE: 3 })).toBe("1 post social e 3 creatività");
     expect(kindCountPhrase({ AD_CREATIVE: 1, BLOG_ARTICLE: 2 }, { adSets: true })).toBe("2 articoli e 1 set di creatività");
@@ -223,7 +223,7 @@ describe("unified portal", () => {
       ["Tutti", 3, false],
       ["Post social", 1, false],
       ["Articoli", 1, true],
-      ["Creatività", 1, false],
+      ["Creatività ads", 1, false],
     ]);
     expect(tabs[0].href).toBe("/review/tok");
     expect(tabs[2].href).toBe("/review/tok?tipo=blog");
@@ -241,7 +241,7 @@ describe("unified portal", () => {
 
   it("says what the client finds in the header", () => {
     expect(portalTagline(["AD_CREATIVE", "SOCIAL_POST", "BLOG_ARTICLE"])).toBe(
-      "I tuoi contenuti da approvare: post social, articoli e creatività"
+      "I tuoi contenuti da approvare: post social, articoli e creatività ads"
     );
     expect(portalTagline(["SOCIAL_POST"])).toBe("I tuoi post da approvare");
     expect(portalTagline(["BLOG_ARTICLE"])).toBe("I tuoi articoli da approvare");

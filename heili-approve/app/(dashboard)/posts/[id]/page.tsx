@@ -77,7 +77,7 @@ import { isClaim } from "@/lib/scheduling";
 import { enabledKinds, postsHref, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
-const PAGE_TITLES: Record<ContentKind, string> = { SOCIAL_POST: "Post", BLOG_ARTICLE: "Articolo", AD_CREATIVE: "Creatività" };
+const PAGE_TITLES: Record<ContentKind, string> = { SOCIAL_POST: "Post", BLOG_ARTICLE: "Articolo", AD_CREATIVE: "Creatività ads" };
 
 export async function generateMetadata() {
   const kinds = enabledKinds();

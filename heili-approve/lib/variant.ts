@@ -150,7 +150,7 @@ export const KIND_UI: Record<
     navLabel: string;
     newTitle: string;
     pluralTitle: string;
-    /** Name of the service a client buys: "Post social", "Articoli", "Creatività". */
+    /** Name of the service a client buys: "Post social", "Articoli", "Creatività ads". */
     serviceLabel: string;
   }
 > = {
@@ -170,10 +170,10 @@ export const KIND_UI: Record<
   },
   AD_CREATIVE: {
     slug: "ads",
-    navLabel: "Creatività",
-    newTitle: "Nuova creatività",
+    navLabel: "Creatività ads",
+    newTitle: "Nuova creatività ads",
     pluralTitle: "Le creatività ads",
-    serviceLabel: "Creatività",
+    serviceLabel: "Creatività ads",
   },
 };
 
@@ -188,7 +188,7 @@ export function sortKinds(kinds: Iterable<ContentKind>): ContentKind[] {
   return KIND_ORDER.filter((kind) => set.has(kind));
 }
 
-/** "Post social", "Articoli", "Creatività". */
+/** "Post social", "Articoli", "Creatività ads". */
 export function serviceLabel(kind: ContentKind): string {
   return KIND_UI[kind].serviceLabel;
 }

@@ -119,7 +119,7 @@ describe("navigation", () => {
 
   it("names the single kind of a blog or ads instance, without ?kind=", () => {
     expect(navItems("blog")[1]).toEqual({ label: "Articoli", href: "/posts", kind: "BLOG_ARTICLE" });
-    expect(navItems("ads")[1]).toEqual({ label: "Creatività", href: "/posts", kind: "AD_CREATIVE" });
+    expect(navItems("ads")[1]).toEqual({ label: "Creatività ads", href: "/posts", kind: "AD_CREATIVE" });
     // Monthly plans are social only.
     expect(navItems("blog").some((item) => item.href === "/plans")).toBe(false);
     expect(navItems("ads").some((item) => item.href === "/plans")).toBe(false);
@@ -131,7 +131,7 @@ describe("navigation", () => {
     expect(navItems("all").filter((item) => item.kind).map(({ label, href }) => [label, href])).toEqual([
       ["Post", "/posts?kind=social"],
       ["Articoli", "/posts?kind=blog"],
-      ["Creatività", "/posts?kind=ads"],
+      ["Creatività ads", "/posts?kind=ads"],
     ]);
     expect(postsHref("BLOG_ARTICLE", "all")).toBe("/posts?kind=blog");
     expect(newPostHref("BLOG_ARTICLE", "all")).toBe("/posts/new?kind=blog");

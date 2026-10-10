@@ -40,7 +40,7 @@ describe("contentWords", () => {
   it("names the items of a single-kind instance", () => {
     expect(contentWords(["SOCIAL_POST"]).the).toBe("i post");
     expect(contentWords(["BLOG_ARTICLE"]).all).toBe("Tutti gli articoli");
-    expect(contentWords(["AD_CREATIVE"]).all).toBe("Tutte le creatività");
+    expect(contentWords(["AD_CREATIVE"]).all).toBe("Tutte le creatività ads");
   });
   it("falls back to 'contenuti' when kinds are mixed", () => {
     expect(contentWords(["SOCIAL_POST", "BLOG_ARTICLE"]).plural).toBe("contenuti");
