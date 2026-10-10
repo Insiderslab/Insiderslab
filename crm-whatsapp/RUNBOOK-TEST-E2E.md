@@ -112,3 +112,25 @@
 - Database: messaggio in entrata **"Ciao" alle 23:36**, organizzazione "Negocio de Stefano Finoti", `wa_message_id` reale → **la catena Meta → CRM funziona**. Causa del guasto: `META_APP_SECRET` sbagliato (106 caratteri) → 401 silenziosi.
 - Nella stessa organizzazione ci sono 16 messaggi della **demo "Ferretería El Martillo"** (seed caricato nelle ultime 24 h): da ripulire prima di usare l'organizzazione per lavoro vero.
 - Resta da fare la tabella C: risposta manuale dal composer, risposta AI (agente spento, chiave OpenRouter da verificare), handoff, finestra 24 h; modello Utility da creare; token permanente di `WhatsappBot`; pulizia risorse in eccesso; rigenerazione App Secret.
+
+### 10/10 19:50 UTC — Rilascio in produzione di `main` @ `e23332e` ✅
+- Eseguito da Stefano con `rilascio-crm.sh`.
+  - Al primo tentativo lo script si è fermato correttamente: `EXPORT_API_KEY` era impostata. È stata disattivata (riga commentata nel `.env`, copia in `.env.bak-export-*`) e il rilascio è ripartito.
+  - Backup `/root/backup/vocero-pre-rilascio-20261010T195011Z.dump` (72K). Migrazioni 9 → 13, health 200.
+- Diagnosi WhatsApp tutta OK:
+  - connessione "Negocio de Stefano Finoti" / WABA 1027272492350148 / Phone 671133866076775;
+  - webhook firmato (POST senza firma → 401);
+  - numero CONNECTED, CLOUD_API, qualità GREEN;
+  - callback dell'app = CRM.
+- In produzione ora:
+  - C1–C3 (chiavi per organizzazione, ruoli);
+  - coexistence (pulsante non ancora attivo: manca `META_ES_CONFIG_ID`);
+  - compose con volume degli allegati;
+  - agente senza conferme.
+- Da fare:
+  - "prova rilascio" al +1 555;
+  - configurazione v4 su Meta, poi `rilascio-crm.sh attiva-pulsante <ID>`;
+  - reimpostare l'App Secret;
+  - collegare il +39 347;
+  - se qualcosa usava l'export, chiave `vex_` per organizzazione;
+  - riavvio del VPS ("System restart required") quando comodo.
