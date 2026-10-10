@@ -16,7 +16,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ContentKind } from "@/app/generated/prisma/client";
-import { approvePostAction, addCommentAction, requestChangesAction } from "@/app/review/[token]/actions";
+import {
+  addAssistantFeedbackAction,
+  approvePostAction,
+  addCommentAction,
+  requestChangesAction,
+} from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
 import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
 import BottomSheet from "./bottom-sheet";
@@ -38,6 +43,7 @@ import {
   OpenFeedbackNotice,
   feedbackHint,
 } from "./review-pieces";
+import type { AssistantMode } from "@/lib/review-assistant/shared";
 import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
 
 type Outcome = "approved" | "changes";
@@ -94,8 +100,10 @@ export default function PostReview({
   const [seek, setSeek] = useState<PreviewSeek | undefined>(undefined);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
-  const openedOnArrival = openAssistant && assistantEnabled && post.canAct;
+  const openedOnArrival = openAssistant && assistantEnabled && (post.canAct || post.status === "CHANGES_REQUESTED");
   const [assistantOpen, setAssistantOpen] = useState(openedOnArrival);
+  // Bumped after Heili's feedback was added: the next conversation starts fresh.
+  const [assistantKey, setAssistantKey] = useState(0);
 
   const [sheet, setSheet] = useState<null | "approve">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
@@ -105,6 +113,10 @@ export default function PostReview({
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
   const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
+  // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
+  const assistantAvailable = assistantEnabled && canComment;
+  const assistantMode: AssistantMode = canAct ? "decision" : "feedback";
   const hasVideo = post.media.some((m) => m.type === "video");
   // Opened from Sfoglia, "next" is the next card; otherwise the next post waiting.
   const nextHref = plan?.browse ? plan.browse.nextHref : queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
@@ -367,6 +379,25 @@ export default function PostReview({
     finish("changes");
   }
 
+  // «Aggiungi al feedback»: the conclusion of Heili once the changes were already requested.
+  async function addFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
+    const result = await addAssistantFeedbackAction(token, {
+      postId: ref.id,
+      versionNumber: ref.versionNumber,
+      message: input.message,
+      reviewSessionId: input.reviewSessionId,
+    });
+    if (!result.ok) {
+      if (result.stale) setStale(true);
+      throw new Error(result.error);
+    }
+    setAssistantOpen(false);
+    setAssistantKey((key) => key + 1);
+    setDecisionError(null);
+    setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
+  }
+
   // Arrived from "Parla con Heili" (open from the first render): bring Heili into view.
   useEffect(() => {
     if (!openedOnArrival) return;
@@ -531,21 +562,22 @@ export default function PostReview({
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
                 <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-                <p className="mt-1 text-sm text-muted">{feedbackHint(canAct, assistantEnabled)}</p>
+                <p className="mt-1 text-sm text-muted">{feedbackHint(canComment, assistantEnabled, post.status === "CHANGES_REQUESTED")}</p>
               </div>
               {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
             </div>
-            {canAct && assistantEnabled && (
+            {assistantAvailable && (
               <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
                 <AssistantPanel
-                  key={`${post.id}-${post.versionNumber}`}
+                  key={`${post.id}-${post.versionNumber}-${assistantKey}`}
                   controlRef={assistantControl}
                   onRequestSavedChanges={requestSavedChanges}
                   token={token}
                   postId={post.id}
                   versionNumber={post.versionNumber}
-                  onSubmitChanges={submitFromAssistant}
-                  onApprove={approveFromAssistant}
+                  mode={assistantMode}
+                  onSubmitChanges={canAct ? submitFromAssistant : addFromAssistant}
+                  onApprove={canAct ? approveFromAssistant : undefined}
                   getVideoTime={hasVideo ? getVideoTime : undefined}
                   getPointContext={getPointContext}
                 />
@@ -563,7 +595,7 @@ export default function PostReview({
                 onDirtyChange={setCommentDirty}
                 onListeningChange={setCommentListening}
                 assistantAction={
-                  canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                  assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
                 }
                 onCancel={() => {
                   setCommentDirty(false);

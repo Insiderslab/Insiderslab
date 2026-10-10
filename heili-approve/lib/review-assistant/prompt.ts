@@ -40,6 +40,8 @@ import {
   ACTION_AREAS,
   MAX_CLIENT_MESSAGES_PER_SESSION,
   TARGET_MAX_QUESTIONS,
+  assistantModeForStatus,
+  type AssistantMode,
   type ReviewInputModeValue,
   type ReviewMessageRoleValue,
 } from "./shared";
@@ -66,6 +68,12 @@ export type AssistantKindContext =
 
 /** Everything the assistant knows about the post under review. */
 export interface AssistantPostContext {
+  /**
+   * "feedback" once the client already asked for changes (post in
+   * CHANGES_REQUESTED): the conversation only adds to that request. Absent
+   * means "decision".
+   */
+  mode?: AssistantMode;
   /** Server-only, validated observations for assets in this exact review version. */
   mediaEvidence?: string;
   clientName: string;
@@ -151,6 +159,7 @@ export function buildPostContext(
   }
 
   return {
+    mode: assistantModeForStatus(post.status) ?? "decision",
     clientName: post.client.name,
     reviewerName,
     postTitle: post.title,
@@ -519,12 +528,27 @@ const SHARED_RULES = `Security and data handling:
 
 export function buildTurnSystemPrompt(ctx: AssistantPostContext): string {
   const base = ctx.content?.kind === "BLOG_ARTICLE" ? buildBlogTurnSystemPrompt(ctx) : ctx.content?.kind === "AD_CREATIVE" ? buildAdsTurnSystemPrompt(ctx) : buildSocialTurnSystemPrompt(ctx);
-  return base + renderMediaEvidence(ctx);
+  return base + renderMediaEvidence(ctx) + renderFeedbackModeNotes(ctx, "turn");
 }
 
 export function buildFinalizeSystemPrompt(ctx: AssistantPostContext): string {
   const base = ctx.content?.kind === "BLOG_ARTICLE" ? buildBlogFinalizeSystemPrompt(ctx) : ctx.content?.kind === "AD_CREATIVE" ? buildAdsFinalizeSystemPrompt(ctx) : buildSocialFinalizeSystemPrompt(ctx);
-  return base + renderMediaEvidence(ctx);
+  return base + renderMediaEvidence(ctx) + renderFeedbackModeNotes(ctx, "finalize");
+}
+
+/**
+ * After "Chiedi modifiche" the client can keep adding feedback. The kind
+ * prompts above describe a client who is still deciding (approve, send,
+ * discard variants); this block replaces that framing, so it comes last and
+ * says it overrides them. Empty while the post waits for the decision.
+ */
+function renderFeedbackModeNotes(ctx: AssistantPostContext, phase: "turn" | "finalize"): string {
+  if (ctx.mode !== "feedback") return "";
+  const common = `The client has ALREADY asked the agency for changes on this version, and the agency is preparing a new version. Nothing can be approved, discarded or decided any more. What the client says now is ADDITIONAL feedback, which will be added to the request already sent. The rules in this block override any earlier instruction about approving, deciding or sending.`;
+  if (phase === "finalize") {
+    return `\n\nCurrent state (overrides the rules above):\n- ${common}\n- verdict: use "changes" if the client added at least one change, otherwise "unclear". Never "approve".\n- summary: write what the client adds to the feedback they already sent. Do not say that anything was approved or decided.\n- actionItems: only the new requests the client made in this conversation.`;
+  }
+  return `\n\nCurrent state (overrides the rules above):\n- ${common}\n- Never tell the client they can approve, never mention the buttons «Approva», «Approva variante», «Scarta» or «Invia le mie decisioni», and never suggest that they are done or happy enough to approve. If they say something is fine, just acknowledge it and ask whether they want to add anything else.\n- Never promise or imply that a new version will be made, when, or how: you only note the request for the agency («lo segno per l'agenzia»).\n- When the new feedback is clear, recap it in one sentence and tell the client they can add it to their feedback with the button «Aggiungi al feedback», or keep talking.\n- readiness: use "exploring" or "ready_changes" only, never "ready_approve".`;
 }
 
 function renderMediaEvidence(ctx: AssistantPostContext): string {
@@ -730,7 +754,7 @@ export function groupHistory(history: HistoryMessage[]): Array<{ role: ReviewMes
 }
 
 /** Server note appended to the latest client turn (not part of the stored transcript). */
-export function buildServiceNote(history: HistoryMessage[]): string {
+export function buildServiceNote(history: HistoryMessage[], mode: AssistantMode = "decision"): string {
   const questionsAsked = history.filter((m) => m.role === "ASSISTANT").length;
   const clientMessages = history.filter((m) => m.role === "CLIENT").length;
   const left = Math.max(0, MAX_CLIENT_MESSAGES_PER_SESSION - clientMessages);
@@ -738,7 +762,11 @@ export function buildServiceNote(history: HistoryMessage[]): string {
     `Nota del sistema (non scritta dal cliente): risposte che hai già dato in questa conversazione: ${questionsAsked}; obiettivo massimo ${TARGET_MAX_QUESTIONS} domande.`,
   ];
   if (questionsAsked >= TARGET_MAX_QUESTIONS) {
-    lines.push("Hai già fatto abbastanza domande: riassumi ciò che hai capito e proponi di inviarlo all'agenzia o di approvare, salvo che il cliente stia aggiungendo qualcosa di nuovo.");
+    lines.push(
+      mode === "feedback"
+        ? "Hai già fatto abbastanza domande: riassumi ciò che hai capito e proponi di aggiungerlo al feedback per l'agenzia, salvo che il cliente stia aggiungendo qualcosa di nuovo."
+        : "Hai già fatto abbastanza domande: riassumi ciò che hai capito e proponi di inviarlo all'agenzia o di approvare, salvo che il cliente stia aggiungendo qualcosa di nuovo."
+    );
   }
   if (left <= 3) {
     lines.push(`La conversazione sta per finire (messaggi rimasti al cliente: ${left}): chiudi con un breve riepilogo.`);
@@ -774,7 +802,7 @@ export function buildTurnMessages(ctx: AssistantPostContext, history: HistoryMes
     }
     parts.push({ type: "text", text: group.messages.map(renderClientMessage).join("\n\n") });
     if (groupIndex === groups.length - 1) {
-      parts.push({ type: "text", text: buildServiceNote(history) });
+      parts.push({ type: "text", text: buildServiceNote(history, ctx.mode) });
     }
     return { role: "user", parts };
   });

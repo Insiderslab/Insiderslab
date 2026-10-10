@@ -179,14 +179,16 @@ export function AssistantActionButton({ onToggle }: { onToggle: () => void }) {
 }
 
 /**
- * Subtitle of "Cosa ne pensi?". Heili works only while the version waits for a
- * decision: after "Chiedi modifiche" the client can still write or dictate, and
- * Heili comes back with the agency's new version.
+ * Subtitle of "Cosa ne pensi?". Heili is there wherever the client can comment
+ * (while the post waits for a decision and after "Chiedi modifiche", on the
+ * current version) as long as the assistant is enabled.
  */
-export function feedbackHint(canAct: boolean, assistantEnabled: boolean): string {
-  if (!assistantEnabled) return "Scrivilo oppure dettalo.";
-  if (canAct) return "Scrivilo, dettalo oppure parlane con Heili.";
-  return "Scrivilo oppure dettalo. Heili torna disponibile quando l'agenzia invia la nuova versione.";
+export function feedbackHint(canComment: boolean, assistantEnabled: boolean, changesRequested = false): string {
+  if (!canComment) return "Qui trovi i commenti salvati su questa versione.";
+  if (changesRequested) {
+    return `Hai già chiesto modifiche: puoi aggiungere altro ${assistantEnabled ? "scrivendo, dettando o parlando con Heili" : "scrivendo o dettando"}.`;
+  }
+  return assistantEnabled ? "Scrivilo, dettalo oppure parlane con Heili." : "Scrivilo oppure dettalo.";
 }
 
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */

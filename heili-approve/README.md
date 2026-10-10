@@ -373,6 +373,14 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   invia: *Approvato*; l'agenzia vede decisioni e note, scarica lo ZIP (solo i file
   di A e C, `copy.csv`, `README.txt`) e lo segna come consegnato. Un secondo set
   con tutte le varianti scartate torna a *Modifiche richieste*;
+- `assistant-after-changes.spec.mjs` — Heili dopo «Chiedi modifiche»: avvia un secondo
+  server (porta `E2E_HELI_PORT`, default 3102) con un finto provider AI (un piccolo
+  server HTTP che risponde alle Responses API di OpenAI) e verifica che a 390 px,
+  con il post in *Modifiche richieste*, Heili resti disponibile sulla versione
+  corrente (senza «Approva»), che il riepilogo si aggiunga al feedback con
+  «Aggiungi al feedback» (stato invariato, nessuna seconda richiesta di modifiche,
+  nessuna approvazione), che l'agenzia lo veda e che l'API dell'assistente rifiuti il
+  post di un altro cliente e le versioni vecchie;
 - `client-services.spec.mjs` — servizi per cliente: il portale di Agriturismo Le
   Querce (tre servizi) a 390 px mostra i pulsanti «Tutti · Post social · Articoli ·
   Creatività» con i conteggi e il filtro funziona; un cliente con un solo servizio

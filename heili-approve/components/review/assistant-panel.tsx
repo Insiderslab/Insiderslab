@@ -37,6 +37,7 @@ import { formatTimecode } from "@/lib/domain";
 import {
   ACTION_AREA_LABELS,
   ACTION_PRIORITY_LABELS,
+  ASSISTANT_FEEDBACK_COPY,
   ASSISTANT_KIND_COPY,
   MAX_CLIENT_MESSAGE_LENGTH,
   VERDICT_LABELS,
@@ -52,6 +53,7 @@ import {
   type AssistantContentKind,
   type AssistantFinalizeResponse,
   type AssistantMessageView,
+  type AssistantMode,
   type AssistantSessionView,
   type AssistantStateResponse,
   type AssistantTurnResponse,
@@ -63,8 +65,19 @@ export interface AssistantPanelProps {
   token: string;
   postId: string;
   versionNumber: number;
+  /**
+   * Sends the conclusion: the change request ("decision" mode) or the
+   * additional feedback ("feedback" mode, after «Chiedi modifiche»).
+   */
   onSubmitChanges(input: { message: string; reviewSessionId: string }): Promise<void>;
-  onApprove(): Promise<void>;
+  /** Only in "decision" mode: after «Chiedi modifiche» there is nothing left to approve. */
+  onApprove?(): Promise<void>;
+  /**
+   * "decision" (default): the post waits for the client's decision.
+   * "feedback": the changes were already requested; Heili only adds to that
+   * feedback, with no «Approva» and with «Aggiungi al feedback» as conclusion.
+   */
+  mode?: AssistantMode;
   /** Current time of the post's video player, null when nothing is loaded. */
   getVideoTime?: () => number | null;
   /** Content kind: picks the wording and the chips. Default: social post. */
@@ -97,7 +110,7 @@ export interface AssistantPanelHandle {
   close(): Promise<boolean>;
 }
 
-type ComposerAction = "prepare" | "send" | "approve";
+type ComposerAction = "prepare" | "send" | "approve" | "add";
 
 export function composerBlockingMessage(
   draft: string,
@@ -110,7 +123,9 @@ export function composerBlockingMessage(
       ? "approvare"
       : action === "send"
         ? "inviare le modifiche"
-        : "preparare il riepilogo";
+        : action === "add"
+          ? "aggiungere al feedback"
+          : "preparare il riepilogo";
   if (listening) {
     return `Ferma la dettatura, poi invia o svuota il messaggio prima di ${next}.`;
   }
@@ -190,6 +205,7 @@ export function AssistantPanel({
   versionNumber,
   onSubmitChanges,
   onApprove,
+  mode = "decision",
   getVideoTime,
   kind = "SOCIAL_POST",
   getSelection,
@@ -200,6 +216,9 @@ export function AssistantPanel({
   onRequestSavedChanges,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
+  const feedbackMode = mode === "feedback";
+  // The portal's sticky «Chiedi modifiche» / «Approva» bar drives the panel only while the client decides.
+  const barDrives = Boolean(controlRef) && !feedbackMode;
   const labels: ActionItemLabels = { variantNames };
   const baseUrl = `/api/review/${encodeURIComponent(token)}/assistant`;
 
@@ -498,7 +517,7 @@ export function AssistantPanel({
   }
 
   async function submitChanges() {
-    if (busy || !session || !guardComposer("send")) return;
+    if (busy || !session || !guardComposer(feedbackMode ? "add" : "send")) return;
     const message = (changesDraft ?? session.changesMessage ?? "").trim();
     if (!message) {
       setError("Il messaggio per l'agenzia è vuoto.");
@@ -517,6 +536,10 @@ export function AssistantPanel({
   }
 
   async function approve() {
+    if (feedbackMode || !onApprove) {
+      setError("Hai già chiesto modifiche: non c'è nulla da approvare.");
+      return;
+    }
     if (busy || !guardComposer("approve")) return;
     setBusy("approve");
     setError(null);
@@ -536,7 +559,7 @@ export function AssistantPanel({
   }
 
   async function requestChanges() {
-    if (busy || !guardComposer("send")) return;
+    if (busy || !guardComposer(feedbackMode ? "add" : "send")) return;
     if (voiceBusy || (session?.status === "OPEN" && hasClientMessages)) {
       const prepared = await prepareSummary();
       if (prepared) {
@@ -603,7 +626,9 @@ export function AssistantPanel({
         <div className="min-w-0 space-y-1">
           <h2 className="text-sm font-semibold">Heili</h2>
           <p className="text-xs text-muted">
-            Ti aiuta a spiegare all&apos;agenzia cosa cambiare. Non approva e non invia nulla al posto tuo.
+            {feedbackMode
+              ? ASSISTANT_FEEDBACK_COPY.header
+              : "Ti aiuta a spiegare all'agenzia cosa cambiare. Non approva e non invia nulla al posto tuo."}
           </p>
         </div>
       </header>
@@ -618,7 +643,7 @@ export function AssistantPanel({
         ) : (
           <>
             {messages.length === 0 && !voiceBusy && !live.clientText && !live.assistantText && (
-              <Bubble role="ASSISTANT" content={copy.intro} />
+              <Bubble role="ASSISTANT" content={feedbackMode ? ASSISTANT_FEEDBACK_COPY.intro : copy.intro} />
             )}
             {messages.map((m) => (
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
@@ -642,7 +667,9 @@ export function AssistantPanel({
       )}
 
       {done === "changes" && (
-        <p className="text-sm text-success">Modifiche inviate all&apos;agenzia. Grazie!</p>
+        <p className="text-sm text-success">
+          {feedbackMode ? ASSISTANT_FEEDBACK_COPY.doneText : "Modifiche inviate all'agenzia. Grazie!"}
+        </p>
       )}
       {done === "approved" && <p className="text-sm text-success">{copy.approvedText}</p>}
 
@@ -662,6 +689,8 @@ export function AssistantPanel({
                   : null
           }
           labels={labels}
+          draftLabel={feedbackMode ? ASSISTANT_FEEDBACK_COPY.draftLabel : undefined}
+          showVerdict={!feedbackMode}
         />
       )}
 
@@ -669,13 +698,16 @@ export function AssistantPanel({
         <>
           {outOfSessions && (
             <p className="text-xs text-muted">
-              Hai già usato tutte le conversazioni con l&apos;assistente per questo post. Puoi comunque approvarlo o
-              chiedere modifiche direttamente.
+              {feedbackMode
+                ? ASSISTANT_FEEDBACK_COPY.exhausted
+                : "Hai già usato tutte le conversazioni con l'assistente per questo post. Puoi comunque approvarlo o chiedere modifiche direttamente."}
             </p>
           )}
           {messagesLeft === 0 && !completed && (
             <p className="text-xs text-muted">
-              La conversazione ha raggiunto la lunghezza massima: prepara il riepilogo per l&apos;agenzia.
+              {feedbackMode
+                ? ASSISTANT_FEEDBACK_COPY.messagesLimit
+                : "La conversazione ha raggiunto la lunghezza massima: prepara il riepilogo per l'agenzia."}
             </p>
           )}
 
@@ -825,11 +857,17 @@ export function AssistantPanel({
 
           {(hasClientMessages || completed || live.clientText) && (
             <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:flex-wrap">
-              {completed && controlRef ? (
+              {completed && barDrives ? (
                 <p className="text-sm text-muted">Controlla il riepilogo, poi premi «Chiedi modifiche» nella barra in basso per inviarlo all’agenzia.</p>
               ) : completed ? (
-                <ActionButton onClick={submitChanges} disabled={busy !== null || voiceBusy} primary={sendHighlighted}>
-                  {busy === "submit" ? "Invio…" : "Invia le modifiche all'agenzia"}
+                <ActionButton onClick={submitChanges} disabled={busy !== null || voiceBusy} primary={feedbackMode || sendHighlighted}>
+                  {busy === "submit"
+                    ? feedbackMode
+                      ? ASSISTANT_FEEDBACK_COPY.submitting
+                      : "Invio…"
+                    : feedbackMode
+                      ? ASSISTANT_FEEDBACK_COPY.submitLabel
+                      : "Invia le modifiche all'agenzia"}
                 </ActionButton>
               ) : (
                 <ActionButton
@@ -840,13 +878,15 @@ export function AssistantPanel({
                   {busy === "finalize" ? "Preparo il riepilogo…" : "Prepara il riepilogo per l'agenzia"}
                 </ActionButton>
               )}
-              {!controlRef && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
+              {!controlRef && !feedbackMode && onApprove && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
                 {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
               </ActionButton>}
               {(voiceBusy || draft.trim() || speechInput.listening) && (
                 <p className="basis-full text-xs text-muted">
                   {voiceBusy
-                    ? "Termina la conversazione vocale prima di inviare o approvare."
+                    ? feedbackMode
+                      ? "Termina la conversazione vocale prima di aggiungere il feedback."
+                      : "Termina la conversazione vocale prima di inviare o approvare."
                     : "Il messaggio in bozza va inviato o svuotato prima dell’azione finale."}
                 </p>
               )}
@@ -944,6 +984,8 @@ function SummaryCard({
   disabled,
   disabledReason,
   labels,
+  draftLabel,
+  showVerdict = true,
 }: {
   session: AssistantSessionView;
   changesDraft: string;
@@ -951,12 +993,15 @@ function SummaryCard({
   disabled: boolean;
   disabledReason: string | null;
   labels: ActionItemLabels;
+  draftLabel?: string;
+  /** False after «Chiedi modifiche»: there is no outcome left to propose. */
+  showVerdict?: boolean;
 }) {
   return (
     <div className="space-y-3 rounded border border-border bg-background p-3">
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
-          Riepilogo{session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
+          Riepilogo{showVerdict && session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
         </p>
         <p className="whitespace-pre-wrap text-sm">{session.summary}</p>
       </div>
@@ -982,7 +1027,7 @@ function SummaryCard({
       )}
       <label className="block space-y-1">
         <span className="text-xs text-muted">
-          Messaggio da inviare all&apos;agenzia (non ancora inviato; puoi modificarlo qui)
+          {draftLabel ?? "Messaggio da inviare all'agenzia (non ancora inviato; puoi modificarlo qui)"}
         </span>
         <textarea
           value={changesDraft}

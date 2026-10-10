@@ -11,11 +11,13 @@ import {
   MAX_CLIENT_MESSAGES_PER_DAY,
   MAX_CLIENT_MESSAGES_PER_SESSION,
   MAX_SESSIONS_PER_POST_PER_REVIEWER,
+  ASSISTANT_FEEDBACK_COPY,
   formatChangesMessage,
   isVerdict,
   parseActionItems,
   type ActionItem,
   type ActionItemLabels,
+  type AssistantMode,
   type AssistantSessionView,
 } from "./shared";
 
@@ -44,12 +46,16 @@ export interface LimitCounts {
  * is allowed. Every message costs a model call, so these caps bound the spend
  * per reviewer.
  */
-export function checkMessageLimits(counts: LimitCounts): string | null {
+export function checkMessageLimits(counts: LimitCounts, mode: AssistantMode = "decision"): string | null {
   if (!counts.hasCurrentSession && counts.sessionsOnPost >= MAX_SESSIONS_PER_POST_PER_REVIEWER) {
-    return "Hai già usato tutte le conversazioni con l'assistente per questo post. Puoi comunque approvarlo o chiedere modifiche direttamente.";
+    return mode === "feedback"
+      ? ASSISTANT_FEEDBACK_COPY.exhausted
+      : "Hai già usato tutte le conversazioni con l'assistente per questo post. Puoi comunque approvarlo o chiedere modifiche direttamente.";
   }
   if (counts.hasCurrentSession && counts.clientMessagesInSession >= MAX_CLIENT_MESSAGES_PER_SESSION) {
-    return "La conversazione ha raggiunto la lunghezza massima: prepara il riepilogo per l'agenzia.";
+    return mode === "feedback"
+      ? ASSISTANT_FEEDBACK_COPY.messagesLimit
+      : "La conversazione ha raggiunto la lunghezza massima: prepara il riepilogo per l'agenzia.";
   }
   if (counts.clientMessagesLast24h >= MAX_CLIENT_MESSAGES_PER_DAY) {
     return "Hai inviato molti messaggi all'assistente nelle ultime 24 ore. Riprova più tardi oppure scrivi direttamente all'agenzia.";
@@ -64,14 +70,18 @@ export function sessionsLeft(sessionsOnPost: number): number {
 /**
  * Session the panel shows and continues for this version: the open one
  * (resume), else the latest completed one (its summary is waiting for the
- * client's click; a new message reopens it). Abandoned sessions are skipped.
+ * client's click; a new message reopens it). Abandoned sessions are skipped,
+ * and so are the `submitted` ones: their summary already reached the agency
+ * (as the change request or as extra feedback), so what the client says next
+ * starts a new conversation instead of repeating what was already sent.
  */
-export function pickSessionForVersion<T extends Pick<ReviewSession, "status" | "versionNumber" | "startedAt">>(
+export function pickSessionForVersion<T extends Pick<ReviewSession, "id" | "status" | "versionNumber" | "startedAt">>(
   sessions: T[],
-  versionNumber: number
+  versionNumber: number,
+  submitted?: ReadonlySet<string>
 ): T | null {
   const forVersion = sessions
-    .filter((s) => s.versionNumber === versionNumber)
+    .filter((s) => s.versionNumber === versionNumber && !submitted?.has(s.id))
     .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
   return forVersion.find((s) => s.status === "OPEN") ?? forVersion.find((s) => s.status === "COMPLETED") ?? null;
 }

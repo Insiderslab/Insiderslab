@@ -159,7 +159,7 @@ test("blog, cliente (390px): commenta una frase selezionata e chiede modifiche",
   await expect(sheet.getByText(COMMENTED)).toBeVisible();
   await sheet.getByPlaceholder("Cosa vorresti cambiare in questo passaggio?").fill(COMMENT);
   await sheet.getByRole("button", { name: "Invia commento" }).click();
-  await expect(page.getByText("Commento inviato")).toBeVisible();
+  await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
 
   // The passage is highlighted with its number.
   const mark = article.locator("mark[data-comment-id]").first();
@@ -168,10 +168,9 @@ test("blog, cliente (390px): commenta una frase selezionata e chiede modifiche",
   await page.evaluate(() => window.scrollBy(0, -200));
   await viewportShot(page, "blog-cliente-evidenziazione-mobile.png");
 
+  // Studio: "Chiedi modifiche" sends the comments already saved, with no second text.
   await page.getByRole("button", { name: "Chiedi modifiche" }).click();
-  await page.getByPlaceholder(/Per esempio/).fill("Vedi il commento sulla frase degli aromi, per il resto va bene.");
-  await page.getByRole("button", { name: "Invia la richiesta" }).click();
-  await expect(page.getByText("Richiesta inviata all'agenzia.")).toBeVisible();
+  await expect(page.getByText("Modifiche inviate all'agenzia.", { exact: true })).toBeVisible();
 
   const row = await waitForStatus(db, state.postId, "CHANGES_REQUESTED", 10_000);
   expect(row.currentVersionNumber).toBe(1);

@@ -78,6 +78,48 @@ export const finalOutputSchema = z.object({
 });
 export type FinalOutput = z.infer<typeof finalOutputSchema>;
 
+// ─── Where the assistant is allowed ──────────────────────────────────────────
+
+/**
+ * What a conversation with Heili leads to, which depends on the post state:
+ * - "decision": the post waits for the client (IN_REVIEW). The conclusion can
+ *   be "Chiedi modifiche" or "Approva", both decided by the client's click;
+ * - "feedback": the client already asked for changes and the agency is
+ *   preparing the new version (CHANGES_REQUESTED). The conclusion is only
+ *   added to the feedback already sent, exactly like a typed comment: no
+ *   approval, no second change request, no status change.
+ */
+export type AssistantMode = "decision" | "feedback";
+
+/** The only states in which the client can talk to Heili. Every other one is read-only. */
+export function assistantModeForStatus(status: string): AssistantMode | null {
+  if (status === "IN_REVIEW") return "decision";
+  if (status === "CHANGES_REQUESTED") return "feedback";
+  return null;
+}
+
+export type AssistantAccess =
+  | { ok: true; mode: AssistantMode }
+  | { ok: false; reason: "closed" | "stale" };
+
+/**
+ * Single gate of the assistant (text chat, summary and voice), shared by the
+ * server checks and unit-tested. `post` is the state being checked: the client
+ * portal snapshot (with `canAct`, which for IN_REVIEW also means "this is the
+ * version the client was sent") or a fresh database row (no `canAct`). The
+ * conversation must be about the CURRENT version, whatever the state: a newer
+ * version is "stale" and the page has to be reloaded.
+ */
+export function checkAssistantAccess(
+  post: { status: string; currentVersionNumber: number; canAct?: boolean },
+  versionNumber: number
+): AssistantAccess {
+  const mode = assistantModeForStatus(post.status);
+  if (!mode || (mode === "decision" && post.canAct === false)) return { ok: false, reason: "closed" };
+  if (versionNumber !== post.currentVersionNumber) return { ok: false, reason: "stale" };
+  return { ok: true, mode };
+}
+
 // ─── Views (API responses) ───────────────────────────────────────────────────
 
 export type ReviewSessionStatusValue = "OPEN" | "COMPLETED" | "ABANDONED";
@@ -114,6 +156,8 @@ export interface AssistantStateResponse {
   sessionsLeft: number;
   /** False when the post can no longer be approved or changed (read-only). */
   canChat: boolean;
+  /** What the conversation leads to; null when the assistant is closed for this post. */
+  mode: AssistantMode | null;
 }
 
 /** POST /api/review/[token]/assistant */
@@ -485,6 +529,21 @@ export const ASSISTANT_KIND_COPY: Record<AssistantContentKind, AssistantKindCopy
     approveLabel: "Invia le mie decisioni",
   },
 };
+
+/** Wording of the conversation in "feedback" mode (changes already requested). */
+export const ASSISTANT_FEEDBACK_COPY = {
+  header: "Hai già chiesto modifiche: quello che aggiungi qui si somma al tuo feedback. Non approva e non invia nulla al posto tuo.",
+  intro:
+    "Ciao! Hai già chiesto modifiche e l'agenzia sta preparando la nuova versione. Dimmi pure cos'altro vorresti aggiungere: lo segno per l'agenzia. Puoi scrivere o dettare a voce.",
+  submitLabel: "Aggiungi al feedback",
+  submitting: "Aggiungo…",
+  draftLabel: "Messaggio da aggiungere al feedback (non ancora inviato; puoi modificarlo qui)",
+  summaryHint: "Controlla il riepilogo, poi premi «Aggiungi al feedback»: l'agenzia lo vedrà insieme alle tue richieste.",
+  doneText: "Aggiunto al tuo feedback: l'agenzia lo vedrà insieme alla richiesta già inviata. Grazie!",
+  exhausted:
+    "Hai già usato tutte le conversazioni con l'assistente per questo contenuto. Puoi comunque scrivere un commento.",
+  messagesLimit: "La conversazione ha raggiunto la lunghezza massima: prepara il riepilogo e aggiungilo al feedback.",
+} as const;
 
 /**
  * Ads: what the client is looking at, for the chip "Usa la variante e il

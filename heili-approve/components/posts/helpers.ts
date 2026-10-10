@@ -762,6 +762,7 @@ export function describeEvent(
       } else if (typeof m.mediaIndex === "number") {
         details.push(`Sul media ${m.mediaIndex + 1}`);
       }
+      if (typeof m.reviewSessionId === "string") details.push("Preparato con Heili");
       const who = event.reviewer ? client : agency;
       return { title: `${who} ha scritto un commento${v}`, details, tone: "neutral" };
     }

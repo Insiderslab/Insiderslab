@@ -72,6 +72,7 @@ import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
 import { recordEvent, type DbClient } from "@/lib/events";
 import { validateForNetworks } from "@/lib/metricool/payload";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
+import { loadSubmittedSessionIds } from "@/lib/review-assistant/submitted";
 import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
 import { assertKindEnabled, enabledKinds, isKindEnabled } from "@/lib/variant";
 
@@ -1841,6 +1842,55 @@ export async function approvePost(
 }
 
 /**
+ * Stores the assistant's structured items as client comments on their media,
+ * moment, passage or variant (planActionItemCommentFor). Items that point
+ * nowhere valid stay in the summary comment only. Shared by the change request
+ * and by the feedback added after it, so both land exactly alike.
+ */
+async function createActionItemComments(
+  tx: Prisma.TransactionClient,
+  input: {
+    postId: string;
+    kind: ContentKind;
+    version: { id: string; media: unknown; content: unknown };
+    reviewerId: string;
+    actionItems: RequestChangesActionItem[];
+  }
+): Promise<PostComment[]> {
+  const { postId, kind, version, reviewerId, actionItems } = input;
+  const target: ActionItemTarget =
+    kind === "BLOG_ARTICLE"
+      ? { kind: "BLOG_ARTICLE" }
+      : kind === "AD_CREATIVE"
+        ? { kind: "AD_CREATIVE", variants: actionItems.length ? adVariantsOf(readKindContent(kind, version.content)) : [] }
+        : { kind: "SOCIAL_POST", media: parseMediaItems(version.media) };
+  const comments: PostComment[] = [];
+  for (const item of actionItems) {
+    const planned = planActionItemCommentFor(item, target);
+    if (!planned) continue;
+    comments.push(
+      await tx.postComment.create({
+        data: {
+          postId,
+          versionId: version.id,
+          authorType: "CLIENT",
+          reviewerId,
+          body: planned.body,
+          mediaIndex: planned.mediaIndex,
+          timeSec: planned.timeSec,
+          timeEndSec: planned.timeEndSec,
+          pinX: planned.pinX,
+          pinY: planned.pinY,
+          variantId: planned.variantId,
+          ...(planned.anchor ? { anchor: toJson(planned.anchor) } : {}),
+        },
+      })
+    );
+  }
+  return comments;
+}
+
+/**
  * Client asks for changes. The assistant path turns `message` and its
  * structured action items into comments. The manual portal path uses
  * `useSavedComments`: it submits the reviewer's existing unresolved comments
@@ -1943,35 +1993,13 @@ export async function requestChanges(
             },
           });
 
-    const target: ActionItemTarget =
-      post.kind === "BLOG_ARTICLE"
-        ? { kind: "BLOG_ARTICLE" }
-        : post.kind === "AD_CREATIVE"
-          ? { kind: "AD_CREATIVE", variants: actionItems.length ? adVariantsOf(readKindContent(post.kind, version.content)) : [] }
-          : { kind: "SOCIAL_POST", media: parseMediaItems(version.media) };
-    const actionComments: PostComment[] = [];
-    for (const item of actionItems) {
-      const planned = planActionItemCommentFor(item, target);
-      if (!planned) continue;
-      actionComments.push(
-        await tx.postComment.create({
-          data: {
-            postId,
-            versionId: version.id,
-            authorType: "CLIENT",
-            reviewerId: reviewer.id,
-            body: planned.body,
-            mediaIndex: planned.mediaIndex,
-            timeSec: planned.timeSec,
-            timeEndSec: planned.timeEndSec,
-            pinX: planned.pinX,
-            pinY: planned.pinY,
-            variantId: planned.variantId,
-            ...(planned.anchor ? { anchor: toJson(planned.anchor) } : {}),
-          },
-        })
-      );
-    }
+    const actionComments = await createActionItemComments(tx, {
+      postId,
+      kind: post.kind,
+      version,
+      reviewerId: reviewer.id,
+      actionItems,
+    });
 
     await recordEvent(tx, {
       postId,
@@ -1992,6 +2020,85 @@ export async function requestChanges(
   const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
   await afterPlanDecision(post.planId);
   return { post, comment: result.comment, actionComments: result.actionComments };
+}
+
+/**
+ * Heili's conclusion after "Chiedi modifiche": the summary the client checked
+ * (and its structured items) is added to the feedback already sent, on the
+ * current version, exactly like typed comments (same checks as addComment:
+ * active reviewer of this client, post in CHANGES_REQUESTED, current version
+ * only). It never changes the post status, never
+ * approves and never opens a second change request: the agency finds a
+ * comment with the summary plus, when the items point somewhere, comments on
+ * that media / moment / passage / variant. One conversation can be added once.
+ */
+export async function addAssistantFeedback(
+  postId: string,
+  reviewer: ReviewerRef,
+  versionNumber: number,
+  message: string,
+  opts: { reviewSessionId: string; actionItems: RequestChangesActionItem[] }
+): Promise<{ comment: PostComment; actionComments: PostComment[] }> {
+  if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
+  const body = parseOrThrow(changesMessageSchema, message);
+  const actionItems = parseOrThrow(actionItemsSchema, opts.actionItems);
+  const actor: Actor = { kind: "reviewer", reviewerId: reviewer.id };
+
+  return prisma.$transaction(async (tx) => {
+    // Serialize with plan-wide approval, comments and the other assistant writes.
+    await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${postId} FOR UPDATE`;
+    const post = await loadPostForReviewerAction(tx, postId, reviewer);
+    const person = await tx.clientReviewer.findUnique({
+      where: { id: reviewer.id },
+      select: { clientId: true, active: true },
+    });
+    if (!person?.active || person.clientId !== post.clientId) throw new NotFoundError("Post non trovato");
+    if (post.status === "IN_REVIEW") {
+      throw new ConflictError("Il post è tornato in revisione: ricarica la pagina per rivederlo");
+    }
+    if (post.status !== "CHANGES_REQUESTED") {
+      throw new ConflictError("Questo post è già stato deciso e non accetta nuovi commenti");
+    }
+    const visible = visibleVersionNumber(post.currentVersionNumber, await lastSubmittedVersion(tx, post));
+    if (versionNumber > visible) throw new NotFoundError("Versione non trovata");
+    if (versionNumber !== post.currentVersionNumber) throw new ConflictError(STALE_VERSION_MESSAGE);
+
+    const session = await tx.reviewSession.findFirst({
+      where: { id: opts.reviewSessionId, postId, reviewerId: reviewer.id, versionNumber },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundError("Conversazione con l'assistente non trovata");
+    if ((await loadSubmittedSessionIds(tx, postId, reviewer.id)).has(session.id)) {
+      throw new ConflictError("Questa conversazione è già stata aggiunta al feedback");
+    }
+
+    const version = await tx.postVersion.findUniqueOrThrow({
+      where: { postId_number: { postId, number: versionNumber } },
+      select: { id: true, media: true, content: true },
+    });
+    const comment = await tx.postComment.create({
+      data: { postId, versionId: version.id, authorType: "CLIENT", reviewerId: reviewer.id, body },
+    });
+    const actionComments = await createActionItemComments(tx, {
+      postId,
+      kind: post.kind,
+      version,
+      reviewerId: reviewer.id,
+      actionItems,
+    });
+    await recordEvent(tx, {
+      postId,
+      type: "COMMENTED",
+      actor,
+      versionNumber,
+      metadata: {
+        commentId: comment.id,
+        reviewSessionId: session.id,
+        ...(actionComments.length ? { actionCommentIds: actionComments.map((c) => c.id) } : {}),
+      },
+    });
+    return { comment, actionComments };
+  });
 }
 
 /**

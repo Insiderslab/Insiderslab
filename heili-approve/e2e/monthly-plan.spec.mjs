@@ -139,7 +139,7 @@ test("cliente (390px): rivede il piano, commenta un post e approva tutto il rest
 
   await expect(page.getByTestId("plan-heading")).toContainText(`Piano social di ${state.monthName}`);
   await expect(page.getByText("Questo mese raccontiamo la cucina e il team.")).toBeVisible();
-  await expect(page.getByText("0 di 4 approvati").first()).toBeVisible();
+  await expect(page.getByText("0 di 4 revisionati").first()).toBeVisible();
   await expect(page.getByTestId("plan-post-card")).toHaveCount(4);
   await expect(page.getByTestId("plan-post-card").first()).toContainText(posts[0].title);
   await expectNoHorizontalScroll(page);
@@ -150,12 +150,12 @@ test("cliente (390px): rivede il piano, commenta un post e approva tutto il rest
   await page.waitForURL(new RegExp(`/posts/${posts[3].id}$`));
   const nav = page.getByTestId("plan-nav");
   await expect(nav).toContainText("Post 4 di 4");
-  await expect(nav.getByRole("link", { name: "‹ Post precedente" })).toHaveAttribute("href", new RegExp(`/posts/${posts[2].id}$`));
+  await expect(nav.getByRole("link", { name: "Post precedente" })).toHaveAttribute("href", new RegExp(`/posts/${posts[2].id}$`));
   await expect(nav.getByText("Ultimo del piano")).toBeVisible();
-  await page.getByRole("button", { name: "Scrivi un commento" }).click();
-  await page.getByPlaceholder("Scrivi il tuo commento per l'agenzia").fill("Possiamo spostarlo al mattino?");
+  // Studio: the general comment field is open from the start (no "Scrivi un commento" step).
+  await page.getByPlaceholder(/Per esempio/).fill("Possiamo spostarlo al mattino?");
   await page.getByRole("button", { name: "Invia commento" }).click();
-  await expect(page.getByText("Commento inviato")).toBeVisible();
+  await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await viewportShot(page, "piano-cliente-post-mobile.png");
   await nav.getByRole("link", { name: "← Torna al piano" }).click();
   await page.waitForURL(new RegExp(`/piani/${state.planId}$`));
@@ -164,11 +164,11 @@ test("cliente (390px): rivede il piano, commenta un post e approva tutto il rest
   const sheet = page.getByRole("dialog");
   await expect(sheet.getByRole("heading", { name: "Approvi 3 post del piano?" })).toBeVisible();
   await expect(sheet.getByTestId("plan-skipped")).toContainText(posts[3].title);
-  await expect(sheet.getByTestId("plan-skipped")).toContainText("commento aperto");
+  await expect(sheet.getByTestId("plan-skipped")).toContainText("ha commenti o una conversazione da verificare");
   await viewportShot(page, "piano-cliente-approva-tutto-mobile.png");
   await sheet.getByRole("button", { name: "Sì, approva 3 post" }).click();
   await expect(page.getByTestId("plan-outcome")).toContainText("Fatto! 3 post approvati.");
-  await expect(page.getByText("3 di 4 approvati").first()).toBeVisible();
+  await expect(page.getByText("3 di 4 revisionati").first()).toBeVisible();
 
   // Same approval as one by one: Metricool scheduling through the worker.
   for (const post of posts.slice(0, 3)) {

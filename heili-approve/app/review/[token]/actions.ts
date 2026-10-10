@@ -26,6 +26,7 @@ import {
 } from "@/lib/errors";
 import { decideVariant, finalizeCreativeReview, type DecisionEvaluation } from "@/lib/creative-decisions";
 import {
+  addAssistantFeedback,
   addComment,
   approvePost,
   getPostForReviewer,
@@ -77,6 +78,15 @@ const anchorSchema = z.object({
   blockIndex: z.number().int().min(0).max(100_000).nullable(),
 });
 
+const assistantFeedbackSchema = z
+  .object({
+    postId: idSchema,
+    versionNumber: versionSchema,
+    message: z.string().max(10_000),
+    reviewSessionId: idSchema,
+  })
+  .strict();
+
 const commentSchema = z.object({
   postId: idSchema,
   versionNumber: versionSchema,
@@ -118,6 +128,7 @@ export type ApprovePlanInput = z.input<typeof approvePlanSchema>;
 export type ApproveMonthInput = z.input<typeof approveMonthSchema>;
 export type PlanCommentInput = z.input<typeof planCommentSchema>;
 export type RequestChangesInput = z.input<typeof changesSchema>;
+export type AssistantFeedbackInput = z.input<typeof assistantFeedbackSchema>;
 export type PortalCommentInput = z.input<typeof commentSchema>;
 export type DecideVariantInput = z.input<typeof decideSchema>;
 export type FinalizeDecisionsInput = z.input<typeof approveSchema>;
@@ -198,23 +209,52 @@ export async function requestChangesAction(
     }
 
     const { message, reviewSessionId } = data;
-
-    const session = await prisma.reviewSession.findFirst({
-      where: { id: reviewSessionId, postId, reviewerId: reviewer.id, versionNumber },
-      select: { actionItems: true },
-    });
-    if (!session) throw new NotFoundError("Conversazione con l'assistente non trovata");
-    // Ownership + visibility (throws NotFoundError); requestChanges re-checks the version.
-    const post = await getPostForReviewer(postId, reviewer);
-    const version = post.versions.find((v) => v.number === versionNumber);
-    if (!version) throw new ConflictError(STALE_VERSION);
-    const actionItems: RequestChangesActionItem[] = toRequestChangesItems(
-      post.kind,
-      version,
-      parseActionItems(session.actionItems)
-    );
-
+    const actionItems = await loadAssistantActionItems(reviewer, postId, versionNumber, reviewSessionId);
     await requestChanges(postId, reviewer, versionNumber, message, { reviewSessionId, actionItems });
+    return undefined;
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/**
+ * The structured items of an assistant conversation, read from the DB (never
+ * from the browser) and mapped onto this version's media, passages or variants.
+ */
+async function loadAssistantActionItems(
+  reviewer: ReviewerRef,
+  postId: string,
+  versionNumber: number,
+  reviewSessionId: string
+): Promise<RequestChangesActionItem[]> {
+  const session = await prisma.reviewSession.findFirst({
+    where: { id: reviewSessionId, postId, reviewerId: reviewer.id, versionNumber },
+    select: { actionItems: true },
+  });
+  if (!session) throw new NotFoundError("Conversazione con l'assistente non trovata");
+  // Ownership + visibility (throws NotFoundError); lib/posts re-checks the version.
+  const post = await getPostForReviewer(postId, reviewer);
+  const version = post.versions.find((v) => v.number === versionNumber);
+  if (!version) throw new ConflictError(STALE_VERSION);
+  return toRequestChangesItems(post.kind, version, parseActionItems(session.actionItems));
+}
+
+/**
+ * "Aggiungi al feedback": Heili's conclusion once the changes were already
+ * requested. It is saved as additional client feedback on the version the
+ * client is looking at (a comment with the summary plus the located items),
+ * like a typed comment: the post stays in CHANGES_REQUESTED, nothing is
+ * approved and no second change request is created. Only offered, and only
+ * accepted, while the post is in CHANGES_REQUESTED (lib/posts).
+ */
+export async function addAssistantFeedbackAction(
+  token: string,
+  input: AssistantFeedbackInput
+): Promise<PortalActionResult> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { postId, versionNumber, message, reviewSessionId } = parseOrThrow(assistantFeedbackSchema, input);
+    const actionItems = await loadAssistantActionItems(reviewer, postId, versionNumber, reviewSessionId);
+    await addAssistantFeedback(postId, reviewer, versionNumber, message, { reviewSessionId, actionItems });
     return undefined;
   });
   if (result.ok) refresh();

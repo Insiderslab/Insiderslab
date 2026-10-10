@@ -14,7 +14,13 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ContentKind } from "@/app/generated/prisma/client";
-import { addCommentAction, approvePostAction, requestChangesAction } from "@/app/review/[token]/actions";
+import {
+  addAssistantFeedbackAction,
+  addCommentAction,
+  approvePostAction,
+  requestChangesAction,
+} from "@/app/review/[token]/actions";
+import type { AssistantMode } from "@/lib/review-assistant/shared";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
 import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
 import { buildAnchor } from "@/lib/content/blog-text";
@@ -115,6 +121,8 @@ export default function BlogReview({
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  // Bumped after Heili's feedback was added: the next conversation starts fresh.
+  const [assistantKey, setAssistantKey] = useState(0);
 
   const [sheet, setSheet] = useState<null | "approve">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
@@ -125,6 +133,11 @@ export default function BlogReview({
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
   const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
+  // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
+  const assistantAvailable = assistantEnabled && canComment;
+  const assistantMode: AssistantMode = canAct ? "decision" : "feedback";
+  const assistantOnPage = assistantEnabled && (post.canAct || post.status === "CHANGES_REQUESTED");
   const nextHref = queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
   const homeHref = portalPath(token);
   const wording = portalWording(listKinds);
@@ -145,7 +158,7 @@ export default function BlogReview({
   // ─── Selected passage (for the assistant's chip) ───────────────────────────
 
   useEffect(() => {
-    if (!assistantEnabled || !post.canAct) return;
+    if (!assistantOnPage) return;
     const onSelectionChange = () => {
       const anchor = readArticleSelection(readerRef.current);
       if (anchor) {
@@ -160,7 +173,7 @@ export default function BlogReview({
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [assistantEnabled, post.canAct]);
+  }, [assistantOnPage]);
 
   const getSelection = useCallback((): BlogAnchor | null => lastSelection.current, []);
 
@@ -352,6 +365,25 @@ export default function BlogReview({
     finish("changes");
   }
 
+  // «Aggiungi al feedback»: the conclusion of Heili once the changes were already requested.
+  async function addFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
+    const result = await addAssistantFeedbackAction(token, {
+      postId: ref.id,
+      versionNumber: ref.versionNumber,
+      message: input.message,
+      reviewSessionId: input.reviewSessionId,
+    });
+    if (!result.ok) {
+      if (result.stale) setStale(true);
+      throw new Error(result.error);
+    }
+    setAssistantOpen(false);
+    setAssistantKey((key) => key + 1);
+    setDecisionError(null);
+    setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
+  }
+
   async function toggleAssistant() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
@@ -446,7 +478,7 @@ export default function BlogReview({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
             <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-            <p className="mt-1 text-sm text-muted">{feedbackHint(canAct, assistantEnabled)}</p>
+            <p className="mt-1 text-sm text-muted">{feedbackHint(canComment, assistantEnabled, post.status === "CHANGES_REQUESTED")}</p>
           </div>
           {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
         </div>
@@ -459,17 +491,18 @@ export default function BlogReview({
               Commento generale
             </button>
           )}
-        {canAct && assistantEnabled && (
+        {assistantAvailable && (
           <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
             <AssistantPanel
-              key={`${post.id}-${post.versionNumber}`}
+              key={`${post.id}-${post.versionNumber}-${assistantKey}`}
               controlRef={assistantControl}
               onRequestSavedChanges={requestSavedChanges}
               token={token}
               postId={post.id}
               versionNumber={post.versionNumber}
-              onSubmitChanges={submitFromAssistant}
-              onApprove={approveFromAssistant}
+              mode={assistantMode}
+              onSubmitChanges={canAct ? submitFromAssistant : addFromAssistant}
+              onApprove={canAct ? approveFromAssistant : undefined}
               kind="BLOG_ARTICLE"
               getSelection={getSelection}
             />
@@ -486,7 +519,7 @@ export default function BlogReview({
             onDirtyChange={setCommentDirty}
             onListeningChange={setCommentListening}
             assistantAction={
-              canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+              assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
             }
             onCancel={() => {
               setCommentDirty(false);
@@ -579,7 +612,7 @@ export default function BlogReview({
             onDirtyChange={setCommentDirty}
             onListeningChange={setCommentListening}
             assistantAction={
-              canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+              assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
             }
             onCancel={() => {
               setCommentDirty(false);

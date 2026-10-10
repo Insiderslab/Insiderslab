@@ -7,6 +7,12 @@
  * drafts hidden) and re-checks client, status and version before spending a
  * model call.
  *
+ * Heili is available in two post states (checkAssistantAccess, shared.ts):
+ * IN_REVIEW ("decision": the client can approve or request changes) and
+ * CHANGES_REQUESTED ("feedback": the client keeps adding feedback to the
+ * request already sent; the conversation never approves and never changes the
+ * post status). In both, only on the current version.
+ *
  * Conversations are bound to (post, reviewer, version). The transcript is
  * append-only: each client message is stored before the model is called (so
  * a failed call loses nothing) and the reply is appended after. A completed
@@ -32,6 +38,7 @@ import { AssistantError, getAssistantProvider, runAssistantFinalize, runAssistan
 import { buildPostContext } from "./prompt";
 import { attachMediaEvidence } from "@/lib/media-analysis/context";
 import { assertNoActiveLiveCall } from "./live-service";
+import { loadSubmittedSessionIds } from "./submitted";
 import {
   checkMessageLimits,
   pickSessionForVersion,
@@ -44,8 +51,10 @@ import {
 } from "./rules";
 import {
   formatChangesMessage,
+  checkAssistantAccess,
   type ActionItemLabels,
   type AssistantFinalizeResponse,
+  type AssistantMode,
   type AssistantStateResponse,
   type AssistantTurnResponse,
 } from "./shared";
@@ -69,6 +78,10 @@ const REVIEWER_BUDGET_MESSAGE =
   "Hai raggiunto il limite giornaliero dell'assistente. Puoi comunque approvare il contenuto o scrivere direttamente all'agenzia.";
 const WORKSPACE_BUDGET_MESSAGE =
   "L'assistente ha raggiunto il limite giornaliero del workspace. Puoi comunque approvare il contenuto o scrivere direttamente all'agenzia.";
+const REVIEWER_BUDGET_FEEDBACK_MESSAGE =
+  "Hai raggiunto il limite giornaliero dell'assistente. Puoi comunque scrivere direttamente un commento per l'agenzia.";
+const WORKSPACE_BUDGET_FEEDBACK_MESSAGE =
+  "L'assistente ha raggiunto il limite giornaliero del workspace. Puoi comunque scrivere direttamente un commento per l'agenzia.";
 const ATTEMPT_COOLDOWN_MESSAGE = "Attendi qualche secondo prima di chiedere un'altra risposta all'assistente.";
 
 /** Longer than the slowest model call (timeout × retries): an older claim is a dead process. */
@@ -87,10 +100,28 @@ async function loadPost(reviewer: AssistantReviewer, postId: string): Promise<Re
   return post;
 }
 
-/** The client may talk about this version only while it is the one under review. */
-function assertActionable(post: ReviewerPost, versionNumber: number): void {
-  if (post.status !== "IN_REVIEW" || !post.canAct) throw new AssistantError(NOT_ACTIONABLE_MESSAGE, 409);
-  if (versionNumber !== post.currentVersionNumber) throw new AssistantError(STALE_VERSION_MESSAGE, 409);
+/**
+ * The client may talk about this version only while it is the current one and
+ * the post is waiting for a decision (IN_REVIEW) or for the agency's new
+ * version after "Chiedi modifiche" (CHANGES_REQUESTED). Returns what the
+ * conversation leads to.
+ */
+function assertActionable(post: ReviewerPost, versionNumber: number): AssistantMode {
+  const access = checkAssistantAccess(post, versionNumber);
+  if (!access.ok) {
+    throw new AssistantError(access.reason === "stale" ? STALE_VERSION_MESSAGE : NOT_ACTIONABLE_MESSAGE, 409);
+  }
+  return access.mode;
+}
+
+/** Sessions whose summary already reached the agency matter only after "Chiedi modifiche". */
+async function submittedSessionsFor(
+  db: Parameters<typeof loadSubmittedSessionIds>[0],
+  mode: AssistantMode,
+  postId: string,
+  reviewerId: string
+): Promise<ReadonlySet<string> | undefined> {
+  return mode === "feedback" ? loadSubmittedSessionIds(db, postId, reviewerId) : undefined;
 }
 
 /** Names of the ads variants of a version, for the ready-made message (empty for other kinds). */
@@ -178,13 +209,21 @@ async function workspaceIdForPost(tx: Prisma.TransactionClient, postId: string):
   return row.workspaceId;
 }
 
-async function assertFreshReview(tx: Prisma.TransactionClient, postId: string, clientId: string, versionNumber: number): Promise<void> {
+async function assertFreshReview(
+  tx: Prisma.TransactionClient,
+  postId: string,
+  clientId: string,
+  versionNumber: number
+): Promise<AssistantMode> {
   // Serialize against an agency edit/submit until this short transaction ends.
   await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${postId} FOR UPDATE`;
   const row = await tx.post.findUnique({ where: { id: postId }, select: { clientId: true, status: true, currentVersionNumber: true } });
   if (!row || row.clientId !== clientId) throw new AssistantError("Post non trovato", 404);
-  if (row.status !== "IN_REVIEW") throw new AssistantError(NOT_ACTIONABLE_MESSAGE, 409);
-  if (row.currentVersionNumber !== versionNumber) throw new AssistantError(STALE_VERSION_MESSAGE, 409);
+  const access = checkAssistantAccess(row, versionNumber);
+  if (!access.ok) {
+    throw new AssistantError(access.reason === "stale" ? STALE_VERSION_MESSAGE : NOT_ACTIONABLE_MESSAGE, 409);
+  }
+  return access.mode;
 }
 
 /**
@@ -194,7 +233,7 @@ async function assertFreshReview(tx: Prisma.TransactionClient, postId: string, c
  */
 async function chargeProviderAttempt(
   tx: Prisma.TransactionClient,
-  input: { sessionId: string; reviewerId: string; workspaceId: string; now: Date }
+  input: { sessionId: string; reviewerId: string; workspaceId: string; now: Date; mode?: AssistantMode }
 ): Promise<void> {
   const limits = attemptLimits();
   const since = new Date(input.now.getTime() - DAY_MS);
@@ -215,8 +254,13 @@ async function chargeProviderAttempt(
   if (latest && input.now.getTime() - latest.createdAt.getTime() < limits.cooldownMs) {
     throw new AssistantError(ATTEMPT_COOLDOWN_MESSAGE, 429);
   }
-  if (reviewerAttempts >= limits.reviewerDaily) throw new AssistantError(REVIEWER_BUDGET_MESSAGE, 429);
-  if (workspaceAttempts >= limits.workspaceDaily) throw new AssistantError(WORKSPACE_BUDGET_MESSAGE, 429);
+  const feedback = input.mode === "feedback";
+  if (reviewerAttempts >= limits.reviewerDaily) {
+    throw new AssistantError(feedback ? REVIEWER_BUDGET_FEEDBACK_MESSAGE : REVIEWER_BUDGET_MESSAGE, 429);
+  }
+  if (workspaceAttempts >= limits.workspaceDaily) {
+    throw new AssistantError(feedback ? WORKSPACE_BUDGET_FEEDBACK_MESSAGE : WORKSPACE_BUDGET_MESSAGE, 429);
+  }
 
   await tx.reviewProviderAttempt.create({ data: { sessionId: input.sessionId, createdAt: input.now } });
 }
@@ -246,12 +290,14 @@ export async function getAssistantState(
   versionNumber: number
 ): Promise<AssistantStateResponse> {
   const post = await loadPost(reviewer, postId);
-  const session = pickSessionForVersion(post.reviewSessions, versionNumber);
-  const canChat = post.status === "IN_REVIEW" && post.canAct && versionNumber === post.currentVersionNumber;
+  const access = checkAssistantAccess(post, versionNumber);
+  const submitted = access.ok ? await submittedSessionsFor(prisma, access.mode, post.id, reviewer.id) : undefined;
+  const session = pickSessionForVersion(post.reviewSessions, versionNumber, submitted);
   return {
     session: session ? toSessionView(session, labelsFor(post, versionNumber)) : null,
     sessionsLeft: sessionsLeft(post.reviewSessions.length),
-    canChat,
+    canChat: access.ok,
+    mode: access.ok ? access.mode : null,
   };
 }
 
@@ -283,14 +329,15 @@ export async function sendAssistantMessage(
   const claim = await prisma.$transaction(async (tx) => {
     const workspaceId = await workspaceIdForPost(tx, post.id);
     await lockAssistantBudget(tx, workspaceId, reviewer.id);
-    await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
+    const mode = await assertFreshReview(tx, post.id, reviewer.clientId, input.versionNumber);
     const now = new Date();
     await assertNoActiveLiveCall(tx, reviewer.id);
     const sessions = await tx.reviewSession.findMany({
       where: { postId: post.id, reviewerId: reviewer.id },
       include: { messages: { orderBy: { createdAt: "asc" } } },
     });
-    const existing = pickSessionForVersion(sessions, input.versionNumber);
+    const submitted = await submittedSessionsFor(tx, mode, post.id, reviewer.id);
+    const existing = pickSessionForVersion(sessions, input.versionNumber, submitted);
     if (existing && turnInFlight(existing, now)) throw new AssistantError(TURN_BUSY_MESSAGE, 409);
 
     if (!message) {
@@ -306,17 +353,21 @@ export async function sendAssistantMessage(
         reviewerId: reviewer.id,
         workspaceId,
         now,
+        mode,
       });
       await tx.reviewSession.update({ where: { id: existing.id }, data: { turnStartedAt: now } });
-      return { sessionId: existing.id, workspaceId, claimedAt: now, sessionsOnPost: sessions.length };
+      return { sessionId: existing.id, workspaceId, claimedAt: now, sessionsOnPost: sessions.length, mode };
     }
 
-    const limitError = checkMessageLimits({
-      hasCurrentSession: existing !== null,
-      sessionsOnPost: sessions.length,
-      clientMessagesInSession: existing ? existing.messages.filter((m) => m.role === "CLIENT").length : 0,
-      clientMessagesLast24h: await countClientMessagesLast24h(tx, reviewer.id),
-    });
+    const limitError = checkMessageLimits(
+      {
+        hasCurrentSession: existing !== null,
+        sessionsOnPost: sessions.length,
+        clientMessagesInSession: existing ? existing.messages.filter((m) => m.role === "CLIENT").length : 0,
+        clientMessagesLast24h: await countClientMessagesLast24h(tx, reviewer.id),
+      },
+      mode
+    );
     if (limitError) throw new AssistantError(limitError, 429);
 
     let sessionId: string;
@@ -349,11 +400,11 @@ export async function sendAssistantMessage(
     await tx.reviewMessage.create({
       data: { sessionId, role: "CLIENT", content: message, inputMode: input.inputMode },
     });
-    await chargeProviderAttempt(tx, { sessionId, reviewerId: reviewer.id, workspaceId, now });
-    return { sessionId, workspaceId, claimedAt: now, sessionsOnPost: sessions.length + (existing ? 0 : 1) };
+    await chargeProviderAttempt(tx, { sessionId, reviewerId: reviewer.id, workspaceId, now, mode });
+    return { sessionId, workspaceId, claimedAt: now, sessionsOnPost: sessions.length + (existing ? 0 : 1), mode };
   });
 
-  const { sessionId } = claim;
+  const { sessionId, mode } = claim;
   try {
     const session = await loadSession(sessionId);
     const ctx = buildPostContext(post, reviewer.name, input.versionNumber);
@@ -370,7 +421,8 @@ export async function sendAssistantMessage(
 
     return {
       session: toSessionView(await releaseAndLoad(sessionId, claim.claimedAt), labelsFor(post, input.versionNumber)),
-      readiness: result.readiness,
+      // Nothing to approve once the changes were requested: never light up "Approva".
+      readiness: mode === "feedback" && result.readiness === "ready_approve" ? "exploring" : result.readiness,
       sessionsLeft: sessionsLeft(claim.sessionsOnPost),
     };
   } finally {
@@ -403,9 +455,10 @@ export async function finalizeSession(
 ): Promise<AssistantFinalizeResponse> {
   const provider = requireEnabledProvider();
   const post = await loadPost(reviewer, input.postId);
-  assertActionable(post, input.versionNumber);
+  const mode = assertActionable(post, input.versionNumber);
 
-  const session = pickSessionForVersion(post.reviewSessions, input.versionNumber);
+  const submitted = await submittedSessionsFor(prisma, mode, post.id, reviewer.id);
+  const session = pickSessionForVersion(post.reviewSessions, input.versionNumber, submitted);
   if (!session) throw new AssistantError("Non c'è ancora nessuna conversazione da riassumere.", 400);
 
   const labels = labelsFor(post, input.versionNumber);
@@ -436,6 +489,7 @@ export async function finalizeSession(
       reviewerId: reviewer.id,
       workspaceId,
       now,
+      mode,
     });
     await tx.reviewSession.update({ where: { id: fresh.id }, data: { turnStartedAt: now } });
     return { claimedAt: now, workspaceId, messages };
@@ -463,7 +517,8 @@ export async function finalizeSession(
         where: { id: session.id, status: "OPEN" },
         data: {
           status: "COMPLETED",
-          verdict: result.verdict,
+          // The change request already exists: "approve" has no meaning here.
+          verdict: mode === "feedback" && result.verdict === "approve" ? "unclear" : result.verdict,
           summary,
           actionItems,
           model: result.model,

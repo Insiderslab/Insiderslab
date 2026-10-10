@@ -138,7 +138,7 @@ test("google ads, cliente (390px): anteprima, commento su un titolo, approva", a
   await form.getByLabel("Il tuo commento").fill(HEADLINE_NOTE);
   await viewportShot(page, "google-ads-cliente-commento-titolo-mobile.png");
   await form.getByRole("button", { name: "Invia commento" }).click();
-  await expect(page.getByText("Commento inviato")).toBeVisible();
+  await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await expect(page.getByText("commentato", { exact: true })).toBeVisible();
 
   const { rows } = await db.query('select body, "variantId" from "PostComment" where "postId" = $1', [state.postId]);

@@ -169,7 +169,7 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
   await expect(b.getByLabel("Al momento")).toHaveValue("0:03");
   await b.getByPlaceholder("Cosa non ti convince in questo momento del video?").fill(B_MOMENT);
   await b.getByRole("button", { name: "Invia commento" }).click();
-  await expect(page.getByText("Commento inviato")).toBeVisible();
+  await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await expect(b.getByText(B_MOMENT)).toBeVisible();
 
   // Safe zones on the 9:16 preview (Stories/Reels).

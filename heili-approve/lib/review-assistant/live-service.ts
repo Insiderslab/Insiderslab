@@ -22,13 +22,16 @@ import { getOpenAIModel } from "./openai";
 import { AssistantError } from "./provider";
 import { buildPostContext, buildTurnSystemPrompt, escapeForPrompt, type AssistantPostContext } from "./prompt";
 import { pickSessionForVersion, sortMessages, toHistory } from "./rules";
+import { loadSubmittedSessionIds } from "./submitted";
 import {
   MAX_SESSIONS_PER_POST_PER_REVIEWER,
+  checkAssistantAccess,
   passageMarker,
   pointMarker,
   splitMessageMarkers,
   variantMarker,
   videoMomentMarker,
+  type AssistantMode,
 } from "./shared";
 import type { AssistantReviewer } from "./service";
 
@@ -73,13 +76,14 @@ export interface CloseLiveCallResponse {
   closed: boolean;
 }
 
-function assertActionable(post: ReviewerPost, versionNumber: number): void {
-  if (post.status !== "IN_REVIEW" || !post.canAct) {
-    throw new AssistantError("Questo contenuto non è più in revisione: ricarica la pagina.", 409);
-  }
-  if (versionNumber !== post.currentVersionNumber) {
-    throw new AssistantError("Nel frattempo l'agenzia ha caricato una nuova versione: ricarica la pagina.", 409);
-  }
+const NOT_IN_REVIEW_MESSAGE = "Questo contenuto non è più in revisione: ricarica la pagina.";
+const NEW_VERSION_MESSAGE = "Nel frattempo l'agenzia ha caricato una nuova versione: ricarica la pagina.";
+
+/** Same gate as the text chat (checkAssistantAccess): IN_REVIEW or CHANGES_REQUESTED, current version only. */
+function assertActionable(post: ReviewerPost, versionNumber: number): AssistantMode {
+  const access = checkAssistantAccess(post, versionNumber);
+  if (!access.ok) throw new AssistantError(access.reason === "stale" ? NEW_VERSION_MESSAGE : NOT_IN_REVIEW_MESSAGE, 409);
+  return access.mode;
 }
 
 async function workspaceIdForPost(tx: Prisma.TransactionClient, postId: string): Promise<string> {
@@ -94,22 +98,21 @@ async function assertFreshReview(
   reviewerId: string,
   clientId: string,
   versionNumber: number
-): Promise<void> {
+): Promise<AssistantMode> {
   await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${postId} FOR UPDATE`;
   const post = await tx.post.findUnique({
     where: { id: postId },
     select: { clientId: true, status: true, currentVersionNumber: true },
   });
   if (!post || post.clientId !== clientId) throw new AssistantError("Post non trovato", 404);
-  if (post.status !== "IN_REVIEW") throw new AssistantError("Questo contenuto non è più in revisione: ricarica la pagina.", 409);
-  if (post.currentVersionNumber !== versionNumber) {
-    throw new AssistantError("Nel frattempo l'agenzia ha caricato una nuova versione: ricarica la pagina.", 409);
-  }
+  const access = checkAssistantAccess(post, versionNumber);
+  if (!access.ok) throw new AssistantError(access.reason === "stale" ? NEW_VERSION_MESSAGE : NOT_IN_REVIEW_MESSAGE, 409);
   const reviewer = await tx.clientReviewer.findFirst({
     where: { id: reviewerId, clientId, active: true, client: { archivedAt: null } },
     select: { id: true },
   });
   if (!reviewer) throw new AssistantError("Link di revisione non più attivo", 404);
+  return access.mode;
 }
 
 async function lockVoiceBudget(tx: Prisma.TransactionClient, workspaceId: string, reviewerId: string): Promise<void> {
@@ -159,6 +162,7 @@ ${evidence ? `<media_evidence>\n${evidence}\n</media_evidence>` : "<media_eviden
 type PreparedLiveCall = LiveCallPreparation & {
   post: ReviewerPost;
   context: AssistantPostContext;
+  mode: AssistantMode;
 };
 
 async function loadLiveCallPreparation(
@@ -166,7 +170,7 @@ async function loadLiveCallPreparation(
   input: PrepareLiveCallInput
 ): Promise<PreparedLiveCall> {
   const post = await getPostForReviewer(input.postId, reviewer);
-  assertActionable(post, input.versionNumber);
+  const mode = assertActionable(post, input.versionNumber);
   const workspace = await prisma.post.findUnique({
     where: { id: post.id },
     select: { workspaceId: true },
@@ -183,7 +187,7 @@ async function loadLiveCallPreparation(
       503
     );
   }
-  return { post, context, ...preparation };
+  return { post, context, mode, ...preparation };
 }
 
 /** Preflight that prepares analysis without creating a paid Live session. */
@@ -267,7 +271,7 @@ export async function startLiveCall(
 ): Promise<LiveCallResponse> {
   if (!process.env.OPENAI_API_KEY?.trim()) throw new AssistantError("Conversazione vocale non disponibile", 404);
   const preparation = await loadLiveCallPreparation(reviewer, input);
-  const { post, context } = preparation;
+  const { post, context, mode } = preparation;
   // Validate client-provided selection against the authorized current version
   // before creating a DB claim or making the billable provider call.
   const initialContextMarker = input.contextMarker?.trim()
@@ -281,7 +285,7 @@ export async function startLiveCall(
   const claim = await prisma.$transaction(async (tx) => {
     const workspaceId = await workspaceIdForPost(tx, post.id);
     await lockVoiceBudget(tx, workspaceId, reviewer.id);
-    await assertFreshReview(tx, post.id, reviewer.id, reviewer.clientId, input.versionNumber);
+    const freshMode = await assertFreshReview(tx, post.id, reviewer.id, reviewer.clientId, input.versionNumber);
     const active = await tx.reviewVoiceCall.findFirst({
       where: {
         status: { in: [...ACTIVE_STATUSES] },
@@ -317,7 +321,8 @@ export async function startLiveCall(
       throw new AssistantError("Le conversazioni vocali hanno raggiunto il limite giornaliero del workspace.", 429);
     }
 
-    const existing = pickSessionForVersion(sessions, input.versionNumber);
+    const submitted = freshMode === "feedback" ? await loadSubmittedSessionIds(tx, post.id, reviewer.id) : undefined;
+    const existing = pickSessionForVersion(sessions, input.versionNumber, submitted);
     if (!existing && sessions.length >= MAX_SESSIONS_PER_POST_PER_REVIEWER) {
       throw new AssistantError("Hai già usato tutte le conversazioni disponibili per questo contenuto.", 429);
     }
@@ -365,7 +370,7 @@ export async function startLiveCall(
       session: {
         model: LIVE_MODEL,
         audio: { output: { voice: LIVE_VOICE } },
-        instructions: liveConversationInstructions(post.kind),
+        instructions: liveConversationInstructions(post.kind, mode),
         input: buildLiveStartupInput(
           context,
           toHistory(sortMessages(claim.session.messages)),
@@ -460,7 +465,7 @@ export async function updateLiveContext(
   const call = await authorizedCall(reviewer, callId);
   const now = new Date();
   if (call.status !== "ACTIVE" || call.expiresAt <= now) throw new AssistantError("La conversazione vocale è terminata.", 409);
-  if (call.session.post.status !== "IN_REVIEW" || call.session.post.currentVersionNumber !== call.session.versionNumber) {
+  if (!checkAssistantAccess(call.session.post, call.session.versionNumber).ok) {
     await requestRuntimeClose(callId, "review_invalidated").catch(() => {});
     throw new AssistantError("Il contenuto in revisione è cambiato: ricarica la pagina.", 409);
   }
@@ -534,8 +539,7 @@ export async function sweepLiveCalls(limit = 10): Promise<{ inspected: number; c
       call.status === "CLOSING" ||
       !call.session.reviewer.active ||
       call.session.reviewer.client.archivedAt !== null ||
-      call.session.post.status !== "IN_REVIEW" ||
-      call.session.versionNumber !== call.session.post.currentVersionNumber
+      !checkAssistantAccess(call.session.post, call.session.versionNumber).ok
   ).slice(0, Math.max(1, Math.min(50, Math.floor(limit))));
   let closed = 0;
   let pending = 0;
@@ -567,8 +571,7 @@ export async function sweepLiveCalls(limit = 10): Promise<{ inspected: number; c
         closed += 1;
         return;
       }
-      const reason =
-        call.session.versionNumber !== call.session.post.currentVersionNumber || call.session.post.status !== "IN_REVIEW"
+      const reason = !checkAssistantAccess(call.session.post, call.session.versionNumber).ok
           ? "review_invalidated"
           : call.expiresAt <= now
             ? "expired"

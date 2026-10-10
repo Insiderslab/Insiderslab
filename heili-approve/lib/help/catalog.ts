@@ -98,7 +98,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Indica il punto", body: "Su una foto tocca il punto interessato; su un video fermati sul secondo giusto; in un articolo seleziona la frase." },
       { title: "Descrivi il risultato che vuoi", body: "Scrivi cosa cambiare e, se puoi, perché: per esempio tono, colore, immagine, frase o invito all’azione." },
-      { title: "Usa l’assistente se serve", body: "Apri «Parla con Heili» nello spazio feedback per scrivere o conversare a voce, anche interrompendo l’assistente. Controlla il riepilogo, poi invialo all’agenzia: parlare o preparare il riepilogo non invia una richiesta. Il microfono accanto all’invio trascrive soltanto nel campo." },
+      { title: "Usa l’assistente se serve", body: "Apri «Parla con Heili» nello spazio feedback per scrivere o conversare a voce, anche interrompendo l’assistente. Controlla il riepilogo, poi invialo all’agenzia: parlare o preparare il riepilogo non invia una richiesta. Anche dopo «Chiedi modifiche» puoi parlare con Heili: il riepilogo si aggiunge con «Aggiungi al feedback» alla richiesta già inviata. Il microfono accanto all’invio trascrive soltanto nel campo." },
     ],
   },
   {

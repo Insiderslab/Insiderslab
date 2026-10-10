@@ -134,7 +134,7 @@ test("cliente (390px): commento con pin e richiesta di modifiche", async ({ brow
   await page.waitForURL(new RegExp(`/posts/${state.imagePostId}$`));
 
   // No AI provider key is configured on the test server: no assistant button.
-  await expect(page.getByRole("button", { name: /Parlane con l'assistente/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Parla con Heili" })).toHaveCount(0);
 
   const image = page.getByRole("region", { name: "Anteprima del post" }).locator("img").first();
   await image.scrollIntoViewIfNeeded();
@@ -142,13 +142,12 @@ test("cliente (390px): commento con pin e richiesta di modifiche", async ({ brow
   await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.3);
   await page.getByPlaceholder("Cosa vorresti cambiare in questo punto?").fill("Qui metterei la foto della torta di mele.");
   await page.getByRole("button", { name: "Invia commento" }).click();
-  await expect(page.getByText("Commento inviato")).toBeVisible();
+  await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await shot(page, "04-cliente-post-mobile.png");
 
+  // Studio: "Chiedi modifiche" sends the comments already saved, with no second text.
   await page.getByRole("button", { name: "Chiedi modifiche" }).click();
-  await page.getByPlaceholder(/Per esempio/).fill("Togliete \"della nonna\" e aggiungete l'orario: dalle 12 alle 15.");
-  await page.getByRole("button", { name: "Invia la richiesta" }).click();
-  await expect(page.getByText("Richiesta inviata all'agenzia.")).toBeVisible();
+  await expect(page.getByText("Modifiche inviate all'agenzia.", { exact: true })).toBeVisible();
 
   const row = await waitForStatus(state.imagePostId, "CHANGES_REQUESTED", 10_000);
   expect(row.currentVersionNumber).toBe(1);
@@ -167,6 +166,8 @@ test("agenzia: versione 2 del testo e nuovo invio", async ({ browser }) => {
     "Il menu d'autunno è arrivato 🍂 Vellutata di zucca, tortelli al burro e salvia e la nostra torta di mele.\n\n" +
       "Vi aspettiamo da giovedì, a pranzo dalle 12 alle 15!\n\n#CaffèAurora #menu #autunno"
   );
+  // The note for the client is an optional, collapsed section in the Studio editor.
+  await page.getByText("Nota per il cliente", { exact: false }).first().click();
   await page.locator("#post-change-note").fill("Tolto \"della nonna\" e aggiunto l'orario del pranzo.");
   await page.getByRole("button", { name: "Salva e invia in revisione" }).click();
 
@@ -182,6 +183,8 @@ test("cliente: vede cosa è cambiato e approva; il worker programma su Metricool
   const page = await context.newPage();
 
   await page.goto(reviewPostUrl(0, state.imagePostId));
+  // Studio: the changes since the previous version sit in a collapsed section.
+  await page.getByText("Modifiche dalla versione precedente").click();
   await expect(page.getByRole("heading", { name: "Cosa è cambiato" })).toBeVisible();
   await expect(page.getByText("Tolto \"della nonna\" e aggiunto l'orario del pranzo.")).toBeVisible();
   await expect(page.getByText("Versione 2", { exact: true })).toBeVisible();
@@ -256,13 +259,11 @@ test("reel: commento a un momento, copertina e videoCoverMilliseconds", async ({
     .getByPlaceholder("Cosa non ti convince in questo momento del video?")
     .fill("Qui la scritta passa troppo veloce, lasciatela un secondo in più.");
   await page.getByRole("button", { name: "Invia commento" }).click();
-  await expect(page.getByText("Commento inviato")).toBeVisible();
+  await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await shot(page, "08-cliente-reel-mobile.png");
 
   await page.getByRole("button", { name: "Chiedi modifiche" }).click();
-  await page.getByPlaceholder(/Per esempio/).fill("Vedi il commento sul video. Come copertina usate il cuore già formato.");
-  await page.getByRole("button", { name: "Invia la richiesta" }).click();
-  await expect(page.getByText("Richiesta inviata all'agenzia.")).toBeVisible();
+  await expect(page.getByText("Modifiche inviate all'agenzia.", { exact: true })).toBeVisible();
   await waitForStatus(state.reelPostId, "CHANGES_REQUESTED", 10_000);
 
   // ── Agency: marker on the timeline and the timed note ──
@@ -282,6 +283,7 @@ test("reel: commento a un momento, copertina e videoCoverMilliseconds", async ({
   await coverForward.click();
   await picker.getByRole("button", { name: "Usa questo fotogramma" }).click();
   await expect(picker.getByRole("button", { name: "Copertina a 0:02" })).toBeVisible();
+  await agencyPage.getByText("Nota per il cliente", { exact: false }).first().click();
   await agencyPage.locator("#post-change-note").fill("Copertina sul cuore già formato.");
   await agencyPage.getByRole("button", { name: "Salva e invia in revisione" }).click();
   await expect
@@ -291,6 +293,7 @@ test("reel: commento a un momento, copertina e videoCoverMilliseconds", async ({
 
   // ── Client approves version 2 ──
   await page.goto(reviewPostUrl(0, state.reelPostId));
+  await page.getByText("Modifiche dalla versione precedente").click();
   await expect(page.getByRole("heading", { name: "Cosa è cambiato" })).toBeVisible();
   await expect(page.getByText("Copertina del video modificata")).toBeVisible();
   await page.getByRole("button", { name: "Approva", exact: true }).click();

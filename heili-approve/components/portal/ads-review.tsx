@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ContentKind } from "@/app/generated/prisma/client";
 import {
+  addAssistantFeedbackAction,
   addCommentAction,
   decideVariantAction,
   finalizeDecisionsAction,
@@ -43,7 +44,7 @@ import {
   type AdVariant,
   type GoogleAssetRef,
 } from "@/lib/content/ads";
-import type { AssistantAdsContext } from "@/lib/review-assistant/shared";
+import type { AssistantAdsContext, AssistantMode } from "@/lib/review-assistant/shared";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
@@ -139,6 +140,8 @@ export default function AdsReview({
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  // Bumped after Heili's feedback was added: the next conversation starts fresh.
+  const [assistantKey, setAssistantKey] = useState(0);
   const [compareOpen, setCompareOpen] = useState(false);
 
   const [sheet, setSheet] = useState<null | "send">(null);
@@ -149,6 +152,10 @@ export default function AdsReview({
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
   const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
+  // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
+  const assistantAvailable = assistantEnabled && canComment;
+  const assistantMode: AssistantMode = canAct ? "decision" : "feedback";
   const nextHref = queue.nextPostId ? portalPath(token, queue.nextPostId) : null;
   const homeHref = portalPath(token);
   const wording = portalWording(listKinds);
@@ -465,6 +472,25 @@ export default function AdsReview({
     finish({ kind: "changes" });
   }
 
+  // «Aggiungi al feedback»: the conclusion of Heili once the changes were already requested.
+  async function addFromAssistant(input: { message: string; reviewSessionId: string }) {
+    if (blockUnsavedComment()) throw new Error(UNSAVED_COMMENT_MESSAGE);
+    const result = await addAssistantFeedbackAction(token, {
+      postId: ref.id,
+      versionNumber: ref.versionNumber,
+      message: input.message,
+      reviewSessionId: input.reviewSessionId,
+    });
+    if (!result.ok) {
+      if (result.stale) setStale(true);
+      throw new Error(result.error);
+    }
+    setAssistantOpen(false);
+    setAssistantKey((key) => key + 1);
+    setDecisionError(null);
+    setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
+  }
+
   async function toggleAssistant() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
@@ -677,7 +703,7 @@ export default function AdsReview({
                   onDirtyChange={setCommentDirty}
                   onListeningChange={setCommentListening}
                   assistantAction={
-                    canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                    assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
                   }
                   onSubmit={(input) => submitComment(variant.id, input)}
                   onCancel={() => {
@@ -703,7 +729,7 @@ export default function AdsReview({
                   onDirtyChange={setCommentDirty}
                   onListeningChange={setCommentListening}
                   assistantAction={
-                    canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                    assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
                   }
                   onSubmit={(body) => submitComment(variant.id, { body })}
                   onCancel={() => {
@@ -731,13 +757,15 @@ export default function AdsReview({
       ))}
       </div>
 
-      {(setComments.length > 0 || canComment || (canAct && assistantEnabled)) && (
+      {(setComments.length > 0 || canComment || assistantAvailable) && (
         <section className="space-y-4 rounded-[20px] border border-border bg-surface p-4 sm:p-5 lg:sticky lg:top-4" aria-labelledby="set-comments-title">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
               <h2 id="set-comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-              <p className="mt-1 text-sm text-muted">Sul set in generale puoi scrivere, dettare o parlare con Heili.</p>
+              <p className="mt-1 text-sm text-muted">
+                {assistantAvailable ? "Sul set in generale puoi scrivere, dettare o parlare con Heili." : "Sul set in generale puoi scrivere o dettare."}
+              </p>
             </div>
             {setComments.length > 0 && <span className="text-xs text-muted">{setComments.length} salvati</span>}
           </div>
@@ -750,17 +778,18 @@ export default function AdsReview({
                 Scrivi un commento
               </button>
             )}
-          {canAct && assistantEnabled && (
+          {assistantAvailable && (
             <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
               <AssistantPanel
-                key={`${post.id}-${post.versionNumber}`}
+                key={`${post.id}-${post.versionNumber}-${assistantKey}`}
                 controlRef={assistantControl}
                 onRequestSavedChanges={requestSavedChanges}
                 token={token}
                 postId={post.id}
                 versionNumber={post.versionNumber}
-                onSubmitChanges={submitFromAssistant}
-                onApprove={sendFromAssistant}
+                mode={assistantMode}
+                onSubmitChanges={canAct ? submitFromAssistant : addFromAssistant}
+                onApprove={canAct ? sendFromAssistant : undefined}
                 kind="AD_CREATIVE"
                 getContext={getContext}
                 variantNames={variantNames}
@@ -778,7 +807,7 @@ export default function AdsReview({
               onDirtyChange={setCommentDirty}
               onListeningChange={setCommentListening}
               assistantAction={
-                canAct && assistantEnabled ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
               }
               onSubmit={(input) => submitComment(null, input)}
               onCancel={() => {
