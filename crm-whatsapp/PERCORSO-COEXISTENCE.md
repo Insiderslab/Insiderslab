@@ -5,7 +5,7 @@
 ## Stato
 | Pezzo | Stato |
 |---|---|
-| Codice CRM: pulsante "Collega con Meta", import di storico e rubrica, avviso di scollegamento | ✅ Fatto. Repo `Insiderslab/vocero-crm`, branch `claude/exciting-rubin-mow1yu`, commit `ebea4b5`. Controlli tutti verdi: tipi, lint, 284 test, build, prova completa 111/111. **Non unito a `main`, non in produzione.** |
+| Codice CRM: pulsante "Collega con Meta", import di storico e rubrica, avviso di scollegamento | ✅ **Unito su `main` il 10/10** (PR #3, #4, #5; `main` = `126d20a`). Rilascio: `RILASCIO-CRM-2026-10-10.md`. Storia precedente: Repo `Insiderslab/vocero-crm`, branch `claude/exciting-rubin-mow1yu`, commit `ebea4b5`. Controlli tutti verdi: tipi, lint, 284 test, build, prova completa 111/111. **Non unito a `main`, non in produzione.** |
 | Specifica | `vocero-crm/specs/custom-heili/005-coexistence-embedded-signup.md` |
 | Meta: configurazione del collegamento guidato, dominio, campi webhook | ⏳ Da fare con il prompt `PROMPT-CHROME-TECH-PROVIDER.md` |
 | Meta: Tech Provider | ⏳ Serve **solo per i clienti**. Per il numero di InsidersLab basta che Stefano abbia un ruolo nell'app (accesso standard) |
