@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "insiders-cockpit",
-      "source": "./claude-mods/insiders-cockpit"
+      "source": "./.claude/skills/insiders-cockpit"
     }
   ],
   "description": "Mod di InsidersLab per Claude Code"

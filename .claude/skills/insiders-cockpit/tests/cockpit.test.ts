@@ -76,7 +76,7 @@ test('la barra dati compare dopo /cockpit', async ($, on) => {
   })
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'insiders-cockpit', surface, ...BAND })
-    expect(await ui.find({ key: 'open-chat' })).toBeDefined()
+    expect(await ui.find({ key: 'open-chats' })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /Contesto 12%/ }))?.text).toContain('Costo $0.84')
     await ui.unmount()
   }
