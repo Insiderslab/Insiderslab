@@ -1,6 +1,6 @@
 # Rilascio del CRM sul VPS — PR #3, #4, #5 (10/10/2026)
 
-**Cosa va in produzione:** `main` di `Insiderslab/vocero-crm` al commit `126d20a` (oggi gira `2f4338d`):
+**Cosa va in produzione:** `main` di `Insiderslab/vocero-crm` al commit `e23332e` (oggi gira `2f4338d`). Rispetto a `126d20a`, `e23332e` aggiunge solo i test golden (PR #6, nessun codice dell'applicazione):
 - isolamento tra clienti con chiavi per organizzazione (C1, C2, C3) e ruoli (PR #3);
 - coexistence con il pulsante "Collega con Meta" (PR #4);
 - `docker-compose.yml` con le variabili mancanti, volume degli allegati e agente senza conferme di prenotazione (PR #5).
@@ -10,6 +10,8 @@
 **Durata:** circa 30 minuti. **Chi:** Stefano, sul VPS, un blocco alla volta. Se un controllo non dà l'atteso, fermati e incollami l'output.
 
 ---
+
+> Finché non hai fatto questo rilascio non unisco su `main` nient'altro che cambi il database (fase 2 del livello canali): il commit atteso resta `e23332e`.
 
 ## 0. Controlli prima di iniziare (sola lettura)
 ```bash
@@ -37,7 +39,7 @@ Poi copia il file **fuori dal VPS**: dal tuo PC, `scp root@186.241.16.46:/root/b
 cd /opt/vocero
 git fetch origin main
 git checkout main
-git pull --ff-only                     # atteso: aggiornamento fino a 126d20a
+git pull --ff-only                     # atteso: aggiornamento fino a e23332e
 git log --oneline -1
 ```
 Se `git pull` si lamenta di modifiche locali, **non forzare**: incollami l'output.
