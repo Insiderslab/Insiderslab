@@ -136,3 +136,16 @@ Se l'accesso standard non bastasse, servirebbe il Tech Provider, e allora sono s
 4. **Numeri:** +1 555 resta il numero di prova; +39 347 in coexistence nell'org "InsidersLab"; su Clientify nessun bot sui numeri Insiderslab. Sì/no?
 5. **ADR dei canali** (`docs/adr/0001-livello-canali.md` sul branch keen): è in attesa della tua approvazione, e senza approvazione M1 non parte.
 6. **Primo rilascio di La Bambola:** WhatsApp + sito nel CRM, Instagram con DM by Heili (pannello separato), Facebook dopo. Sì/no?
+
+---
+
+## 9. Decisioni di Stefano (10/10/2026)
+
+| # | Decisione | Note |
+|---|---|---|
+| 2 | **Wapi congelato** finché non serve davvero (rivalutazione a metà novembre) | CRM in modalità diretta |
+| 3 | **Una sola app Meta per il CRM**, per WhatsApp, Instagram, Facebook e il resto. Va **rinominata** | Il nome non può contenere "Meta", "WhatsApp", "Facebook", "Instagram" né storpiature (anche "Whatpp" rischia in App Review). Proposta: **"Heili by InsidersLab"** o **"InsidersLab Heili"**: è il nome che i clienti vedono nel popup di collegamento |
+| 5 | **ADR dei canali approvato**: si procede con il CRM multicanale | Da riportare nel campo "Stato" dell'ADR sul branch keen, quando la sessione che lo cura lo integra |
+| 6 | **La Bambola: l'obiettivo è partire con tutti i canali** se Instagram/Facebook nel CRM sono pronti in tempo; se no, WhatsApp + sito prima e gli altri canali appena pronti, nello stesso CRM | Per non aspettare l'App Review: le persone che gestiscono Instagram e la Pagina di La Bambola ricevono un ruolo (tester) nell'app, così il canale funziona con l'accesso standard durante il pilota |
+| 1 | Unione PR #3: spiegata, decisione in attesa | — |
+| 4 | Clientify: spiegata, decisione in attesa | Verificato su Clientify: 1 sola automazione pubblicata ("Nuovo Lead"); i canali dell'inbox non sono leggibili via API (manca l'addon) |
