@@ -1,42 +1,63 @@
-# Onboarding primo cliente sul CRM WhatsApp — La Bambola (modo diretto)
+# Onboarding La Bambola — tutti i canali nello stesso CRM (v2, 10/10/2026)
 
-**Perché La Bambola:** è già un'organizzazione nel CRM in produzione (`docs/ops/rilascio-c1.md` del branch C1) e ha già un portfolio Meta proprio ("La Bambola Morrocoy") con un'app "La bambolaChatbot" (REPORT-META §10). Il modello è quello giusto per oggi: WABA e app nel portfolio **del cliente**, credenziali incollate nel CRM, nessuna review Meta per noi.
+**Sostituisce la v1** (modo diretto con l'app del cliente). Decisioni di Stefano del 10/10:
+- **una sola app Meta**, la nostra: 609974691965875, da rinominare **"Heili by InsidersLab"**;
+- **niente Wapi**;
+- **La Bambola parte con tutti i canali**: WhatsApp, sito, Instagram, Facebook.
 
-## 1. Da chiedere al cliente (30 min di call)
-- [ ] Chi ha accesso admin al portfolio Meta "La Bambola Morrocoy" e all'app "La bambolaChatbot". Se non è Stefano, farsi aggiungere come **Amministratore** del portfolio e dell'app.
-- [ ] Il portfolio è **verificato**? (Impostazioni → Centro per la sicurezza). Se no: visura/documento della società + email di dominio. 2–5 giorni lavorativi.
-- [ ] **Numero** da usare: nuovo (consigliato, SIM o numero fisso che riceve SMS/chiamata) oppure migrazione del numero attuale dall'app WhatsApp Business del telefono (si perde l'uso sull'app e le chat sul telefono: va detto in chiaro).
-- [ ] **Nome visualizzato** = ragione sociale o insegna così come appare su sito e Google, senza aggiunte.
-- [ ] **Chi risponde** quando l'AI passa a un umano: nome, orari, numero personale per l'avviso.
-- [ ] **Contenuti per la base di conoscenza:** listino, orari, indirizzo, servizi, domande frequenti, cosa NON dire (prezzi non ufficiali, promesse mediche, ecc.), tono (tu/lei, lingua IT/ES).
-- [ ] **Metodo di pagamento** Meta del cliente (carta) per il suo WABA: paga lui le conversazioni.
-- [ ] Consenso scritto al trattamento dei messaggi tramite il CRM e l'AI (clausola nel contratto; DPA se il cliente lo chiede).
+L'app "La bambolaChatbot" del portfolio di La Bambola **non si usa più**: con un'app sola la firma dei webhook è una sola, il problema A5 dell'analisi.
 
-## 2. Lato Meta, nel portfolio del cliente (45 min, con il cliente o con accesso admin)
-1. WhatsApp Manager → *Aggiungi numero* → verifica via SMS → nome visualizzato → categoria.
-2. Utente di sistema del cliente → assegna app "La bambolaChatbot" + WABA → token permanente con `whatsapp_business_messaging` + `whatsapp_business_management`. Il token lo incolla chi fa il setup direttamente nel CRM.
-3. Nell'app del cliente: webhook → URL del CRM (`https://crm.heili.cloud/api/webhooks/wa/<token-istanza>`, la stessa per tutte le organizzazioni: il CRM instrada per Phone Number ID) + campi `messages`, `message_template_status_update`; iscrivi il WABA all'app.
-   - Attenzione: `META_APP_SECRET` del CRM è **uno per istanza**. Con app diverse per cliente la firma può essere verificata per una sola app. Opzioni: (a) il cliente aggiunge come amministratore la **nostra** app `609974691965875` al suo WABA tramite condivisione del WABA con Insiderlabs Business come partner, così l'app è unica; (b) si lascia la URL segreta come unica protezione per le app dei clienti. Decisione da prendere prima del secondo cliente; per il primo va bene (a) se il cliente accetta la condivisione, altrimenti (b).
-4. Metodo di pagamento sul WABA del cliente.
-5. 2–3 template in approvazione: riapertura conversazione (utility), promemoria appuntamento (utility), promo mensile (marketing, con opt-out).
+**Cliente:** Catamarán La Bambola, Tucacas (Morrocoy, Venezuela). Portfolio Meta "La Bambola Morrocoy" `2451131388356181` (non verificato al 5/10). Instagram `@labambolamorrocoy`, Facebook `/labambolamorrocoy`, WhatsApp pubblicato 0414-432-4032, sito labambolamorrocoy.com.
 
-## 3. Lato CRM (1 ora)
-1. `/admin` (super-admin): organizzazione "La Bambola" esiste già; se manca, crearla con il primo utente del cliente (owner).
-2. Entrare nell'organizzazione → **Impostazioni → WhatsApp** → WABA ID, Phone Number ID, token → Prova connessione → Salva.
-3. **Agente**: nome, tono, istruzioni, regole di escalation; base di conoscenza dal materiale del punto 1 (coppie domanda/risposta + blocchi liberi).
-4. **Laboratorio**: corsa completa; correggere la base di conoscenza finché score e rilievi sono accettabili (nessuna allucinazione sui prezzi, escalation corretta). Conservare il report come evidenza per il cliente.
-5. **Pipeline**: adattare le fasi al cliente (es. Nuovo → In conversazione → Appuntamento fissato → Cliente → Perso).
-6. **Tag + automazioni** (facoltativo al primo giro): un tag "da ricontattare" e una regola "ogni 7 giorni template X" solo quando il template è approvato.
-7. **Team**: utente per chi risponde in handoff; mostrare come riattivare l'IA.
-8. **Chiavi**: se un bot esterno o n8n deve leggere i dati, chiave `vbk_`/`vex_` **della sola organizzazione La Bambola** (dopo il rilascio C1/C2), mai la chiave d'istanza.
+## Come si collega ogni canale
 
-## 4. Go-live e prima settimana
-- [ ] Messaggio di prova dal telefono del cliente; risposta AI; handoff; template.
-- [ ] Il cliente pubblica il numero (sito, Google Business, bio Instagram, link `wa.me`).
-- [ ] Giorno 1–7: controllo quotidiano dell'inbox da parte nostra, revisione delle risposte AI, aggiunta delle domande mancanti alla base di conoscenza, nuova corsa del Laboratorio a fine settimana.
-- [ ] Metriche da riportare al cliente: conversazioni, tempo medio di prima risposta, % gestite dall'AI senza handoff, lead entrati in pipeline.
+| Canale | Come | Quando | Cosa serve da Meta |
+|---|---|---|---|
+| **WhatsApp** | Pulsante **"Collega con Meta"** nel CRM. Se lo 0414-432-4032 è sull'app WhatsApp Business del telefono: **coexistence**, l'app resta e il CRM riceve | Appena la PR #4 è in produzione e la configurazione v4 è creata | Finché non siamo Tech Provider, chi fa il collegamento dal lato La Bambola deve avere un **ruolo nella nostra app**: tester o sviluppatore. Da provare al primo tentativo |
+| **Sito** | Modulo del sito → endpoint del CRM `POST /api/inbound/webform`: contatto + conversazione "web" + lead | Da sviluppare: 2–3 giorni | Nessuna |
+| **Instagram** | Pulsante "Collega Instagram" (Business Login for Instagram, codice ripreso da DM by Heili) | Dopo M1 (livello canali, approvato il 10/10) e l'adattatore: **fine novembre** | Durante il pilota: l'account Instagram di La Bambola collegato da una persona con ruolo **tester** nella nostra app (accesso standard, niente App Review). Poi App Review |
+| **Facebook Messenger** | Pulsante "Collega Facebook": si sceglie la Pagina | Come Instagram | Come Instagram: amministratore della Pagina con ruolo tester; poi App Review |
 
-## 5. Prerequisiti lato nostro (prima di toccare il cliente)
-- Test end-to-end riuscito sul nostro numero (`RUNBOOK-TEST-E2E.md`).
-- Rilascio C1/C2 (chiavi per organizzazione) o, finché non è rilasciato, **nessuna** chiave bot/export d'istanza in uso con due organizzazioni.
-- Backup giornaliero del database del CRM fuori dal VPS.
+> Se si preferisce non aspettare fine novembre per tutto: WhatsApp + sito partono appena pronti, Instagram e Facebook entrano nello stesso CRM dopo, senza rifare niente. **Decisione attuale di Stefano: partire con tutto se si chiude in tempo.**
+
+## 1. Da chiedere al cliente (call di 30 min)
+- [ ] **Chi è amministratore** del portfolio Meta "La Bambola Morrocoy", della Pagina Facebook e dell'account Instagram. Ci servono **nome e profilo Facebook** di una persona per aggiungerla come **tester** della nostra app.
+- [ ] Lo **0414-432-4032** è sull'app **WhatsApp Business** sul telefono (→ coexistence) oppure su un'altra piattaforma o un altro fornitore (→ va staccato prima)? Chi lo usa ogni giorno?
+- [ ] **Verifica del portfolio** (Centro per la sicurezza): se manca, documenti della società. Serve per il nome visualizzato e per i limiti di invio.
+- [ ] L'Instagram è **professionale** (Business o Creator) e collegato alla Pagina Facebook?
+- [ ] **Tutti i dati della sezione 4** di `LA-BAMBOLA-AGENTE-KB.md`: prezzi con data di validità, orari, cosa è incluso, percorso, prenotazione e anticipo, pagamenti, politiche (cancellazione, meteo, minori), cosa portare.
+- [ ] **Chi risponde** quando l'IA passa la conversazione a una persona: nome, orari, telefono per l'avviso. Lingue: qualcuno risponde in inglese?
+- [ ] **Tono:** tu o usted, emoji sì o no, parole da evitare.
+- [ ] **Modulo del sito:** su che piattaforma è fatto il sito (WordPress, Elementor, altro) e chi lo gestisce.
+- [ ] **Contratto + DPA** per l'uso dell'IA sulle loro conversazioni (skill business-administration).
+
+## 2. Lato Meta (prompt Chrome: `PROMPT-CHROME-LA-BAMBOLA.md`)
+1. Nel portfolio di La Bambola, solo lettura: verifica, WABA e numeri, Pagina, Instagram, app collegate, partner.
+2. Nella **nostra** app (con il tuo ok): aggiungere la persona di La Bambola come **tester**; lei accetta l'invito.
+3. Metodo di pagamento sulla WABA di La Bambola: lo paga il cliente.
+4. Dopo il collegamento: 2–3 modelli Utility in approvazione (riapertura della conversazione, promemoria del tour).
+
+## 3. Lato CRM
+1. `/admin` → organizzazione **"La Bambola"** con il primo utente owner del cliente.
+2. **Impostazioni → WhatsApp → "Collega con Meta"**, con la persona di La Bambola al telefono. Va fatto entro 24 ore dall'inizio, perché lo storico e la rubrica Meta li dà solo in quella finestra.
+3. **Agente:** profilo e base di conoscenza da `LA-BAMBOLA-AGENTE-KB.md`. Si caricano solo le voci **LISTA**; le **CONFIRMAR** dopo l'ok del cliente. **L'agente resta spento** finché il Laboratorio non passa.
+4. **Laboratorio:** i 10 scenari della sezione 5. Nessun rosso su prezzi, conferme di prenotazione, iniezioni, reclami e dati di carta.
+5. **Pipeline:** Nuovo → In conversazione → Interessato → Prenotazione confermata (solo umano) → Cliente → Perso.
+6. **Team:** utente per chi risponde; mostrare come riattivare l'IA dopo il passaggio all'umano.
+7. **Chiavi** `vbk_`/`vex_` dell'organizzazione La Bambola, solo se serve un bot esterno.
+
+## 4. Due cose da correggere nel CRM prima del go-live (trovate preparando la base di conoscenza)
+- Il prompt di sistema (`src/server/ai/prompts.ts`) **impone lo spagnolo**: un turista che scrive in inglese riceve risposte in spagnolo. Va resa configurabile la lingua per organizzazione, oppure si risponde nella lingua del cliente.
+- Lo stesso prompt dice «se c'è intenzione d'acquisto → … e **conferma al cliente**»: rischia di far "confermare" una prenotazione. Va cambiato in «conferma di aver registrato la richiesta». Lo copre anche la regola 1 delle istruzioni di La Bambola.
+
+## 5. Go-live e prima settimana
+- [ ] Prova dal telefono di un collaboratore: messaggio, risposta dell'IA, passaggio all'umano, risposta dall'app del telefono (eco nel CRM, IA in pausa).
+- [ ] Modulo del sito → lead nella Posta.
+- [ ] Giorni 1–7: revisione quotidiana della Posta, domande nuove nella base di conoscenza, Laboratorio a fine settimana.
+- [ ] Metriche per il cliente: conversazioni, tempo della prima risposta, % gestite dall'IA, lead in pipeline.
+
+## 6. Prerequisiti lato nostro
+- PR #3 ✅ unita (10/10). PR #4 (coexistence) in revisione, poi unione e **rilascio** (backup prima).
+- Configurazione Embedded Signup v4 sulla nostra app, campi webhook, dominio dell'SDK.
+- Backup giornaliero del database fuori dal VPS (M0.4).
+- Prova dal vivo del +39 347 InsidersLab in coexistence (stesso flusso di La Bambola, fatto prima su noi).
