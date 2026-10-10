@@ -1,0 +1,13 @@
+{
+  "name": "insiderslab-mods",
+  "owner": {
+    "name": "InsidersLab"
+  },
+  "plugins": [
+    {
+      "name": "insiders-cockpit",
+      "source": "./claude-mods/insiders-cockpit"
+    }
+  ],
+  "description": "Mod di InsidersLab per Claude Code"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "insiders-cockpit",
+  "version": "0.1.0",
+  "description": "Pannello chat con pulsanti rapidi e barra dati sempre visibile (contesto, costo, limiti, turni)",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "InsidersLab"
+  }
+}
