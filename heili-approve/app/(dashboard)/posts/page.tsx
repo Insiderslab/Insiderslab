@@ -189,6 +189,15 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
               Piano del mese
             </Link>
           )}
+          {social && (
+            <Link
+              href={clientId ? `/posts/import?clientId=${clientId}` : "/posts/import"}
+              className="btn btn-sm"
+              data-testid="posts-import-link"
+            >
+              Importa da Excel
+            </Link>
+          )}
           <Link
             href={newHref}
             className="rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"

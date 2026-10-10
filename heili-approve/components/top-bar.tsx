@@ -31,6 +31,7 @@ export function pageTitleFor(pathname: string, kinds: readonly ContentKind[], re
   if (matches("/posts")) {
     const kind = kinds.length === 1 ? kinds[0] : requestedKind && kinds.includes(requestedKind) ? requestedKind : null;
     if (matches("/posts/new")) return kind ? KIND_UI[kind].newTitle : "Nuovo contenuto";
+    if (matches("/posts/import")) return "Importa post";
     return kind ? KIND_UI[kind].navLabel : "Contenuti";
   }
   return pageTitles.find(([prefix]) => matches(prefix))?.[1] ?? "Dashboard";

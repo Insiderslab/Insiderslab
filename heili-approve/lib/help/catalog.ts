@@ -102,6 +102,21 @@ const TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: "agency-import-panel",
+    audience: "agency",
+    title: "Importare i post da un foglio",
+    summary: "Carica un foglio con i post e le immagini: controlli le righe e crei le bozze, senza strumenti tecnici.",
+    searchTerms: ["importa post", "importare post", "foglio", "modello", "caricare molti post", "bozze da foglio", "incollare righe", "google fogli"],
+    kinds: ["SOCIAL_POST"],
+    routes: [/\/posts\/import(?:\/|$)/],
+    steps: [
+      { title: "Scegli il cliente e scarica il modello", body: "Da «Post» apri «Importa da Excel». Il cliente è quello scelto nel menu. «Scarica il modello» dà un foglio con le colonne Data, Ora, Reti, Testo, Primo commento, Titolo, Immagini." },
+      { title: "Compila e carica", body: "Trascina il foglio (o incolla le righe copiate) insieme alle immagini e ai video: li abbino alle righe dal nome del file. Data e ora valgono nel fuso orario del cliente." },
+      { title: "Correggi le righe rosse", body: "Ogni riga mostra cosa non va (data passata, rete sconosciuta, testo troppo lungo, immagine mancante). Puoi correggere i campi direttamente nell'anteprima." },
+      { title: "Crea le bozze", body: "«Crea N bozze» crea solo bozze, mai invii. Rifare la stessa importazione non duplica i post. Poi usa «Manda in revisione»; con «Crea anche il piano» trovi i post già raccolti nel piano del mese." },
+    ],
+  },
+  {
     id: "agency-create-content",
     audience: "agency",
     title: "Creare e inviare un contenuto",

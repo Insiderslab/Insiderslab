@@ -32,5 +32,6 @@ describe("help guide catalog", () => {
     const topics = helpTopics({ audience: "agency", services: ["SOCIAL_POST"] });
     expect(suggestedHelpTopics(topics, "/plans/plan-1")[0]?.id).toBe("agency-plans");
     expect(suggestedHelpTopics(topics, "/settings")[0]?.id).toBe("agency-import");
+    expect(suggestedHelpTopics(topics, "/posts/import")[0]?.id).toBe("agency-import-panel");
   });
 });

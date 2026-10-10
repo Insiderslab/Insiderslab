@@ -4,6 +4,11 @@ Piattaforma per far **rivedere e approvare ai clienti i post social** preparati
 dall'agenzia. Quando il cliente approva, il post viene **programmato in automatico
 su Metricool**.
 
+**Importazione dal pannello:** da **Post → Importa da Excel** (`/posts/import`) la
+squadra carica un foglio Excel/CSV (o incolla le righe copiate) con le immagini,
+corregge le righe segnalate e crea le bozze, senza ID né percorsi: stesse regole
+dell'importatore sotto, e rifare l'importazione non duplica i post.
+
 **Importazione con Codex o Claude:** [guida Excel/CSV/JSON](docs/AGENT-IMPORT.md),
 [contratto API](docs/AUTOMATION-API.md) e [modello CSV apribile in Excel](docs/templates/approve-posts.csv).
 Le chiavi personali si creano in Impostazioni; l'importatore crea bozze con controllo preventivo e protezione dai duplicati.
@@ -387,6 +392,10 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   swipe, frecce, movimento ridotto, riepilogo e «Approva i rimanenti», worker
   che programma), Griglia con i chip di stato, il mese senza piano dalla home e
   i 404 (altro cliente, mese vuoto o malformato);
+- `post-import.spec.mjs` — «Importa post»: scelta del cliente, modello scaricabile,
+  foglio e immagini abbinate per nome, righe incollate con errori in rosso e
+  correzione, bozze (solo `DRAFT`) con il piano del mese, nessun duplicato
+  rifacendo l'importazione, mesi diversi e 390 px;
 - `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
   (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
   «Articoli», che non ci sia Metricool e che una creatività ads non si possa

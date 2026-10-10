@@ -92,6 +92,16 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
           month={defaultMonth}
           highlight={fromLink}
         />
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+          I post del mese sono in un foglio Excel?
+          <Link
+            href={scoped ? `/posts/import?clientId=${scoped.id}` : "/posts/import"}
+            className="btn btn-sm"
+            data-testid="plans-import-link"
+          >
+            Importa da Excel
+          </Link>
+        </p>
       </section>
 
       <section className="space-y-3" aria-labelledby="plans-list">

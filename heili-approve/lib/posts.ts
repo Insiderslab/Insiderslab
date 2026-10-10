@@ -1238,7 +1238,7 @@ export async function createPost(
   workspaceId: string,
   input: PostInput,
   actor: Actor,
-  imported?: { key: string; hash: string; tokenId: string }
+  imported?: { key: string; hash: string; tokenId?: string | null; source?: "automation" | "panel" }
 ): Promise<Post> {
   // Reject invalid input / disabled products before opening a DB transaction.
   assertKindEnabled(parseOrThrow(postInputSchema, input).kind ?? "SOCIAL_POST");
@@ -1286,7 +1286,16 @@ export async function createPost(
 
     await recordEvent(tx, {
       postId: post.id, type: "CREATED", actor, versionNumber: 1,
-      metadata: { kind, ...(imported ? { source: "automation", externalId: imported.key, tokenId: imported.tokenId } : {}) },
+      metadata: {
+        kind,
+        ...(imported
+          ? {
+              source: imported.source ?? "automation",
+              externalId: imported.key,
+              ...(imported.tokenId ? { tokenId: imported.tokenId } : {}),
+            }
+          : {}),
+      },
     });
     return post;
   });
