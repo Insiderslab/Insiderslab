@@ -17,6 +17,12 @@ export interface MetricoolBrandOption {
   label: string;
   timezone: string | null;
   networks: string[];
+  /** Logo URL (Metricool's brand image). */
+  imageUrl: string | null;
+  /** Account name per network (e.g. instagram: "pharmera.it"). */
+  accounts: Record<string, string>;
+  /** Name of another client of the workspace that already uses this brand. */
+  usedBy: string | null;
 }
 
 /** Metricool brands for the client form, or why they are not available. */

@@ -21,6 +21,7 @@ import {
   MetricoolClient,
   MetricoolError,
   getWorkspaceMetricoolClient,
+  type MetricoolBrand,
 } from "@/lib/metricool/client";
 import { isMetricoolEnabled, productName } from "@/lib/variant";
 import {
@@ -36,9 +37,9 @@ const credentialsSchema = z.object({
     .pipe(
       z
         .string()
-        .min(1, "Inserisci lo userId di Metricool")
-        .max(32, "userId non valido")
-        .regex(/^\d+$/, "Lo userId di Metricool è un numero (lo trovi nell'URL di Metricool)")
+        .min(1, "Inserisci l'ID utente di Metricool")
+        .max(32, "ID utente non valido")
+        .regex(/^\d+$/, "L'ID utente di Metricool è un numero: lo trovi nella pagina API, vicino al token")
     ),
   token: z
     .string()
@@ -46,8 +47,6 @@ const credentialsSchema = z.object({
     .min(8, "Il token API sembra troppo corto: copialo di nuovo da Metricool")
     .max(512, "Token API non valido")
     .regex(/^\S+$/, "Il token API non può contenere spazi"),
-  /** Save even if the test call fails (e.g. Metricool temporarily down). */
-  force: z.boolean().default(false),
 });
 
 const SESSION_EXPIRED = "Sessione scaduta: accedi di nuovo.";
@@ -82,22 +81,35 @@ function brandCountLabel(count: number): string {
   return count === 1 ? "1 brand trovato" : `${count} brand trovati`;
 }
 
+/** How many brand logos the settings page previews after connecting. */
+const PREVIEW_BRANDS = 8;
+
+export interface MetricoolConnectionData {
+  brandCount: number;
+  /** The first brands (name and logo only), to show the connection works. */
+  preview: Array<{ label: string; imageUrl: string | null }>;
+}
+
+function connectionData(brands: MetricoolBrand[]): MetricoolConnectionData {
+  return {
+    brandCount: brands.length,
+    preview: brands.slice(0, PREVIEW_BRANDS).map((brand) => ({ label: brand.label, imageUrl: brand.avatarUrl })),
+  };
+}
+
 /**
- * Tests the credentials, then stores them. A failed test blocks the save
- * unless `force` is set, so typos are caught before posts start failing.
+ * Tests the credentials with a real call (the brand list), and stores them
+ * only if it succeeds: a typo never replaces working credentials.
  */
 export async function saveMetricoolCredentialsAction(input: {
   userId: string;
   token: string;
-  force?: boolean;
-}): Promise<ActionResult<{ testFailed: boolean }>> {
+}): Promise<ActionResult<MetricoolConnectionData>> {
   return withManager(async ({ workspaceId }) => {
     const data = parseOrThrow(credentialsSchema, input);
 
-    const test = await new MetricoolClient({ userId: data.userId, token: data.token }).testConnection();
-    if (!test.ok && !data.force) {
-      return { ok: false, error: test.error, canForce: true };
-    }
+    const test = await new MetricoolClient({ userId: data.userId, token: data.token }).checkConnection();
+    if (!test.ok) return { ok: false, error: test.error };
 
     await prisma.workspace.update({
       where: { id: workspaceId },
@@ -111,15 +123,16 @@ export async function saveMetricoolCredentialsAction(input: {
 
     return {
       ok: true,
-      data: { testFailed: !test.ok },
-      message: test.ok
-        ? `Metricool collegato: ${brandCountLabel(test.brandCount)}.`
-        : "Credenziali salvate senza verifica: usa \"Prova connessione\" appena Metricool risponde.",
+      data: connectionData(test.brands),
+      message:
+        test.brands.length === 0
+          ? "Collegato, ma Metricool non ha restituito nessun brand: controlla di aver copiato l'ID utente giusto."
+          : `Collegato: ${brandCountLabel(test.brands.length)}`,
     };
   });
 }
 
-export async function testMetricoolConnectionAction(): Promise<ActionResult<{ brandCount: number }>> {
+export async function testMetricoolConnectionAction(): Promise<ActionResult<MetricoolConnectionData>> {
   return withManager(
     async ({ workspaceId }) => {
       let client: MetricoolClient;
@@ -129,12 +142,12 @@ export async function testMetricoolConnectionAction(): Promise<ActionResult<{ br
         if (error instanceof MetricoolError) return { ok: false, error: error.message };
         throw error;
       }
-      const result = await client.testConnection();
+      const result = await client.checkConnection();
       if (!result.ok) return { ok: false, error: result.error };
       return {
         ok: true,
-        data: { brandCount: result.brandCount },
-        message: `Connessione riuscita: ${brandCountLabel(result.brandCount)}${client.isFake ? " (modalità di prova)" : ""}.`,
+        data: connectionData(result.brands),
+        message: `Connessione riuscita: ${brandCountLabel(result.brands.length)}${client.isFake ? " (modalità di prova)" : ""}.`,
       };
     },
     { requireManager: false }

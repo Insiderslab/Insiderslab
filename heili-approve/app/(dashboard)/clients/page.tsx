@@ -18,7 +18,7 @@ import { prisma } from "@/lib/db/client";
 import { getReviewUrl } from "@/lib/reviewers";
 import { NETWORK_LABELS, STATUS_TONES, isNetwork } from "@/lib/domain";
 import { KIND_UI, enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
-import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
+import { canManageWorkspace, getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export async function generateMetadata() {
   return { title: `Clienti - ${productName()}` };
@@ -81,6 +81,8 @@ export default async function ClientsPage({
   );
   const metricoolConnected = Boolean(metricool?.metricoolTokenEncrypted);
   const activeCount = clients.filter((c) => !c.archivedAt).length;
+  // Import needs Metricool connected and a role that can manage the workspace.
+  const showImport = metricoolEnabled && metricoolConnected && canManageWorkspace(context.role);
 
   return (
     <div className="space-y-6">
@@ -98,6 +100,11 @@ export default async function ClientsPage({
           >
             {showArchived ? "Nascondi archiviati" : "Mostra archiviati"}
           </Link>
+          {showImport && (
+            <Link href="/clients/import" className="btn flex-1 sm:flex-none">
+              Importa da Metricool
+            </Link>
+          )}
           <Link
             href="/clients/new"
             className="flex-1 rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover sm:flex-none"
@@ -127,12 +134,23 @@ export default async function ClientsPage({
               ? "Aggiungi un cliente, collegalo al suo brand su Metricool e invita chi deve approvare i post."
               : `Aggiungi un cliente e invita chi deve approvare ${words.the}.`}
           </p>
-          <Link
-            href="/clients/new"
-            className="inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
-          >
-            Aggiungi cliente
-          </Link>
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+            {showImport && !showArchived && (
+              <Link href="/clients/import" className="btn btn-primary">
+                Importa da Metricool
+              </Link>
+            )}
+            <Link
+              href="/clients/new"
+              className={
+                showImport && !showArchived
+                  ? "btn"
+                  : "inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+              }
+            >
+              Aggiungi cliente
+            </Link>
+          </div>
         </div>
       )}
 

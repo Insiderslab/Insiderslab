@@ -97,7 +97,7 @@ export default async function ClientDetailPage({
 
   const [brands, grouped, recentPosts] = await Promise.all([
     // No Metricool call at all on blog / ads instances.
-    metricool ? loadBrandOptions(context.workspaceId) : Promise.resolve({ status: "not_configured" as const }),
+    metricool ? loadBrandOptions(context.workspaceId, client.id) : Promise.resolve({ status: "not_configured" as const }),
     prisma.post.groupBy({
       by: ["kind", "status"],
       where: postWhere,

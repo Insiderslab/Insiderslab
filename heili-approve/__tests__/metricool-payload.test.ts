@@ -384,8 +384,15 @@ describe("Metricool client helpers", () => {
       { label: "senza id" },
     ]);
     expect(brands).toEqual([
-      { blogId: "123", label: "Heili", timezone: "Europe/Rome", avatarUrl: null, networks: ["instagram", "linkedin"] },
-      { blogId: "456", label: "Altro", timezone: null, avatarUrl: null, networks: [] },
+      {
+        blogId: "123",
+        label: "Heili",
+        timezone: "Europe/Rome",
+        avatarUrl: null,
+        networks: ["instagram", "linkedin"],
+        accounts: { instagram: "heili", linkedin: "heili-srl" },
+      },
+      { blogId: "456", label: "Altro", timezone: null, avatarUrl: null, networks: [], accounts: {} },
     ]);
     expect(parseBrands({ data: [{ id: "7", title: "T" }] })[0]).toMatchObject({ blogId: "7", label: "T" });
     expect(parseBrands("nope")).toEqual([]);
@@ -473,7 +480,7 @@ describe("Metricool client helpers", () => {
       status: 422,
       retryable: false,
     });
-    expect(await client.testConnection()).toEqual({ ok: true, brandCount: 2 });
+    expect(await client.testConnection()).toEqual({ ok: true, brandCount: 10 });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

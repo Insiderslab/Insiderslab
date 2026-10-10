@@ -13,6 +13,12 @@
  *
  * Services: one checkbox per kind the instance enables (`kinds`). The stored
  * services of kinds this instance does not handle are kept by the server.
+ *
+ * Brand: a searchable picker with logo, name and networks. Choosing a brand
+ * fills what is still empty (logo, networks, and in a new client the time
+ * zone and the name). In a new client, typing a name that matches a brand
+ * chooses it ("Trovato su Metricool"), until the person picks or clears the
+ * brand themselves.
  */
 
 import Link from "next/link";
@@ -22,10 +28,12 @@ import {
   updateClientAction,
 } from "@/app/(dashboard)/clients/actions";
 import type { BrandsState } from "@/components/clients/action-result";
+import BrandPicker, { SelectedBrand } from "@/components/clients/brand-picker";
 import { isValidTimeZoneName, type TimeZoneOption } from "@/components/clients/helpers";
 import type { ContentKind } from "@/app/generated/prisma/client";
 import { KindIcon } from "@/components/posts/kind-badge";
 import { NETWORKS, NETWORK_LABELS, isNetwork, type Network } from "@/lib/domain";
+import { findBrandByName, usableLogoUrl } from "@/lib/metricool/import";
 import { KIND_UI, sortKinds } from "@/lib/variant";
 
 export interface ClientFormValues {
@@ -82,6 +90,10 @@ export default function ClientForm({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [logoBroken, setLogoBroken] = useState(false);
+  // Where the chosen brand came from: the name match picks it, the person overrides.
+  const [brandSource, setBrandSource] = useState<"none" | "auto" | "manual">("none");
+  // A time zone the person chose: a brand never overrides it.
+  const [zoneTouched, setZoneTouched] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const timezone = zoneChoice === OTHER_ZONE ? customZone.trim() : zoneChoice;
@@ -125,15 +137,57 @@ export default function ClientForm({
     );
   }
 
-  /** Copies time zone and connected networks from the selected brand. */
+  /** Copies the brand's time zone and networks over the form's (the "Usa…" button). */
   function applyBrandSettings() {
     if (!selectedBrand) return;
     if (selectedBrand.timezone && isValidTimeZoneName(selectedBrand.timezone)) {
       setTimezone(selectedBrand.timezone);
+      setZoneTouched(true);
     }
     const brandNetworks = selectedBrand.networks.filter(isNetwork);
     if (brandNetworks.length > 0) update("networks", brandNetworks);
-    if (!values.name.trim()) update("name", selectedBrand.label);
+  }
+
+  /** The brand differs from the form in time zone or networks: offer to copy them. */
+  const brandDiffers =
+    selectedBrand !== null &&
+    ((Boolean(selectedBrand.timezone) && isValidTimeZoneName(selectedBrand.timezone ?? "") && selectedBrand.timezone !== timezone) ||
+      (selectedBrand.networks.filter(isNetwork).length > 0 &&
+        [...selectedBrand.networks.filter(isNetwork)].sort().join() !== [...values.networks].sort().join()));
+
+  /** Chooses (or clears) the brand and fills what is still empty. */
+  function pickBrand(blogId: string, source: "auto" | "manual") {
+    const brand = brandList.find((b) => b.blogId === blogId) ?? null;
+    setBrandSource(blogId ? source : "manual");
+    setNotice(null);
+    setValues((current) => {
+      const next = { ...current, metricoolBlogId: blogId };
+      if (!brand) return next;
+      if (!next.name.trim()) next.name = brand.label;
+      const logo = usableLogoUrl(brand.imageUrl);
+      if (!next.logoUrl.trim() && logo) next.logoUrl = logo;
+      const brandNetworks = brand.networks.filter(isNetwork);
+      if (next.networks.length === 0 && brandNetworks.length > 0) next.networks = brandNetworks;
+      return next;
+    });
+    if (brand) setLogoBroken(false);
+    // A new client takes the brand's time zone unless one was chosen on purpose.
+    if (brand && mode === "create" && !zoneTouched && brand.timezone && isValidTimeZoneName(brand.timezone)) {
+      setTimezone(brand.timezone);
+    }
+  }
+
+  /** Name field: in a new client, a name that matches a brand picks that brand. */
+  function changeName(name: string) {
+    update("name", name);
+    if (mode !== "create" || !socialService || brands.status !== "ok" || brandSource === "manual") return;
+    const match = findBrandByName(name, brandList);
+    if (match && match.blogId !== values.metricoolBlogId) pickBrand(match.blogId, "auto");
+    else if (!match && brandSource === "auto") {
+      // The match went away (the name changed): drop the brand it had picked.
+      setBrandSource("none");
+      setValues((current) => ({ ...current, name, metricoolBlogId: "" }));
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -190,7 +244,7 @@ export default function ClientForm({
             <input
               id="client-name"
               value={values.name}
-              onChange={(e) => update("name", e.target.value)}
+              onChange={(e) => changeName(e.target.value)}
               maxLength={120}
               required
               placeholder="Es. Pasticceria Rossi"
@@ -282,35 +336,26 @@ export default function ClientForm({
             </label>
             {brands.status === "ok" ? (
               <>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <select
-                    id="client-brand"
-                    value={values.metricoolBlogId}
-                    onChange={(e) => update("metricoolBlogId", e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Nessun brand collegato</option>
-                    {brandList.map((brand) => (
-                      <option key={brand.blogId} value={brand.blogId}>
-                        {brand.label}
-                      </option>
-                    ))}
-                    {brandMissing && (
-                      <option value={values.metricoolBlogId}>
-                        Brand {values.metricoolBlogId} (non trovato su Metricool)
-                      </option>
+                <BrandPicker
+                  id="client-brand"
+                  brands={brandList}
+                  value={values.metricoolBlogId}
+                  onChange={(blogId) => pickBrand(blogId, "manual")}
+                />
+                {brandSource === "auto" && selectedBrand && (
+                  <p className="text-xs text-success" data-testid="brand-auto-match">
+                    Trovato su Metricool: {selectedBrand.label}. Controlla che sia quello giusto.
+                  </p>
+                )}
+                {selectedBrand && (
+                  <SelectedBrand brand={selectedBrand} onClear={() => pickBrand("", "manual")}>
+                    {brandDiffers && (
+                      <button type="button" onClick={applyBrandSettings} className="btn btn-sm">
+                        Usa fuso e reti del brand
+                      </button>
                     )}
-                  </select>
-                  {selectedBrand && (selectedBrand.timezone || selectedBrand.networks.length > 0) && (
-                    <button
-                      type="button"
-                      onClick={applyBrandSettings}
-                      className="shrink-0 rounded border border-border px-3 py-2 text-sm text-muted hover:text-foreground"
-                    >
-                      Usa fuso e reti del brand
-                    </button>
-                  )}
-                </div>
+                  </SelectedBrand>
+                )}
                 {brandList.length === 0 && (
                   <p className="text-xs text-warning">
                     Nessun brand trovato sull&apos;account Metricool collegato.
@@ -318,7 +363,8 @@ export default function ClientForm({
                 )}
                 {brandMissing && (
                   <p className="text-xs text-warning">
-                    Il brand salvato non risulta più tra quelli dell&apos;account Metricool: scegline un altro.
+                    Il brand salvato ({values.metricoolBlogId}) non risulta più tra quelli dell&apos;account
+                    Metricool: scegline un altro.
                   </p>
                 )}
                 {brands.fake && (
@@ -366,7 +412,10 @@ export default function ClientForm({
             <select
               id="client-timezone"
               value={zoneChoice}
-              onChange={(e) => setZoneChoice(e.target.value)}
+              onChange={(e) => {
+                setZoneChoice(e.target.value);
+                setZoneTouched(true);
+              }}
               className={inputClass}
             >
               {timeZoneOptions.map((option) => (
@@ -380,7 +429,10 @@ export default function ClientForm({
               <input
                 aria-label="Nome del fuso orario"
                 value={customZone}
-                onChange={(e) => setCustomZone(e.target.value)}
+                onChange={(e) => {
+                  setCustomZone(e.target.value);
+                  setZoneTouched(true);
+                }}
                 placeholder="Es. America/Montevideo"
                 autoCapitalize="none"
                 autoCorrect="off"

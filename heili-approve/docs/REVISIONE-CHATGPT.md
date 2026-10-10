@@ -33,7 +33,7 @@ Online su `https://approve.heili.cloud` (VPS Hostinger, Docker, dietro Caddy).
 - BullMQ + Redis: worker `worker/approval-worker.ts` (programmazione Metricool, email), cron `scripts/cron.sh`.
 - Tailwind 4 con i token del design system Heili (`app/globals.css`: classi `.panel`, `.inset`, `.btn*`,
   `.field`, `.chip*`, `.label-caps`).
-- Test: Vitest (542 test, `__tests__/`) e Playwright end-to-end (33 test, `e2e/`).
+- Test: Vitest (574 test, `__tests__/`) e Playwright end-to-end (37 test, `e2e/`).
 - Una sola immagine Docker; `APP_VARIANT=all` in produzione (social + blog + ads in un'unica app).
 
 ## Mappa del codice

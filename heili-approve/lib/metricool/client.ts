@@ -14,7 +14,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db/client";
 import { decryptSecret } from "@/lib/crypto";
-import { getMetricoolApiBase } from "@/lib/env";
+import { getBaseUrl, getMetricoolApiBase } from "@/lib/env";
 import { NETWORKS, type Network } from "@/lib/domain";
 import type { MetricoolSchedulerPayload } from "@/lib/metricool/payload";
 
@@ -139,11 +139,15 @@ export function metricoolErrorFromResponse(status: number, body: unknown): Metri
 
 export interface MetricoolBrand {
   blogId: string;
+  /** Trimmed; "Brand <id>" when Metricool sends none. */
   label: string;
   timezone: string | null;
+  /** Brand logo (Metricool's `image`, also `picture` / `avatar` / `logo`). */
   avatarUrl: string | null;
-  /** Networks with a connected account, when the profile says so. */
+  /** Publishing networks with a connected account (ads accounts are not publishing networks). */
   networks: Network[];
+  /** Account name / handle per connected network, when Metricool tells it (e.g. instagram: "pharmera"). */
+  accounts: Partial<Record<Network, string>>;
 }
 
 /** Profile fields that, when non-empty, mean the network is connected. */
@@ -160,6 +164,27 @@ const NETWORK_PROFILE_FIELDS: Record<Network, string[]> = {
   bluesky: ["bluesky", "blueskyHandle"],
 };
 
+/**
+ * Keys of the `networksData` object of a brand, one per publishing network.
+ * The ads accounts (`facebookAdsData`, `googleAdsData`, `tiktokAdsData`) are
+ * deliberately absent: they cannot receive scheduled posts.
+ */
+const NETWORKS_DATA_KEYS: Record<Network, string> = {
+  instagram: "instagramData",
+  facebook: "facebookData",
+  linkedin: "linkedinData",
+  tiktok: "tiktokData",
+  twitter: "twitterData",
+  threads: "threadsData",
+  pinterest: "pinterestData",
+  youtube: "youtubeData",
+  gmb: "gbpData",
+  bluesky: "blueskyData",
+};
+
+/** Keys of a network's data object that hold its account name, most telling first. */
+const ACCOUNT_NAME_KEYS = ["username", "handle", "screenName", "name", "title", "displayName", "account"];
+
 function firstString(record: Record<string, unknown>, keys: string[]): string | null {
   for (const key of keys) {
     const value = record[key];
@@ -175,6 +200,25 @@ function isConnectedValue(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   if (Array.isArray(value)) return value.length > 0;
   return typeof value === "object" && value !== null;
+}
+
+/** A `<network>Data` value that describes a connected account (not null, not an empty shell). */
+function isNetworkDataConnected(value: unknown): boolean {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.values(value as Record<string, unknown>).some(
+      (entry) => entry !== null && entry !== undefined && entry !== "" && entry !== false
+    );
+  }
+  return isConnectedValue(value);
+}
+
+/** Account name from a `<network>Data` value or a legacy profile string, if any. */
+function accountHint(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return firstString(value as Record<string, unknown>, ACCOUNT_NAME_KEYS);
+  }
+  return null;
 }
 
 function unwrapList(json: unknown): unknown[] {
@@ -197,16 +241,29 @@ export function parseBrands(json: unknown): MetricoolBrand[] {
     const blogId = firstString(record, ["blogId", "id", "blog_id"]);
     if (!blogId) continue;
 
-    const networks = NETWORKS.filter((network) =>
-      NETWORK_PROFILE_FIELDS[network].some((key) => isConnectedValue(record[key]))
-    );
+    const networksData =
+      record.networksData && typeof record.networksData === "object" && !Array.isArray(record.networksData)
+        ? (record.networksData as Record<string, unknown>)
+        : {};
+
+    const networks: Network[] = [];
+    const accounts: Partial<Record<Network, string>> = {};
+    for (const network of NETWORKS) {
+      const data = networksData[NETWORKS_DATA_KEYS[network]];
+      const legacyKey = NETWORK_PROFILE_FIELDS[network].find((key) => isConnectedValue(record[key]));
+      if (!isNetworkDataConnected(data) && !legacyKey) continue;
+      networks.push(network);
+      const hint = accountHint(data) ?? (legacyKey ? accountHint(record[legacyKey]) : null);
+      if (hint) accounts[network] = hint;
+    }
 
     brands.push({
       blogId,
       label: firstString(record, ["label", "name", "title", "brandName"]) ?? `Brand ${blogId}`,
       timezone: firstString(record, ["timezone", "timeZone", "tz"]),
-      avatarUrl: firstString(record, ["picture", "avatar", "image", "logo"]),
+      avatarUrl: firstString(record, ["image", "picture", "avatar", "logo"]),
       networks,
+      accounts,
     });
   }
   return brands;
@@ -229,22 +286,84 @@ export function isMetricoolFake(): boolean {
 /** Fake-mode marker: a post whose text contains it fails as rejected (422). */
 export const FAKE_FAILURE_MARKER = "[metricool:fail]";
 
-const FAKE_BRANDS: MetricoolBrand[] = [
-  {
-    blogId: "fake-1001",
-    label: "Brand demo (Metricool finto)",
-    timezone: "Europe/Rome",
-    avatarUrl: null,
-    networks: ["instagram", "facebook", "linkedin", "tiktok"],
-  },
-  {
-    blogId: "fake-1002",
-    label: "Secondo brand demo (Metricool finto)",
-    timezone: "Europe/Madrid",
-    avatarUrl: null,
-    networks: ["instagram", "facebook", "youtube", "pinterest", "gmb"],
-  },
-];
+/** One connected account in the shape of Metricool's `networksData` entries. */
+const fakeAccount = (username: string) => ({ username, connected: true });
+
+/** Raw entries shaped like `GET /admin/simpleProfiles` (also exercises parseBrands). */
+function fakeBrandEntries(): Record<string, unknown>[] {
+  const logo = (n: number) => `${getBaseUrl()}/fake-brands/brand-${n}.svg`;
+  const base = { userId: 1234567 };
+  return [
+    {
+      ...base, id: "fake-1001", label: "Pharmera ", image: logo(1), timezone: "Europe/Rome",
+      networksData: {
+        facebookData: fakeAccount("Pharmera"), instagramData: fakeAccount("pharmera.it"),
+        linkedinData: fakeAccount("pharmera-srl"), twitterData: null, facebookAdsData: fakeAccount("act_1001"),
+      },
+    },
+    {
+      ...base, id: "fake-1002", label: "Osteria del Borgo", image: logo(2), timezone: "Europe/Rome",
+      networksData: {
+        facebookData: fakeAccount("Osteria del Borgo"), instagramData: fakeAccount("osteriadelborgo"),
+        tiktokData: fakeAccount("osteriadelborgo"), googleAdsData: fakeAccount("123-456-7890"),
+      },
+    },
+    {
+      ...base, id: "fake-1003", label: "Atelier Lumen", image: logo(3), timezone: "Europe/Rome",
+      networksData: {
+        instagramData: fakeAccount("atelier.lumen"), pinterestData: fakeAccount("atelierlumen"),
+        youtubeData: fakeAccount("Atelier Lumen"),
+      },
+    },
+    {
+      ...base, id: "fake-1004", label: "Casa Mediterranea", image: logo(4), timezone: "Europe/Madrid",
+      networksData: {
+        facebookData: fakeAccount("Casa Mediterranea"), instagramData: fakeAccount("casamediterranea"),
+        gbpData: fakeAccount("Casa Mediterranea - Valencia"),
+      },
+    },
+    {
+      // No label: the app falls back to "Brand <id>".
+      ...base, id: "fake-1005", image: logo(5), timezone: "Europe/Rome",
+      networksData: { instagramData: fakeAccount("brand1005"), tiktokAdsData: fakeAccount("7000000000") },
+    },
+    {
+      ...base, id: "fake-1006", label: "Studio Dentistico Bianchi", image: logo(6), timezone: "Europe/Rome",
+      networksData: {
+        facebookData: fakeAccount("Studio Dentistico Bianchi"), gbpData: fakeAccount("Studio Dentistico Bianchi"),
+        linkedinData: fakeAccount("studio-bianchi"),
+      },
+    },
+    {
+      ...base, id: "fake-1007", label: "Gelateria Nuvola", image: logo(7), timezone: "Europe/Rome",
+      networksData: {
+        instagramData: fakeAccount("gelateria.nuvola"), tiktokData: fakeAccount("gelateria.nuvola"),
+        threadsData: fakeAccount("gelateria.nuvola"),
+      },
+    },
+    {
+      ...base, id: "fake-1008", label: "Tech4Kids Academy", image: logo(8), timezone: "Europe/London",
+      networksData: {
+        youtubeData: fakeAccount("Tech4Kids Academy"), linkedinData: fakeAccount("tech4kids"),
+        twitterData: fakeAccount("tech4kids"), blueskyData: fakeAccount("tech4kids.bsky.social"),
+      },
+    },
+    {
+      ...base, id: "fake-1009", label: "Villa Serena Resort", image: logo(9), timezone: "Europe/Lisbon",
+      networksData: {
+        facebookData: fakeAccount("Villa Serena Resort"), instagramData: fakeAccount("villaserenaresort"),
+        gbpData: fakeAccount("Villa Serena Resort"), facebookAdsData: fakeAccount("act_1009"),
+      },
+    },
+    {
+      ...base, id: "fake-1010", label: "Officina Verde", image: logo(10), timezone: "America/Bogota",
+      networksData: {
+        instagramData: fakeAccount("officinaverde"), facebookData: fakeAccount("Officina Verde"),
+        tiktokData: fakeAccount("officinaverde"),
+      },
+    },
+  ];
+}
 
 export interface MetricoolClientOptions {
   userId: string;
@@ -327,7 +446,7 @@ export class MetricoolClient {
 
   /** Brands (Metricool "profiles") the account can publish to. */
   async listBrands(): Promise<MetricoolBrand[]> {
-    if (this.fake) return FAKE_BRANDS.map((brand) => ({ ...brand, networks: [...brand.networks] }));
+    if (this.fake) return parseBrands(fakeBrandEntries());
     const json = await this.request("GET", "/admin/simpleProfiles", { userId: this.userId });
     return parseBrands(json);
   }
@@ -383,17 +502,22 @@ export class MetricoolClient {
     return { metricoolPostId };
   }
 
-  /** Cheap credential check for the settings page. Never throws. */
-  async testConnection(): Promise<MetricoolConnectionResult> {
+  /** Credential check that also returns the brands (settings page). Never throws. */
+  async checkConnection(): Promise<{ ok: true; brands: MetricoolBrand[] } | { ok: false; error: string }> {
     try {
-      const brands = await this.listBrands();
-      return { ok: true, brandCount: brands.length };
+      return { ok: true, brands: await this.listBrands() };
     } catch (error) {
       return {
         ok: false,
         error: error instanceof MetricoolError ? error.message : "Errore imprevisto durante la verifica di Metricool.",
       };
     }
+  }
+
+  /** Cheap credential check for the settings page. Never throws. */
+  async testConnection(): Promise<MetricoolConnectionResult> {
+    const result = await this.checkConnection();
+    return result.ok ? { ok: true, brandCount: result.brands.length } : result;
   }
 }
 

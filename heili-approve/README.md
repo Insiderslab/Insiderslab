@@ -314,7 +314,7 @@ del server.
 **Metricool finto.** Con `METRICOOL_FAKE=1`:
 
 - non parte nessuna chiamata di rete;
-- i brand sono `fake-1001` e `fake-1002`;
+- i brand sono 10, `fake-1001`…`fake-1010`, nella forma dell'elenco reale di Metricool (con logo, reti, un nome con spazio finale e uno senza nome), per provare l'importazione offline;
 - il worker stampa nel suo log il payload esatto che avrebbe inviato (`[Metricool fake] payload {...}`);
 - un post con `[metricool:fail]` nel testo simula un rifiuto (422).
 
@@ -324,7 +324,7 @@ del server.
 npx prisma generate
 npx tsc --noEmit --incremental false
 npm run lint
-npx vitest run            # 542 test unitari
+npx vitest run            # 574 test unitari
 npm run build
 ```
 
@@ -493,18 +493,31 @@ Un database locale creato con `db push` va segnato una volta con
 
 ## Collegare Metricool
 
-1. Su Metricool, apri **Impostazioni account → API** (serve il piano Advanced o
-   superiore) e copia il **token API**. Lo **userId** è il numero nell'URL
-   dell'app (`…?userId=1234567`). Puoi incollare anche l'URL intero: l'app tiene
-   solo il numero.
-2. In Approve: **Impostazioni → Metricool**, inserisci userId e token, poi
-   **Prova connessione**.
-   - Il token viene salvato cifrato (AES-256-GCM con `ENCRYPTION_KEY`) e non lascia
-     mai il server.
+1. In Approve apri **Impostazioni → Metricool**: c'è una breve guida in tre passi.
+   Su Metricool vai in **Impostazioni dell'account → API** (serve un piano che
+   include le API): **token** e **ID utente** sono nella stessa pagina.
+2. Incolla il token e l'ID utente (puoi incollare anche l'URL di Metricool: l'app
+   tiene solo il numero) e premi **Collega e verifica**. Le credenziali vengono
+   salvate **solo se** la chiamata di prova riesce; poi compare «Collegato: N brand
+   trovati» con i primi loghi.
+   - Il token viene salvato cifrato (AES-256-GCM con `ENCRYPTION_KEY`), non lascia
+     mai il server e non viene mai mostrato di nuovo (solo le ultime 4 cifre).
    - Solo titolari e amministratori possono cambiarlo.
-3. Per ogni cliente, nella sua scheda, scegli il **brand Metricool** dall'elenco
-   (diventa il `blogId`). Imposta anche il fuso orario e le reti abilitate.
-4. Con **"Programma automaticamente dopo l'approvazione"** attivo, un post approvato parte subito verso
+3. Premi **Importa i clienti da Metricool** (o **Clienti → Importa da Metricool**,
+   pagina `/clients/import`). Ogni brand è una riga con logo, reti e fuso orario;
+   per ciascuno scegli **Crea nuovo cliente**, **Collega a cliente esistente** o
+   **Ignora**. Se il nome coincide con un cliente che hai già (senza badare a
+   maiuscole, accenti e spazi) il collegamento è già proposto. I brand già
+   collegati sono saltati, quindi si può rifare senza creare doppioni. Un cliente
+   creato prende nome, logo, fuso e reti dal brand, con servizio *Post social* e
+   programmazione automatica; un cliente esistente prende solo il brand e, se
+   mancano, logo e reti (il suo fuso orario non cambia). Solo titolari e
+   amministratori possono importare.
+4. Poi, nella scheda di ogni cliente, aggiungi chi approva e copia il suo link.
+   Un cliente si può collegare anche a mano: nella scheda, il **brand Metricool**
+   si sceglie da un elenco con ricerca (logo, nome, reti); in un cliente nuovo,
+   scrivendo il nome compare «Trovato su Metricool» e il brand è già scelto.
+5. Con **"Programma automaticamente dopo l'approvazione"** attivo, un post approvato parte subito verso
    Metricool. Se è disattivata, resta "Approvato" finché l'agenzia non preme
    **Programma ora**.
 
