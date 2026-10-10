@@ -58,7 +58,7 @@ import { getPortalReviewer } from "../../reviewer";
 type ReviewPostPageProps = {
   params: Promise<{ token: string; postId: string }>;
   /** `?da=sfoglia|griglia&i=3&mese=2026-10`: opened from a month view, with the way back. */
-  searchParams?: Promise<{ da?: string | string[]; i?: string | string[]; mese?: string | string[] }>;
+  searchParams?: Promise<{ da?: string | string[]; i?: string | string[]; mese?: string | string[]; heili?: string | string[] }>;
 };
 
 async function loadPost(postId: string, reviewer: ReviewerRef): Promise<ReviewerPost> {
@@ -148,7 +148,10 @@ function blogContentOf(version: ReviewerPostVersion): BlogContent {
  */
 export default async function ReviewPostPage({ params, searchParams }: ReviewPostPageProps) {
   const { token, postId } = await params;
-  const origin = parsePostReturn((await searchParams) ?? {});
+  const query = (await searchParams) ?? {};
+  const origin = parsePostReturn(query);
+  // `?heili=1` (from Sfoglia's "Parla con Heili"): open the assistant right away.
+  const openAssistant = (Array.isArray(query.heili) ? query.heili[0] : query.heili) === "1";
   const reviewer = await getPortalReviewer(token);
   if (!reviewer) return null; // the layout shows the invalid-link page
 
@@ -409,6 +412,7 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
         }}
         queue={queue}
         assistantEnabled={assistantEnabled}
+        openAssistant={openAssistant}
         publishInPast={post.publishAt.getTime() < now.getTime()}
         changesSlot={changes ? <VersionChanges changes={changes} currentNumber={current.number} /> : undefined}
         historySlot={historySlot}

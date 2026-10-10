@@ -19,6 +19,7 @@
  */
 
 import Link from "next/link";
+import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { approveMonthAction, approvePlanAction, approvePostAction } from "@/app/review/[token]/actions";
@@ -73,6 +74,7 @@ export default function Browse({
   clientName,
   logoUrl,
   timeZone,
+  assistantEnabled = false,
 }: {
   token: string;
   scope: BrowseScope;
@@ -87,6 +89,8 @@ export default function Browse({
   clientName: string;
   logoUrl: string | null;
   timeZone: string;
+  /** Heili is on: "Parla con Heili" opens the post with the assistant already open. */
+  assistantEnabled?: boolean;
 }) {
   const router = useRouter();
   const regionRef = useRef<HTMLElement>(null);
@@ -404,7 +408,18 @@ export default function Browse({
                   {busy ? "Approvo…" : "Approva"}
                 </button>
               </div>
-            ) : (
+            ) : null}
+            {state === "waiting" && assistantEnabled ? (
+              <Link
+                href={`${commentHref(post)}&heili=1`}
+                className="btn btn-quiet min-h-11 w-full !text-base"
+                data-testid="browse-heili"
+              >
+                <HeiliAssistantIcon className="h-6 w-6" />
+                Parla con Heili
+              </Link>
+            ) : null}
+            {state === "waiting" ? null : (
               <div className="flex gap-3">
                 {state === "feedback" && (
                   <Link href={commentHref(post)} className="btn btn-primary min-h-12 flex-1 !text-base" data-testid="browse-open-post">

@@ -178,6 +178,17 @@ export function AssistantActionButton({ onToggle }: { onToggle: () => void }) {
   );
 }
 
+/**
+ * Subtitle of "Cosa ne pensi?". Heili works only while the version waits for a
+ * decision: after "Chiedi modifiche" the client can still write or dictate, and
+ * Heili comes back with the agency's new version.
+ */
+export function feedbackHint(canAct: boolean, assistantEnabled: boolean): string {
+  if (!assistantEnabled) return "Scrivilo oppure dettalo.";
+  if (canAct) return "Scrivilo, dettalo oppure parlane con Heili.";
+  return "Scrivilo oppure dettalo. Heili torna disponibile quando l'agenzia invia la nuova versione.";
+}
+
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */
 export function DecisionBar({ children }: { children: ReactNode }) {
   return (

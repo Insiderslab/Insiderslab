@@ -35,6 +35,7 @@ import {
   savedFeedbackBlocker,
   UNSAVED_COMMENT_MESSAGE,
   OpenFeedbackNotice,
+  feedbackHint,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
 
@@ -445,7 +446,7 @@ export default function BlogReview({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
             <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-            <p className="mt-1 text-sm text-muted">Scrivilo, dettalo oppure parlane con Heili.</p>
+            <p className="mt-1 text-sm text-muted">{feedbackHint(canAct, assistantEnabled)}</p>
           </div>
           {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
         </div>

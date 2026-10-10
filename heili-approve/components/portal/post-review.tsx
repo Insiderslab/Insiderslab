@@ -14,7 +14,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ContentKind } from "@/app/generated/prisma/client";
 import { approvePostAction, addCommentAction, requestChangesAction } from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
@@ -36,6 +36,7 @@ import {
   savedFeedbackBlocker,
   UNSAVED_COMMENT_MESSAGE,
   OpenFeedbackNotice,
+  feedbackHint,
 } from "./review-pieces";
 import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
 
@@ -49,6 +50,8 @@ export interface PostReviewProps {
   client: PortalClient;
   queue: PortalQueue;
   assistantEnabled: boolean;
+  /** Open Heili as the page loads (Sfoglia's "Parla con Heili"). */
+  openAssistant?: boolean;
   /** The publish date is already behind us (the agency will pick a new one). */
   publishInPast: boolean;
   /** Server-rendered "Cosa è cambiato" block, if the post has earlier versions. */
@@ -67,6 +70,7 @@ export default function PostReview({
   client,
   queue,
   assistantEnabled,
+  openAssistant = false,
   publishInPast,
   changesSlot,
   historySlot,
@@ -90,7 +94,8 @@ export default function PostReview({
   const [seek, setSeek] = useState<PreviewSeek | undefined>(undefined);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const openedOnArrival = openAssistant && assistantEnabled && post.canAct;
+  const [assistantOpen, setAssistantOpen] = useState(openedOnArrival);
 
   const [sheet, setSheet] = useState<null | "approve">(null);
   const [sheetBusy, setSheetBusy] = useState(false);
@@ -362,6 +367,12 @@ export default function PostReview({
     finish("changes");
   }
 
+  // Arrived from "Parla con Heili" (open from the first render): bring Heili into view.
+  useEffect(() => {
+    if (!openedOnArrival) return;
+    requestAnimationFrame(() => assistantRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  }, [openedOnArrival]);
+
   async function toggleAssistant() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
@@ -520,7 +531,7 @@ export default function PostReview({
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
                 <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-                <p className="mt-1 text-sm text-muted">Scrivilo, dettalo oppure parlane con Heili.</p>
+                <p className="mt-1 text-sm text-muted">{feedbackHint(canAct, assistantEnabled)}</p>
               </div>
               {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
             </div>

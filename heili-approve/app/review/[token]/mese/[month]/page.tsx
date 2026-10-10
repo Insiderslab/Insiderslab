@@ -9,6 +9,7 @@ import { monthRouteAllowed, parseMonthView, parsePosition, selectMonthPosts, typ
 import { isPlanMonth, planMonthName, planMonthOf, planProgress } from "@/lib/plan-rules";
 import { listPostsForReviewer, type ReviewerRef } from "@/lib/posts";
 import { isKindEnabled } from "@/lib/variant";
+import { isAssistantEnabled } from "@/lib/review-assistant";
 import { getPortalReviewer } from "../../reviewer";
 
 type ReviewMonthPageProps = {
@@ -70,6 +71,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
             clientName={reviewer.client.name}
             logoUrl={reviewer.client.logoUrl}
             timeZone={timeZone}
+            assistantEnabled={isAssistantEnabled()}
           />
         ) : (
           <MonthGrid

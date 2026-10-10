@@ -21,6 +21,7 @@ import { parseMonthView, parsePosition, type MonthView } from "@/lib/month-rules
 import { byPublishAsc, instagramGridOrder, planHeading, planMonthName, planProgress } from "@/lib/plan-rules";
 import { getPlanForReviewer, openClientCommentCounts, type ReviewerPlan } from "@/lib/plans";
 import { listPostsForReviewer, type ReviewerRef } from "@/lib/posts";
+import { isAssistantEnabled } from "@/lib/review-assistant";
 import { getPortalReviewer } from "../../reviewer";
 
 type PlanSearch = { vista?: string | string[]; i?: string | string[] };
@@ -129,6 +130,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
               clientName={reviewer.client.name}
               logoUrl={reviewer.client.logoUrl}
               timeZone={timeZone}
+              assistantEnabled={isAssistantEnabled()}
             />
           ) : (
             <MonthGrid
