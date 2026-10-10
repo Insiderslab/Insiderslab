@@ -1239,7 +1239,7 @@ export async function createPost(
   workspaceId: string,
   input: PostInput,
   actor: Actor,
-  imported?: { key: string; hash: string; tokenId?: string | null; source?: "automation" | "panel" }
+  imported?: { key: string; hash: string; tokenId?: string | null; source?: "automation" | "panel" | "mcp"; via?: string | null }
 ): Promise<Post> {
   // Reject invalid input / disabled products before opening a DB transaction.
   assertKindEnabled(parseOrThrow(postInputSchema, input).kind ?? "SOCIAL_POST");
@@ -1294,6 +1294,8 @@ export async function createPost(
               source: imported.source ?? "automation",
               externalId: imported.key,
               ...(imported.tokenId ? { tokenId: imported.tokenId } : {}),
+              // MCP over OAuth: which AI app (the token's azp) created the draft.
+              ...(imported.via ? { via: imported.via } : {}),
             }
           : {}),
       },

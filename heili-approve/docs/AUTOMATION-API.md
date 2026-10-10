@@ -6,6 +6,8 @@ Interfaccia comune per Codex, Claude e altri client HTTP. Il flusso completo e i
 
 In Impostazioni ogni membro può creare una propria chiave (30 giorni dalla UI, massimo 10 attive). Il token `approve_auto_…` viene mostrato una volta; il database conserva soltanto SHA-256. Inviare `Authorization: Bearer <token>` tramite HTTPS. La chiave è limitata al workspace di creazione e perde accesso quando scade, viene revocata o il membro viene rimosso. Le sessioni browser e i token cliente non autenticano questi endpoint.
 
+La stessa chiave autentica anche il server MCP (`POST /mcp`, [COLLEGARE-AI-MCP.md](COLLEGARE-AI-MCP.md)): le bozze create da lì usano gli stessi controlli, la stessa protezione dai duplicati (chiave `mcp:<source_id>`) e lo stesso limite giornaliero di questa API.
+
 ## Contratto HTTP
 
 | Metodo | Percorso | Risposta `data` |

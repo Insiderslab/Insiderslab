@@ -11,6 +11,9 @@ import { AutomationError } from "./auth";
  * strict input checks, domain validation (validatePostDraft), the content hash
  * and the idempotency rules (importKey / importHash) cannot drift apart.
  *
+ * The MCP server (lib/mcp, tool create_draft_posts) is a third caller of the same
+ * functions (source "mcp").
+ *
  * Imported posts are always DRAFTs: nothing here submits, approves or schedules.
  */
 
@@ -55,7 +58,7 @@ export async function importPreparedDraft(
   context: DraftContext,
   prepared: PreparedDraft,
   externalId: string,
-  options: { hash?: string; source?: "automation" | "panel" } = {}
+  options: { hash?: string; source?: "automation" | "panel" | "mcp"; via?: string | null } = {}
 ) {
   const hash = options.hash ?? prepared.hash;
   const where = { workspaceId_importKey: { workspaceId: context.workspaceId, importKey: externalId } };
@@ -70,6 +73,7 @@ export async function importPreparedDraft(
   try {
     const post = await createPost(context.workspaceId, prepared.post, userActor(context.userId), {
       key: externalId, hash, tokenId: context.tokenId ?? null, source: options.source ?? "automation",
+      ...(options.via ? { via: options.via } : {}),
     });
     return { post: { id: post.id, status: post.status }, replayed: false };
   } catch (error) {

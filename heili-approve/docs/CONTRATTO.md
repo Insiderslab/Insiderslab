@@ -31,6 +31,10 @@ Codex e Claude usano la stessa interfaccia documentata in [AGENT-IMPORT.md](AGEN
 
 L'importazione v1 crea solo bozze social attraverso `createPost`, mantenendo validazione di dominio, versione e audit. Non invia notifiche, non approva, non programma. Il dry-run non scrive. `externalId` è stabile e univoco per workspace: stessa chiave e stessi dati restituiscono il post già creato, dati diversi restituiscono 409. Non sostituire automaticamente un post già presente.
 
+## Server MCP (Claude, ChatGPT, Codex)
+
+`POST /mcp` (`app/mcp/route.ts`, logica in `lib/mcp/`) è un server MCP remoto, stateless: un assistente collegato lavora come l'utente che l'ha collegato, solo nei suoi workspace (stesso perimetro del pannello, id altrui = «non trovato»). Accetta un access token OAuth dello stesso tenant Auth0 di Heili (utente trovato dall'email verificata, mai creato; scope `approve:read` / `approve:draft`) oppure una chiave di automazione personale. Legge e **prepara solo bozze**: `create_draft_posts` riusa `prepareDraft`/`importPreparedDraft` e `validateForNetworks` (come «Importa post» e l'API di automazione, sorgente `mcp`); non esistono strumenti per approvare, inviare, programmare, pubblicare, annullare o cambiare impostazioni. Guida: [COLLEGARE-AI-MCP.md](COLLEGARE-AI-MCP.md).
+
 ## Già pronto (non riscrivere)
 
 | File | Cosa |

@@ -1,10 +1,11 @@
 /**
  * Settings Page
  *
- * Metricool connection (userId + API token) and team. The token is
- * decrypted here only to compute its last 4 characters: the token itself is
- * never passed to a client component. Instances without social posts (blog,
- * ads) have no Metricool section: only the team.
+ * AI connections (personal keys, MCP address), Metricool connection (userId +
+ * API token) and team. The Metricool token is decrypted here only to compute
+ * its last 4 characters: the token itself is never passed to a client
+ * component. Instances without social posts (blog, ads) have no Metricool
+ * section: only the team.
  */
 
 import { redirect } from "next/navigation";
@@ -13,6 +14,8 @@ import { secretTail } from "@/components/settings/helpers";
 import MetricoolSettings from "@/components/settings/metricool-settings";
 import TeamSettings from "@/components/settings/team-settings";
 import AutomationSettings from "@/components/settings/automation-settings";
+import McpSettings from "@/components/settings/mcp-settings";
+import { getMcpConfig } from "@/lib/mcp/config";
 import { prisma } from "@/lib/db/client";
 import { decryptSecret } from "@/lib/crypto";
 import { isMetricoolFake } from "@/lib/metricool/client";
@@ -42,6 +45,7 @@ export default async function SettingsPage() {
   const token = storedTokenTail(workspace.metricoolTokenEncrypted);
   const canManage = canManageWorkspace(context.role);
   const metricool = isMetricoolEnabled();
+  const mcp = getMcpConfig();
   const tokens = await prisma.automationToken.findMany({
     where: { workspaceId: context.workspaceId, userId: context.userId, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" }, take: 10,
@@ -51,6 +55,7 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       <AutomationSettings tokens={tokens.map(token => ({ ...token, expiresAt: token.expiresAt.toISOString() }))} />
+      <McpSettings url={mcp.resource} enabled={mcp.enabled} oauthConfigured={mcp.oauth !== null} />
       {metricool && (
         <section className="panel rounded p-4 sm:p-6">
           <h2 className="mb-1 text-base font-semibold">Metricool</h2>

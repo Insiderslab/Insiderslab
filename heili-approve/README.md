@@ -13,6 +13,14 @@ dell'importatore sotto, e rifare l'importazione non duplica i post.
 [contratto API](docs/AUTOMATION-API.md) e [modello CSV apribile in Excel](docs/templates/approve-posts.csv).
 Le chiavi personali si creano in Impostazioni; l'importatore crea bozze con controllo preventivo e protezione dai duplicati.
 
+**Collegare Claude, ChatGPT o Codex (MCP):** il server MCP remoto `POST /mcp`
+(Impostazioni → «Collega la tua AI (MCP)») permette a un assistente AI di
+**leggere** clienti, post, piani e commenti aperti e di **preparare bozze**
+(`create_draft_posts`, `upload_media`, `create_month_plan`) nei workspace
+dell'utente. Non approva, non invia al cliente, non programma e non pubblica.
+Accetta l'accesso con account (OAuth, stesso tenant Auth0 di Heili) o una chiave
+personale. Guida e checklist Auth0: [docs/COLLEGARE-AI-MCP.md](docs/COLLEGARE-AI-MCP.md).
+
 - L'agenzia (InsidersLab) prepara i post nel pannello: testo, immagini, video e
   Reel, reti, data e ora.
 - Il cliente riceve un **link personale** (niente password) e apre il post dal
@@ -400,6 +408,11 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   swipe, frecce, movimento ridotto, riepilogo e «Approva i rimanenti», worker
   che programma), Griglia con i chip di stato, il mese senza piano dalla home e
   i 404 (altro cliente, mese vuoto o malformato);
+- `mcp.spec.mjs` — server MCP (`POST /mcp`) a livello di richieste, con una chiave
+  personale: 401 e discovery, `initialize` → `tools/list` → `list_clients` →
+  `create_draft_posts` → `get_post` (bozza, idempotenza), isolamento tra workspace e
+  la scheda «Collega la tua AI (MCP)» in Impostazioni a 1366 e 390 px
+  (`E2E_MCP_SHOTS=<cartella>` per salvare gli screenshot);
 - `post-import.spec.mjs` — «Importa post»: scelta del cliente, modello scaricabile,
   foglio e immagini abbinate per nome, righe incollate con errori in rosso e
   correzione, bozze (solo `DRAFT`) con il piano del mese, nessun duplicato

@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 // Agency-only areas. The client portal (/review/...) and public media
-// (/media/...) are deliberately not listed: they authenticate by token.
+// (/media/...) are deliberately not listed: they authenticate by token. So are
+// the MCP endpoint (/mcp) and its /.well-known discovery documents: they use
+// bearer tokens (OAuth or a personal key, lib/mcp) and must never get a login redirect.
 const PROTECTED_PREFIXES = ["/dashboard", "/posts", "/calendar", "/plans", "/clients", "/settings"];
 
 function hasSessionCookie(request: NextRequest): boolean {
