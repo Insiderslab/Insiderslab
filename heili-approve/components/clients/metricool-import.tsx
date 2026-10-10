@@ -238,24 +238,27 @@ export default function MetricoolImport({ rows, candidates, fake }: Props) {
                       >
                         {OPTIONS.map((option) => {
                           const disabled = option.action === "link" && candidates.length === 0;
+                          const checked = choice?.action === option.action;
+                          // Plain buttons (role="radio"), not visually hidden <input>s: focusing an
+                          // off-screen input made Safari jump the page to the bottom.
                           return (
-                            <label
+                            <button
                               key={option.action}
-                              className={`flex min-h-11 cursor-pointer items-center justify-center rounded-md px-1.5 text-center text-[13px] font-semibold leading-tight transition-colors has-[:checked]:bg-accent-soft has-[:checked]:text-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent ${
-                                disabled ? "cursor-not-allowed opacity-50" : "text-muted hover:text-foreground"
+                              type="button"
+                              role="radio"
+                              aria-checked={checked}
+                              disabled={disabled}
+                              onClick={() => chooseAction(row, option.action)}
+                              className={`flex min-h-11 items-center justify-center rounded-md px-1.5 text-center text-[13px] font-semibold leading-tight transition-colors ${
+                                checked
+                                  ? "bg-accent-soft text-accent"
+                                  : disabled
+                                    ? "cursor-not-allowed text-muted opacity-50"
+                                    : "text-muted hover:text-foreground"
                               }`}
                             >
-                              <input
-                                type="radio"
-                                className="sr-only"
-                                name={`choice-${row.blogId}`}
-                                value={option.action}
-                                checked={choice?.action === option.action}
-                                disabled={disabled}
-                                onChange={() => chooseAction(row, option.action)}
-                              />
                               {option.label}
-                            </label>
+                            </button>
                           );
                         })}
                       </div>
