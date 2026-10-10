@@ -17,19 +17,16 @@ Instagram, Facebook e il sito di La Bambola arrivano nei giorni successivi (vedi
 | Pulsante «Collega con Meta» per il +39 347 | il codice c'è; manca il **Configuration ID v4** da Meta |
 | App Secret | da **reimpostare** (era finito in chat) |
 
-## 2. Stanotte (lo faccio io, niente in produzione)
+## 2. Stanotte: cosa è stato fatto (niente in produzione)
 
-1. **PR #8:**
-   - finire le correzioni della revisione: numeri con `+` obbligatorio; accesso anche per i contatti con identificativo nuovo di Meta; la demo non cancella più la tua base di conoscenza; niente lettere perse durante il salvataggio;
-   - ripetere tutte le prove (unità, golden, e2e, sabotaggi), poi **unirla**.
-2. **Script di rilascio unico** (`rilascio-crm.sh` aggiornato):
-   - porta la produzione a main con le PR #7 e #8 (migrazioni attese **14**);
-   - backup prima, controlli del livello canali in modalità «avvisa»;
-   - provato su una copia locale come quello di ieri.
-3. **Richieste dal sito nella Posta** (per La Bambola e per i clienti con un sito):
-   - un indirizzo per organizzazione con chiave propria; il modulo del sito crea contatto e conversazione nella Posta;
-   - spec, test e PR separata. Lo unisco solo se passa tutte le prove, altrimenti resta pronto per lunedì.
-4. **Guida di prova di domani** con l'elenco di cosa controllare, punto per punto (§3.3).
+1. ✅ **PR #8 unita** (`0bc731e`): 9 correzioni dalla revisione e prove ripetute (unità 1069, golden 107, sabotaggi).
+2. ✅ **Script di rilascio pronto**: `rilascio-crm.sh` porta la produzione a `0bc731e` (PR #7 + #8), con migrazioni attese **15**. Prima fa il backup e controlla che non ci siano transazioni lunghe; dopo verifica il livello canali (V1–V7). L'ho provato su un ambiente simulato in tre casi.
+3. 🟡 **Richieste dal sito nella Posta**: [PR #10](https://github.com/Insiderslab/vocero-crm/pull/10), **in bozza**. Funziona e passa tutte le prove (unità 1167, golden 132, e2e 193). È **fuori dal rilascio di domani** perché aspetta due tue decisioni:
+   - **D1, richieste con solo l'email:** se chi scrive dal sito lascia solo l'email e non è ancora un contatto, per ora la richiesta viene rifiutata. Il modulo chiede quindi il telefono come obbligatorio. Accettare anche solo l'email richiede la fase R2 del livello canali (prossima settimana). **Va bene così per La Bambola?** Consiglio: sì, in Venezuela tutti lasciano il WhatsApp.
+   - **D2, nome del canale dei messaggi dal sito:** «web» oppure «form». È solo un'etichetta interna, ma l'ADR dei canali richiede la tua approvazione per ogni valore nuovo. Consiglio: «web».
+
+   Stanotte gira anche una revisione avversaria della PR #10. Dopo le tue risposte la correggo, la unisco e va nel rilascio successivo.
+4. ✅ **Guida di prova di domani** (§3.3).
 
 ## 3. Domattina (tu, circa 45 minuti, in quest'ordine)
 
