@@ -28,6 +28,21 @@ Instagram, Facebook e il sito di La Bambola arrivano nei giorni successivi (vedi
    Stanotte gira anche una revisione avversaria della PR #10. Dopo le tue risposte la correggo, la unisco e va nel rilascio successivo.
 4. ✅ **Guida di prova di domani** (§3.3).
 
+## 2b. Test di usabilità (PDF di Stefano): cosa ne faccio
+
+| Problema del test | Dove si risolve |
+|---|---|
+| **E1, critico:** l'IA va in errore e il cliente resta senza risposta | La causa di stanotte era il credito OpenRouter, già risolto, e il limite `max_tokens` è nella PR #8. Il resto è nel **pacchetto 009**, in lavorazione stanotte: un secondo tentativo dopo 60 s, un messaggio di cortesia configurabile, il filtro «Assistenza umana» in Posta con queste chat in cima, il pulsante «Riprova risposta IA» e un avviso nel CRM |
+| **Punto 4:** dati demo della ferramenta nell'azienda dell'assistente interno | Domattina, `COSA-FARE-ADESSO.md` §D: rinomina dell'azienda, «Rimuovi dati demo» e accesso riservato (PR #8) |
+| **E2/E9:** lingue mescolate (fasi, Laboratorio, «Ficha», date, titolo della scheda, valuta MXN) | Pacchetto 009 |
+| **E3/E6:** falso «Nessun contatto», primo clic perso | Pacchetto 009 (stati di caricamento e ricerca della causa) |
+| **E4:** risposta dell'agente prima della domanda | Pacchetto 009 (ordine deterministico) |
+| **E5:** errori 503 nel precaricamento delle pagine | Pacchetto 009: analisi del codice e della configurazione. Se serve una prova dal server, ti preparo i comandi in sola lettura |
+| **E7/E8/E10:** rifiniture visive | Pacchetto 009 |
+| **Priorità 2–4** (KB modificabile, assegnazione, pagina di sintesi, etichette, inviti, moduli, canali) | Nel piano §4, dopo il 009 e R2 |
+
+Il pacchetto 009 segue lo stesso percorso delle altre PR: prove, revisione separata, correzioni. Va in un rilascio successivo, non in quello di domattina.
+
 ## 3. Domattina (tu, circa 45 minuti, in quest'ordine)
 
 ### 3.1 Rilascio (10 minuti, quasi tutti di attesa)
