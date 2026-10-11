@@ -40,3 +40,10 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: lib/posts.ts, lib/plans.ts, components/share/messages.ts, app/(dashboard)/posts/actions.ts, app/(dashboard)/plans/actions.ts, app/(dashboard)/plans/[id]/page.tsx, components/plans/plan-editor.tsx, components/portal/types.ts, post-review.tsx, plan-review.tsx, month/browse.tsx, app/review/[token]/posts/[postId]/page.tsx, piani/[planId]/page.tsx, mese/[month]/page.tsx, __tests__/plans.test.ts, share-link.test.ts, portal-review.test.ts.
 - Test: nuovo caso in plans.test.ts («flags a client with auto-schedule but no Metricool brand»); casi singolare/plurale in share-link.test.ts; fixture PortalClient aggiornate in portal-review.test.ts. Passo e2e monthly-plan non aggiunto (e2e opzionali stanotte): domattina valutare.
 - Verifiche: tsc 0, eslint 0, vitest 966/966 (--maxWorkers=4; con il default i due test noti «month-review» e «plans portal 404» vanno in timeout 5 s sotto carico, già al baseline — flake di ambiente, passano sempre in isolamento).
+
+### QA-05 — FATTA (commit 762025a)
+- Problema: MCP `create_month_plan` diceva sempre «Non è stato inviato al cliente» anche con piano già inviato.
+- Fix: frase costruita da `plan.sentAt`/`plan.status` con `planStatusLabel` («È già stato inviato al cliente (stato In revisione)…»).
+- File: lib/mcp/tools/write.ts, __tests__/mcp-tools.test.ts.
+- Test: nuovo caso «says the plan was already sent when it has been».
+- Verifiche: tsc 0, eslint 0, vitest 967/967.
