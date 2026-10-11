@@ -132,6 +132,7 @@ describe("BlogReview", () => {
         queue,
         listKinds: ["BLOG_ARTICLE"],
         assistantEnabled: true,
+        reviewerHasEmail: true,
         seoSlot: createElement("p", null, "Dettagli per i motori di ricerca"),
       })
     );
@@ -157,6 +158,7 @@ describe("BlogReview", () => {
         queue: { ...queue, position: null },
         listKinds: ["BLOG_ARTICLE"],
         assistantEnabled: true,
+        reviewerHasEmail: true,
       })
     );
     expect(html).toContain("Hai approvato questo articolo ieri");
@@ -175,6 +177,7 @@ describe("AdsReview", () => {
         queue,
         listKinds: ["AD_CREATIVE"],
         assistantEnabled: true,
+        reviewerHasEmail: true,
       })
     );
     expect(html).toContain("Creatività ads");
@@ -207,6 +210,7 @@ describe("AdsReview", () => {
         queue,
         listKinds: ["AD_CREATIVE"],
         assistantEnabled: false,
+        reviewerHasEmail: true,
       })
     );
     expect(html).toContain("3 di 3 varianti decise");
@@ -234,6 +238,7 @@ describe("PostReview (social) keeps its wording", () => {
         client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
         queue,
         assistantEnabled: false,
+        reviewerHasEmail: true,
         publishInPast: false,
       })
     );
@@ -242,6 +247,34 @@ describe("PostReview (social) keeps its wording", () => {
     expect(html).toContain("Prossimo post");
     expect(html).toContain("Pubblicazione: </span>");
     expect(html).not.toContain("Post social");
+  });
+
+  it("never promises an email to a reviewer without one", () => {
+    const post: PortalPost = {
+      ...base,
+      status: "CHANGES_REQUESTED",
+      canAct: false,
+      networks: ["instagram"],
+      networkOptions: {},
+      text: "La nuova colomba!",
+      firstCommentText: null,
+      media: [],
+      publishAt: now,
+      comments: [],
+    };
+    const props = {
+      token: "tok",
+      post,
+      client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
+      queue,
+      assistantEnabled: false,
+      publishInPast: false,
+    };
+    const withEmail = renderToStaticMarkup(createElement(PostReview, { ...props, reviewerHasEmail: true }));
+    expect(withEmail).toContain("riceverai un&#x27;email quando la nuova versione sarà pronta");
+    const withoutEmail = renderToStaticMarkup(createElement(PostReview, { ...props, reviewerHasEmail: false }));
+    expect(withoutEmail).not.toContain("email");
+    expect(withoutEmail).toContain("l&#x27;agenzia ti avviserà quando la nuova versione sarà pronta");
   });
 
   it("puts the preview before collapsed details and keeps the complete copy accessible", () => {
@@ -262,6 +295,7 @@ describe("PostReview (social) keeps its wording", () => {
         client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
         queue,
         assistantEnabled: false,
+        reviewerHasEmail: true,
         publishInPast: false,
         changesSlot: createElement("div", { "data-testid": "changes-content" }, "Differenze complete"),
       })
@@ -357,6 +391,7 @@ describe("saved feedback submission", () => {
         client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
         queue: { ...queue, position: null },
         assistantEnabled: false,
+        reviewerHasEmail: true,
         publishInPast: false,
       })
     );
@@ -367,6 +402,7 @@ describe("saved feedback submission", () => {
         queue: { ...queue, position: null },
         listKinds: ["BLOG_ARTICLE"],
         assistantEnabled: false,
+        reviewerHasEmail: true,
       })
     );
     const ads = renderToStaticMarkup(
@@ -377,6 +413,7 @@ describe("saved feedback submission", () => {
         queue: { ...queue, position: null },
         listKinds: ["AD_CREATIVE"],
         assistantEnabled: false,
+        reviewerHasEmail: true,
       })
     );
 

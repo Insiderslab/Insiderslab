@@ -333,6 +333,7 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
           queue={queue}
           listKinds={listKinds}
           assistantEnabled={assistantEnabled}
+          reviewerHasEmail={Boolean(reviewer.email)}
           changesSlot={changesSlot}
           seoSlot={<SeoDetails content={content} />}
           historySlot={historySlot}
@@ -369,6 +370,7 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
           queue={queue}
           listKinds={listKinds}
           assistantEnabled={assistantEnabled}
+          reviewerHasEmail={Boolean(reviewer.email)}
           changesSlot={changesSlot}
           historySlot={historySlot}
         />
@@ -413,6 +415,7 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
         }}
         queue={queue}
         assistantEnabled={assistantEnabled}
+        reviewerHasEmail={Boolean(reviewer.email)}
         openAssistant={openAssistant}
         publishInPast={post.publishAt.getTime() < now.getTime()}
         changesSlot={changes ? <VersionChanges changes={changes} currentNumber={current.number} /> : undefined}

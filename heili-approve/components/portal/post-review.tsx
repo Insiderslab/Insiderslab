@@ -42,6 +42,7 @@ import {
   UNSAVED_COMMENT_MESSAGE,
   OpenFeedbackNotice,
   feedbackHint,
+  newVersionNotice,
 } from "./review-pieces";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
@@ -56,6 +57,8 @@ export interface PostReviewProps {
   client: PortalClient;
   queue: PortalQueue;
   assistantEnabled: boolean;
+  /** False when the reviewer has no email: notices must not promise one. */
+  reviewerHasEmail: boolean;
   /** Open Heili as the page loads (Sfoglia's "Parla con Heili"). */
   openAssistant?: boolean;
   /** The publish date is already behind us (the agency will pick a new one). */
@@ -76,6 +79,7 @@ export default function PostReview({
   client,
   queue,
   assistantEnabled,
+  reviewerHasEmail,
   openAssistant = false,
   publishInPast,
   changesSlot,
@@ -457,7 +461,7 @@ export default function PostReview({
           <p className="text-sm">
             {outcome === "approved"
               ? scheduleSentence
-              : "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da rivedere."}
+              : newVersionNotice(reviewerHasEmail)}
           </p>
         </SuccessPanel>
       )}
@@ -486,7 +490,7 @@ export default function PostReview({
             )}
           </header>
 
-          {outcome === null && !post.canAct && <StatusNotice post={post} schedulingOn={client.schedulingOn} />}
+          {outcome === null && !post.canAct && <StatusNotice post={post} schedulingOn={client.schedulingOn} hasEmail={reviewerHasEmail} />}
         </div>
 
         <section
@@ -740,11 +744,12 @@ function PlanNav({ plan }: { plan: PortalPlanNav }) {
   );
 }
 
-function StatusNotice({ post, schedulingOn }: { post: PortalPost; schedulingOn: boolean }) {
+function StatusNotice({ post, schedulingOn, hasEmail }: { post: PortalPost; schedulingOn: boolean; hasEmail: boolean }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
-    text =
-      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando la nuova versione sarà pronta.";
+    text = hasEmail
+      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando la nuova versione sarà pronta."
+      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando la nuova versione sarà pronta.";
   } else if (post.status === "SCHEDULED") {
     text = `Il post è programmato e uscirà ${post.publishLabel}. Per cambiare qualcosa, contatta l'agenzia.`;
   } else if (post.status === "IN_REVIEW") {

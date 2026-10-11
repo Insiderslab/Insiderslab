@@ -191,6 +191,16 @@ export function feedbackHint(canComment: boolean, assistantEnabled: boolean, cha
   return assistantEnabled ? "Scrivilo, dettalo oppure parlane con Heili." : "Scrivilo oppure dettalo.";
 }
 
+/**
+ * "What happens after you send changes": one formula everywhere, honest about
+ * the email the reviewer may not have (without it, the agency warns them).
+ */
+export function newVersionNotice(hasEmail: boolean): string {
+  return hasEmail
+    ? "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da rivedere."
+    : "L'agenzia preparerà una nuova versione e ti avviserà quando sarà pronta da rivedere.";
+}
+
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */
 export function DecisionBar({ children }: { children: ReactNode }) {
   return (
