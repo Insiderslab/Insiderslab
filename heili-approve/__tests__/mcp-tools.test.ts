@@ -419,6 +419,18 @@ describe("create_month_plan", () => {
   it("validates the month", async () => {
     expect((await run("create_month_plan", { client_id: "c1", month: "2030-13" })).isError).toBe(true);
   });
+
+  it("says the plan was already sent when it has been", async () => {
+    plans.createPlan.mockResolvedValue({
+      plan: { ...plan, status: "IN_REVIEW", sentAt: new Date("2030-10-02T09:00:00Z") },
+      created: false,
+    });
+    const result = await run("create_month_plan", { client_id: "c1", month: "2030-10" });
+    expect(result.isError).toBe(false);
+    expect(result.data).toMatchObject({ plan: { sent_to_client: true, status: "IN_REVIEW" } });
+    expect(result.text).toContain("È già stato inviato al cliente (stato In revisione)");
+    expect(result.text).not.toContain("Non è stato inviato al cliente");
+  });
 });
 
 // ─── nothing beyond drafts ───────────────────────────────────────────────────

@@ -21,6 +21,7 @@ import { userActor } from "@/lib/actor";
 import { validateForNetworks, zonedDateTimeToUtc } from "@/lib/metricool/payload";
 import { MAX_MEDIA_PER_POST, networkOptionsSchema } from "@/lib/posts";
 import { addPostsToPlan, createPlan, updatePlan } from "@/lib/plans";
+import { planStatusLabel } from "@/lib/plan-rules";
 import { MAX_UPLOAD_BYTES, mediaItemForAsset, parseDurationSec, saveMediaStream } from "@/lib/storage";
 import { assertKindEnabled } from "@/lib/variant";
 import { requireClient, resolveWorkspaceId } from "../access";
@@ -327,10 +328,13 @@ export const createMonthPlanTool = defineTool({
     if (input.post_ids?.length) added = await addPostsToPlan(plan.id, client.workspaceId, input.post_ids);
     if (input.intro && (created || !plan.intro)) await updatePlan(plan.id, client.workspaceId, { intro: input.intro });
     const postCount = await prisma.post.count({ where: { planId: plan.id, workspaceId: client.workspaceId, status: { not: "CANCELLED" } } });
+    const sentSentence = plan.sentAt
+      ? `È già stato inviato al cliente (stato ${planStatusLabel(plan.status, true)}): le modifiche le fa una persona dal pannello.`
+      : "Non è stato inviato al cliente: lo invia una persona dal pannello.";
     return {
       text:
         `${created ? "Piano creato" : "Piano già esistente"}: «${plan.title}» (${month}) di ${client.name}, ${postCount} post. ` +
-        `Non è stato inviato al cliente: lo invia una persona dal pannello. ${planUrl(plan.id)}`,
+        `${sentSentence} ${planUrl(plan.id)}`,
       data: {
         plan: { id: plan.id, title: plan.title, month, status: plan.status, sent_to_client: plan.sentAt !== null, post_count: postCount, url: planUrl(plan.id) },
         created,
