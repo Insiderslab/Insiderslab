@@ -1,6 +1,6 @@
 # Prompt per Kimi: notte 10→11/10, M1.3 (R2, adattatore WhatsApp)
 
-Incolla il blocco qui sotto in Kimi, così com'è.
+Incolla il blocco qui sotto in Kimi (OpenCode, sul PC di Stefano), così com'è.
 
 ---
 
@@ -8,6 +8,14 @@ Sei uno sviluppatore senior su **Heili CRM**, repository GitHub `Insiderslab/voc
 
 ## Compito
 Implementa la **Fase 3 «R2 — adattatore WhatsApp e letture nuove» (M1.3)** del livello canali: task **T022–T034** in `specs/005-livello-canali/tasks.md`. WhatsApp va dietro il contratto comune dei canali, con **comportamento identico** a oggi. È la base per aggiungere Instagram e Facebook.
+
+## Preparazione su questo PC (prima di tutto)
+Lavori in OpenCode sul PC di Stefano. Fai questi passi nell'ordine:
+1. **Cartella di lavoro dedicata.** Se Stefano non ti indica una copia già esistente del repo, clona in una cartella nuova: `git clone https://github.com/Insiderslab/vocero-crm.git heili-r2`, poi `cd heili-r2`. Lavora **solo** dentro questa cartella: non leggere né modificare altri file del PC.
+2. **Controlla gli strumenti:** `git --version`, `node -v` (serve Node 22), `pnpm -v` (se manca, `corepack enable`), `docker -v`. Prima di installare qualcosa a livello di sistema, **chiedi a Stefano**.
+3. **Se manca Docker:** scrivi il codice e fai girare typecheck, lint, test di unità e build. Salta golden ed e2e, che vogliono PostgreSQL, e scrivilo chiaramente nella PR (li rifà Claude).
+4. **Push:** se `git push` chiede credenziali che non hai, non cercarle: lascia i commit in locale e scrivi a Stefano il comando da lanciare. Non chiedergli mai di incollarti token o password.
+5. **Prima di ogni comando che cancella file o cambia la configurazione di git o del sistema, chiedi conferma.**
 
 ## Da leggere prima di scrivere codice
 1. `CLAUDE.md` e `.specify/memory/constitution.md`: regole non negoziabili.
