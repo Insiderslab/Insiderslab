@@ -62,3 +62,12 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: components/portal/review-pieces.tsx, post-review.tsx, blog-review.tsx, ads-review.tsx, app/review/[token]/posts/[postId]/page.tsx, app/review/[token]/page.tsx, __tests__/portal-review.test.ts.
 - Test: nuovo caso «never promises an email to a reviewer without one» (render con e senza email). Asserzione e2e approval-flow non aggiunta (e2e opzionali stanotte).
 - Verifiche: tsc 0, eslint 0, vitest 968/968.
+
+### K-01 — FATTA (commit 3bf0648)
+- Problema: `list_posts` contava 8, `get_post`/UI/`list_open_feedback` 6; sul post ads `list_open_feedback` 1 contro 2 della UI; totale errato.
+- Causa: `list_posts` e la panoramica usavano `openClientCommentCounts` (che somma anche le conversazioni Heili: è la regola di *idoneità* del portale, non il conteggio dei commenti); `get_post` e `list_open_feedback` filtravano alla sola versione corrente mentre la scheda post dell'agenzia conta tutti i commenti non risolti.
+- Decisione (documentata): la regola condivisa è quella visibile all'agenzia nella scheda post — **tutti i commenti del cliente non risolti, di ogni versione** (risposte incluse come righe, commenti per variante/asset inclusi, conversazioni Heili escluse perché non sono commenti). È l'unica che rende coerenti i numeri osservati in produzione (6 + 2 = 8) e «uguale a quello del pannello».
+- Fix: predicato `isOpenClientComment` + helper `openClientCommentTotals` in lib/posts.ts; usati da `list_posts`, `get_post` (conteggio non più dalla pagina di commenti caricata, che è limitata), `get_month_overview`, `list_open_feedback` (che ora elenca tutti i non risolti e indica la `version` di ciascun commento) e dalla scheda post dell'agenzia. `openClientCommentCounts` resta per l'idoneità del portale (regola diversa, già documentata).
+- File: lib/posts.ts, lib/mcp/tools/read.ts, app/(dashboard)/posts/[id]/page.tsx, __tests__/mcp-tools.test.ts.
+- Test: nuovo caso con commenti su versioni diverse, risolti, risposte agenzia, commento per variante e conversazione assistente → i quattro strumenti danno lo stesso numero (4) e il totale è la somma reale.
+- Verifiche: tsc 0, eslint 0, vitest 969/969.
