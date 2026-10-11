@@ -156,7 +156,7 @@ export default function PlanReview({
             {outcome.approved === 1 ? "Fatto! 1 post approvato." : `Fatto! ${outcome.approved} post approvati.`}
           </p>
           <p className="text-sm">
-            {plan.autoSchedule
+            {plan.schedulingOn
               ? "L'agenzia li riceve subito e verranno programmati per le loro date."
               : "L'agenzia li riceve subito e li programmerà per le loro date."}
           </p>
@@ -312,7 +312,7 @@ export default function PlanReview({
         busy={busy}
       >
         <p className="text-base">
-          {plan.autoSchedule
+          {plan.schedulingOn
             ? `Approvi ${postsWord(toApprove)} così come li vedi: verranno programmati per le loro date.`
             : `Approvi ${postsWord(toApprove)} così come li vedi: l'agenzia li programmerà per le loro date.`}
         </p>

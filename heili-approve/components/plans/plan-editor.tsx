@@ -8,6 +8,7 @@
  */
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useId, useState, useTransition } from "react";
 import { sendPlanAction, updatePlanAction } from "@/app/(dashboard)/plans/actions";
 import { localPartsToUtc, timeZoneAbbr } from "@/components/posts/helpers";
@@ -31,10 +32,12 @@ export default function PlanEditor({
   intro,
   dueDate,
   timeZone,
+  clientId,
   clientName,
   monthName,
   counts,
   sent,
+  schedulingWarning = false,
 }: {
   planId: string;
   title: string;
@@ -42,11 +45,14 @@ export default function PlanEditor({
   /** "YYYY-MM-DD" in the client's zone, "" when none. */
   dueDate: string;
   timeZone: string;
+  clientId: string;
   clientName: string;
   /** "ottobre". */
   monthName: string;
   counts: PlanEditorCounts;
   sent: boolean;
+  /** Auto-schedule on but no Metricool brand: approvals cannot be scheduled. */
+  schedulingWarning?: boolean;
 }) {
   const router = useRouter();
   const ids = { title: useId(), intro: useId(), due: useId() };
@@ -163,6 +169,13 @@ export default function PlanEditor({
         </span>
       </label>
 
+      {schedulingWarning && (
+        <p className="rounded-xl bg-warning-soft p-3 text-sm text-warning" role="alert" data-testid="plan-scheduling-warning">
+          {clientName} non ha un brand Metricool collegato: i post approvati non potranno essere programmati e
+          finiranno in «Errore». <Link href={`/clients/${clientId}`} className="font-medium underline">Scegli il brand nella scheda del cliente</Link>.
+        </p>
+      )}
+
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <button
           type="button"
@@ -202,6 +215,11 @@ export default function PlanEditor({
               {sent ? "I post già approvati o già in revisione non cambiano. " : ""}
               Ogni referente con email riceve un solo messaggio con il link al piano.
             </p>
+            {schedulingWarning && (
+              <p className="font-medium text-warning">
+                Senza brand Metricool i post approvati non verranno programmati.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <button type="button" onClick={send} disabled={pending} className="btn btn-primary" data-testid="plan-send-confirm">

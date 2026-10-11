@@ -582,7 +582,7 @@ describe("Invia il piano al cliente", () => {
   beforeEach(() => {
     mockPosts.submitForReview.mockImplementation(async (ids: string[]) => {
       for (const id of ids) db.posts.find((p) => p.id === id)!.status = "IN_REVIEW";
-      return { submitted: ids, clientsWithoutReviewers: [], clientsWithoutEmail: [] };
+      return { submitted: ids, clientsWithoutReviewers: [], clientsWithoutEmail: [], clientsWithoutScheduling: [] };
     });
   });
 
@@ -614,5 +614,18 @@ describe("Invia il piano al cliente", () => {
     db.posts.push(post("a", { status: "IN_REVIEW" }));
     await expect(sendPlan("p1", "w1", { kind: "user", userId: "u1" })).rejects.toBeInstanceOf(ValidationError);
     expect(mockPosts.submitForReview).not.toHaveBeenCalled();
+  });
+
+  it("flags a client with auto-schedule but no Metricool brand, without blocking the send", async () => {
+    db.plans.find((p) => p.id === "p1")!.sentAt = null;
+    db.posts.push(post("a", { status: "DRAFT" }));
+    mockPosts.submitForReview.mockImplementation(async (ids: string[]) => {
+      for (const id of ids) db.posts.find((p) => p.id === id)!.status = "IN_REVIEW";
+      return { submitted: ids, clientsWithoutReviewers: [], clientsWithoutEmail: [], clientsWithoutScheduling: ["Caffè Aurora"] };
+    });
+
+    const result = await sendPlan("p1", "w1", { kind: "user", userId: "u1" });
+    expect(result.clientsWithoutScheduling).toEqual(["Caffè Aurora"]);
+    expect(mockNotify.notifyPlanSent).toHaveBeenCalledTimes(1);
   });
 });

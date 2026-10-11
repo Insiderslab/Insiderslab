@@ -67,7 +67,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
             backHref={portalPath(token)}
             backLabel="Torna ai post"
             startPosition={parsePosition(query.i)}
-            autoSchedule={reviewer.client.autoSchedule}
+            schedulingOn={reviewer.client.autoSchedule && reviewer.client.metricoolBlogId !== null}
             clientName={reviewer.client.name}
             logoUrl={reviewer.client.logoUrl}
             timeZone={timeZone}

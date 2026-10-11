@@ -244,10 +244,12 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             intro={plan.intro ?? ""}
             dueDate={dueDate}
             timeZone={zone}
+            clientId={plan.client.id}
             clientName={plan.client.name}
             monthName={monthName}
             counts={counts}
             sent={Boolean(plan.sentAt)}
+            schedulingWarning={plan.client.autoSchedule && !plan.client.metricoolBlogId}
           />
 
           <PlanSharePanel

@@ -70,7 +70,7 @@ export default function Browse({
   backHref,
   backLabel,
   startPosition,
-  autoSchedule,
+  schedulingOn,
   clientName,
   logoUrl,
   timeZone,
@@ -85,7 +85,8 @@ export default function Browse({
   backLabel: string;
   /** 1-based position from `?i=`; null = the first post still waiting. */
   startPosition: number | null;
-  autoSchedule: boolean;
+  /** autoSchedule AND a Metricool brand: approvals are really scheduled. */
+  schedulingOn: boolean;
   clientName: string;
   logoUrl: string | null;
   timeZone: string;
@@ -339,7 +340,7 @@ export default function Browse({
               </h2>
             </header>
 
-            <StateNotice state={state} post={post} />
+            <StateNotice state={state} post={post} schedulingOn={schedulingOn} />
 
             <div className="w-full">
               <NetworkPreviewTabs
@@ -447,7 +448,7 @@ export default function Browse({
         busy={sheetBusy}
       >
         <p className="text-base">
-          {autoSchedule
+          {schedulingOn
             ? `Approvi ${postsWord(toApprove)} così come li vedi: verranno programmati per le loro date.`
             : `Approvi ${postsWord(toApprove)} così come li vedi: l'agenzia li programmerà per le loro date.`}
         </p>
@@ -495,7 +496,7 @@ function toItem(post: BrowsePost): BrowseItem {
   return { id: post.id, status: post.status, canAct: post.canAct, openComments: post.openComments };
 }
 
-function StateNotice({ state, post }: { state: BrowseState; post: BrowsePost }) {
+function StateNotice({ state, post, schedulingOn }: { state: BrowseState; post: BrowsePost; schedulingOn: boolean }) {
   if (state === "waiting") return null;
   const tone = state === "approved" ? "border-success" : state === "locked" ? "border-border" : "border-warning";
   let text: string;
@@ -505,7 +506,9 @@ function StateNotice({ state, post }: { state: BrowseState; post: BrowsePost }) 
         ? `Programmato: uscirà ${post.publishLabel}.`
         : post.status === "DELIVERED"
           ? "Pubblicato."
-          : `Hai approvato questo post. Uscirà ${post.publishLabel}.`;
+          : schedulingOn
+            ? `Hai approvato questo post. Uscirà ${post.publishLabel}.`
+            : "Hai approvato questo post: l'agenzia lo programmerà per la sua data.";
   } else if (state === "changes") {
     text = "Hai chiesto modifiche: l'agenzia sta preparando una nuova versione e ti scriverà quando sarà pronta.";
   } else if (state === "feedback") {

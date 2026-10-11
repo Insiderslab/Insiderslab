@@ -75,6 +75,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
     logoUrl: reviewer.client.logoUrl,
     dueLabel: due ? formatPortalDate(due, timeZone, { withTime: false, now }) : null,
     autoSchedule: reviewer.client.autoSchedule,
+    schedulingOn: reviewer.client.autoSchedule && reviewer.client.metricoolBlogId !== null,
     posts: posts.map((p) => ({
       id: p.id,
       title: p.title,
@@ -126,7 +127,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
               backHref={planPath}
               backLabel="Torna al piano"
               startPosition={parsePosition(query.i)}
-              autoSchedule={reviewer.client.autoSchedule}
+              schedulingOn={reviewer.client.autoSchedule && reviewer.client.metricoolBlogId !== null}
               clientName={reviewer.client.name}
               logoUrl={reviewer.client.logoUrl}
               timeZone={timeZone}

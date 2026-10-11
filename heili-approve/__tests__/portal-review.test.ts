@@ -231,7 +231,7 @@ describe("PostReview (social) keeps its wording", () => {
       createElement(PostReview, {
         token: "tok",
         post,
-        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
         queue,
         assistantEnabled: false,
         publishInPast: false,
@@ -259,7 +259,7 @@ describe("PostReview (social) keeps its wording", () => {
       createElement(PostReview, {
         token: "tok",
         post,
-        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
         queue,
         assistantEnabled: false,
         publishInPast: false,
@@ -354,7 +354,7 @@ describe("saved feedback submission", () => {
       createElement(PostReview, {
         token: "tok",
         post: socialPost,
-        client: { name: "Rossi", logoUrl: null, autoSchedule: true },
+        client: { name: "Rossi", logoUrl: null, autoSchedule: true, schedulingOn: true },
         queue: { ...queue, position: null },
         assistantEnabled: false,
         publishInPast: false,

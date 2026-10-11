@@ -367,6 +367,8 @@ export interface SendPlanResult {
   emailed: number;
   clientsWithoutReviewers: string[];
   clientsWithoutEmail: string[];
+  /** Auto-schedule clients without a Metricool brand: approvals cannot be scheduled. */
+  clientsWithoutScheduling: string[];
 }
 
 /** Expose an existing collection without re-submitting posts or sending review emails. */
@@ -445,6 +447,7 @@ export async function sendPlan(
     emailed,
     clientsWithoutReviewers: result.clientsWithoutReviewers,
     clientsWithoutEmail: result.clientsWithoutEmail,
+    clientsWithoutScheduling: result.clientsWithoutScheduling,
   };
 }
 

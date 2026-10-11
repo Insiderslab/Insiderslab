@@ -1531,6 +1531,8 @@ export async function submitForReview(
   clientsWithoutReviewers: string[];
   /** Clients whose active reviewers have no email: nobody is notified, the agency shares the link. */
   clientsWithoutEmail: string[];
+  /** Clients with autoSchedule on but no Metricool brand: approved posts cannot be scheduled. */
+  clientsWithoutScheduling: string[];
 }> {
   const ids = [...new Set(postIds)];
   if (ids.length === 0) throw new ValidationError("Seleziona almeno un post");
@@ -1539,7 +1541,7 @@ export async function submitForReview(
     throw new ValidationError("Scadenza di revisione non valida");
   }
 
-  const { clientsWithoutReviewers, clientsWithoutEmail } = await prisma.$transaction(async (tx) => {
+  const { clientsWithoutReviewers, clientsWithoutEmail, clientsWithoutScheduling } = await prisma.$transaction(async (tx) => {
     const posts = await tx.post.findMany({
       where: { id: { in: ids }, workspaceId, kind: { in: enabledKinds() } },
       include: {
@@ -1548,6 +1550,8 @@ export async function submitForReview(
             name: true,
             archivedAt: true,
             timezone: true,
+            autoSchedule: true,
+            metricoolBlogId: true,
             reviewers: { where: { active: true }, select: { email: true } },
           },
         },
@@ -1624,11 +1628,12 @@ export async function submitForReview(
     return {
       clientsWithoutReviewers: clientNames((reviewers) => reviewers.length === 0),
       clientsWithoutEmail: clientNames((reviewers) => reviewers.length > 0 && reviewers.every((r) => !r.email)),
+      clientsWithoutScheduling: [...new Set(posts.filter((p) => p.client.autoSchedule && !p.client.metricoolBlogId).map((p) => p.client.name))],
     };
   });
 
   if (opts.notify !== false) await notifyReviewRequested(ids);
-  return { submitted: ids, clientsWithoutReviewers, clientsWithoutEmail };
+  return { submitted: ids, clientsWithoutReviewers, clientsWithoutEmail, clientsWithoutScheduling };
 }
 
 export async function cancelPost(postId: string, workspaceId: string, actor: Actor): Promise<Post> {

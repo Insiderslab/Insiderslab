@@ -432,7 +432,7 @@ export default function PostReview({
 
   const draftIndex = draft && (draft.kind === "pin" || draft.kind === "moment") ? draft.mediaIndex : null;
   const draftMedia = draftIndex !== null ? post.media[draftIndex] : undefined;
-  const scheduleSentence = client.autoSchedule
+  const scheduleSentence = client.schedulingOn
     ? `Il post verrà programmato su Metricool per ${post.publishLabel}.`
     : `L'agenzia programmerà il post per ${post.publishLabel}.`;
 
@@ -486,7 +486,7 @@ export default function PostReview({
             )}
           </header>
 
-          {outcome === null && !post.canAct && <StatusNotice post={post} />}
+          {outcome === null && !post.canAct && <StatusNotice post={post} schedulingOn={client.schedulingOn} />}
         </div>
 
         <section
@@ -740,7 +740,7 @@ function PlanNav({ plan }: { plan: PortalPlanNav }) {
   );
 }
 
-function StatusNotice({ post }: { post: PortalPost }) {
+function StatusNotice({ post, schedulingOn }: { post: PortalPost; schedulingOn: boolean }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text =
@@ -750,7 +750,10 @@ function StatusNotice({ post }: { post: PortalPost }) {
   } else if (post.status === "IN_REVIEW") {
     text = "Questo post è in aggiornamento: ricarica la pagina tra poco.";
   } else {
-    text = `${post.approvedLabel ? `Hai approvato questo post ${post.approvedLabel}. ` : "Questo post è approvato. "}Uscirà ${post.publishLabel}. Per cambiare qualcosa, contatta l'agenzia.`;
+    const approved = post.approvedLabel ? `Hai approvato questo post ${post.approvedLabel}. ` : "Questo post è approvato. ";
+    text = schedulingOn
+      ? `${approved}Uscirà ${post.publishLabel}. Per cambiare qualcosa, contatta l'agenzia.`
+      : `${approved}L'agenzia lo programmerà per la sua data. Per cambiare qualcosa, contattala.`;
   }
   return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }
