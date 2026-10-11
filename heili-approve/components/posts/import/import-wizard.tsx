@@ -138,6 +138,10 @@ export default function ImportWizard({ client }: Props) {
   const already = states.filter((s) => s.existing);
   const invalidCount = states.filter((s) => s.invalid).length;
   const sendable = states.filter((s) => !s.invalid);
+  // A sendable row without the server's answer yet (check scheduled or in flight):
+  // creating now would trust a stale picture of the rows.
+  const isChecking = (s: (typeof states)[number]) => !s.invalid && !s.existing && serverChecks[s.row.id] === undefined;
+  const awaiting = states.some(isChecking);
 
   const months = [...new Set(sendable.flatMap((s) => (s.evaluation.draft ? [draftMonth(s.evaluation.draft)] : [])))];
   const planMonth = months.length === 1 ? months[0] : null;
@@ -146,7 +150,9 @@ export default function ImportWizard({ client }: Props) {
   const totalBytes = files.reduce((sum, f) => sum + f.ref.size, 0);
 
   // ── Reading files and pasted cells ──
-  function loadSheet(parsed: ParsedSheet, label: string) {
+  // `filesNow` must be the list the server check should see: inside handleFiles the
+  // `files` state is still the previous render's, so the caller passes the merged list.
+  function loadSheet(parsed: ParsedSheet, label: string, filesNow: DroppedFile[]) {
     const next: EditableRow[] = parsed.rows.map((row) => ({ ...row, id: nextId.current++ }));
     const messages: Notice[] = [];
     if (parsed.assumedOrder) {
@@ -162,7 +168,7 @@ export default function ImportWizard({ client }: Props) {
     setWithPlan(false);
     setFinished(null);
     setError(null);
-    scheduleCheck(next, files);
+    scheduleCheck(next, filesNow);
   }
 
   async function handleFiles(dropped: File[]) {
@@ -193,7 +199,7 @@ export default function ImportWizard({ client }: Props) {
       const sheet = sheets[0];
       try {
         const parsed = await parseSheetFile(sheet.name, await sheet.arrayBuffer());
-        loadSheet(parsed, sheet.name);
+        loadSheet(parsed, sheet.name, merged);
         if (sheets.length > 1) sheetNotice = { tone: "warning", text: `Ho letto solo «${sheet.name}»: gli altri fogli sono stati ignorati.` };
       } catch (e) {
         setError(e instanceof ImportParseError ? e.message : "Non riesco a leggere questo file. Controlla che sia un .xlsx o un .csv.");
@@ -207,7 +213,7 @@ export default function ImportWizard({ client }: Props) {
 
   function readPasted() {
     try {
-      loadSheet(parsePastedRows(paste), "Righe incollate");
+      loadSheet(parsePastedRows(paste), "Righe incollate", files);
       setPaste("");
     } catch (e) {
       setError(e instanceof ImportParseError ? e.message : "Non riesco a leggere le righe incollate.");
@@ -529,13 +535,14 @@ export default function ImportWizard({ client }: Props) {
           </section>
 
           <ul className="space-y-3" data-testid="import-rows">
-            {states.map(({ row, evaluation, extra, existing }) => (
+            {states.map((s) => (
               <ImportRow
-                key={row.id}
-                row={row}
-                evaluation={evaluation}
-                extraIssues={extra}
-                existing={existing}
+                key={s.row.id}
+                row={s.row}
+                evaluation={s.evaluation}
+                extraIssues={s.extra}
+                existing={s.existing}
+                checking={isChecking(s)}
                 files={fileMap}
                 disabled={busy !== null}
                 zone={client.timezone}
@@ -550,6 +557,7 @@ export default function ImportWizard({ client }: Props) {
               <span className="font-semibold">{plural(ready.length, "riga pronta", "righe pronte")}</span>
               {already.length > 0 && <span className="text-muted"> · {plural(already.length, "già importata", "già importate")}</span>}
               {invalidCount > 0 && <span className="text-error"> · {plural(invalidCount, "riga da correggere", "righe da correggere")}, non verrà importata</span>}
+              {awaiting && <span className="text-muted"> · Controllo le righe…</span>}
             </p>
             {sendable.length > 0 &&
               (planMonth ? (
@@ -573,11 +581,11 @@ export default function ImportWizard({ client }: Props) {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={busy !== null || ready.length === 0}
+                disabled={busy !== null || ready.length === 0 || awaiting}
                 onClick={create}
                 data-testid="import-create"
               >
-                {busy ?? (ready.length === 0 ? "Nessuna riga da creare" : ready.length === 1 ? "Crea 1 bozza" : `Crea ${ready.length} bozze`)}
+                {busy ?? (awaiting ? "Controllo le righe…" : ready.length === 0 ? "Nessuna riga da creare" : ready.length === 1 ? "Crea 1 bozza" : `Crea ${ready.length} bozze`)}
               </button>
               <span className="text-xs text-muted">Si creano solo bozze: non parte nulla verso il cliente.</span>
             </div>

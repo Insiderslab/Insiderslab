@@ -86,10 +86,16 @@ test("il modello compilato si rilegge, con le immagini abbinate per nome", async
   ]);
   await expect(page.getByTestId("import-source")).toContainText("modello.xlsx · 1 riga");
   const row = page.getByTestId("import-row");
+  // Sheet and pictures dropped together: the debounced server check must see the
+  // pictures too (QA-01). The row is "Controllo…" until the answer, then stays ready.
+  await expect(page.getByTestId("import-summary")).toContainText("Controllo le righe…");
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…");
   await expect(row).toHaveAttribute("data-state", "ready");
   await expect(row.getByText("Trovato")).toHaveCount(2);
+  await expect(row.getByText("Immagine non trovata")).toHaveCount(0);
   await expect(row.getByLabel("Reti")).toHaveValue("Instagram, Facebook");
   await expect(page.getByTestId("import-create")).toHaveText("Crea 1 bozza");
+  await expect(page.getByTestId("import-create")).toBeEnabled();
   await context.close();
 });
 
