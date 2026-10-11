@@ -99,6 +99,14 @@ export default function ImportWizard({ client }: Props) {
     };
   }, []);
 
+  // The agency shell scrolls inside <main>, not on the window: once the result
+  // is rendered, bring it (and the focus) to its title.
+  useEffect(() => {
+    if (!finished) return;
+    document.querySelector("main")?.scrollTo({ top: 0 });
+    document.getElementById("import-done")?.focus();
+  }, [finished]);
+
   const fileMap = useMemo(() => new Map(files.map((f) => [f.key, f])), [files]);
   const fileRefs = useMemo(() => files.map((f) => f.ref), [files]);
 
@@ -354,7 +362,6 @@ export default function ImportWizard({ client }: Props) {
       failed: items.filter((i) => i.status === "failed").length,
       plan: result.plan,
     });
-    if (typeof window !== "undefined") window.scrollTo?.({ top: 0 });
   }
 
   // ── Result ──
@@ -365,7 +372,7 @@ export default function ImportWizard({ client }: Props) {
       <section className="space-y-5" aria-labelledby="import-done" data-testid="import-result">
         <div className="panel space-y-4 p-5 sm:p-6">
           <div className="space-y-1">
-            <h2 id="import-done" className="text-xl font-semibold" data-testid="import-result-title">
+            <h2 id="import-done" tabIndex={-1} className="text-xl font-semibold outline-none" data-testid="import-result-title">
               {finished.created === 0 ? "Nessuna nuova bozza" : finished.created === 1 ? "Creata 1 bozza" : `Create ${finished.created} bozze`}
             </h2>
             <p className="text-sm text-muted">

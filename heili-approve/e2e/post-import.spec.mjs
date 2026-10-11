@@ -144,6 +144,8 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   await page.getByTestId("import-create").click();
 
   await expect(page.getByTestId("import-result-title")).toHaveText("Create 3 bozze", { timeout: 60_000 });
+  // The agency shell scrolls inside <main>: after creating, the result is at the top (QA-03).
+  await expect(page.getByTestId("import-result-title")).toBeInViewport();
   await expect(page.getByTestId("import-result-list").getByText("Bozza creata")).toHaveCount(3);
   await expect(page.getByTestId("import-plan-note")).toContainText("Piano social");
 
