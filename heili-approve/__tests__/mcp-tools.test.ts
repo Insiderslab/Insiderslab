@@ -209,6 +209,41 @@ describe("read tools", () => {
     expect(result.data.posts[0].comments[1].location.timecode).toBe("0:07–0:09");
     expect(result.data.posts[0]).not.toHaveProperty("workspaceId");
   });
+
+  it("list_posts, get_post, get_month_overview and list_open_feedback count open comments the same way", async () => {
+    // One post with: comments on different versions, a resolved one, an agency
+    // reply, a variant comment and an assistant conversation (feedback, not a comment).
+    db.current.post.reset([
+      postRow("mix", "ws-1", client1, {
+        status: "CHANGES_REQUESTED",
+        currentVersionNumber: 2,
+        versions: [
+          { id: "mix-v2", number: 2, text: "Nuovo", firstCommentText: null, media: [], videoCoverMs: null, content: {}, changeNote: null, createdAt: new Date("2030-02-01") },
+          { id: "mix-v1", number: 1, text: "Vecchio", firstCommentText: null, media: [], videoCoverMs: null, content: {}, changeNote: null, createdAt: new Date("2030-01-01") },
+        ],
+        comments: [
+          comment("old", { versionId: "mix-v1" }),
+          comment("cur", { versionId: "mix-v2" }),
+          comment("legacy"),
+          comment("var", { versionId: "mix-v2", variantId: "vB", mediaIndex: 1 }),
+          comment("done", { versionId: "mix-v2", resolvedAt: new Date() }),
+          comment("reply", { authorType: "AGENCY", versionId: "mix-v2", reviewer: null, user: { name: "Paola" } }),
+        ],
+        reviewSessions: [{ versionNumber: 2, messages: [{ id: "m1", role: "CLIENT" }], voiceCalls: [] }],
+      }),
+    ]);
+
+    expect((await run("list_posts", {})).data.posts[0].open_comment_count).toBe(4);
+    expect((await run("get_post", { post_id: "mix" })).data.open_client_comment_count).toBe(4);
+    expect((await run("get_month_overview", { client_id: "c1", month: "2030-10" })).data.posts[0].open_comment_count).toBe(4);
+
+    const feedback = await run("list_open_feedback", {});
+    expect(feedback.data.total_comments).toBe(4);
+    expect(feedback.data.posts[0].comments.map((c: { id: string }) => c.id)).toEqual(["old", "cur", "legacy", "var"]);
+    expect(feedback.data.posts[0].comments[0].version).toBe(1);
+    expect(feedback.data.posts[0].comments[1].version).toBe(2);
+    expect(feedback.text).toContain("4 commenti aperti su 1 post");
+  });
 });
 
 // ─── create_draft_posts ──────────────────────────────────────────────────────

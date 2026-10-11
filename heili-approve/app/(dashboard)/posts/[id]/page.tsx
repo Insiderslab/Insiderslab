@@ -68,6 +68,7 @@ import {
   diffVersions,
   effectiveLastSubmittedVersion,
   getPostForWorkspace,
+  isOpenClientComment,
   parseVersionSchedule,
   readBlogAnchor,
   summarizeVersionDiff,
@@ -200,7 +201,7 @@ export default async function PostDetailPage({
   const activeReviewers = await prisma.clientReviewer.count({ where: { clientId: client.id, active: true } });
 
   const versionNumberById = new Map(versions.map((v) => [v.id, v.number]));
-  const openClientComments = post.comments.filter((c) => c.authorType === "CLIENT" && c.resolvedAt === null);
+  const openClientComments = post.comments.filter(isOpenClientComment);
 
   // Ads: the client's decisions (every version) and how many variants of the approved version were approved.
   const decisions: AdDecisionView[] = post.creativeDecisions.map((d) => ({

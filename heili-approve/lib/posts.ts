@@ -2162,6 +2162,28 @@ export interface AddCommentInput {
 }
 
 /**
+ * The open client feedback of a post, counted as the agency post page does
+ * ("Commenti aperti del cliente"): unresolved client comments of EVERY version
+ * (an open thread stays open until the agency resolves it), client replies as
+ * their own rows, ads variant/asset comments as plain comments. Assistant
+ * conversations are feedback but not comments and are not counted here.
+ */
+export const isOpenClientComment = (comment: { authorType: string; resolvedAt: Date | null }): boolean =>
+  comment.authorType === "CLIENT" && comment.resolvedAt === null;
+
+/** Per-post count of `isOpenClientComment`, for lists that cannot load the comments. */
+export async function openClientCommentTotals(postIds: string[]): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  if (postIds.length === 0) return totals;
+  const posts = await prisma.post.findMany({
+    where: { id: { in: postIds } },
+    select: { id: true, comments: { where: { authorType: "CLIENT", resolvedAt: null }, select: { id: true } } },
+  });
+  for (const post of posts) totals.set(post.id, post.comments.length);
+  return totals;
+}
+
+/**
  * Adds a general, pinned or video-moment comment. Agency users must be
  * members of the post's workspace; reviewers must belong to the post's client
  * and can only comment on versions they have been sent. A moment can only be
