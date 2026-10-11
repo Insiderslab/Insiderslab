@@ -47,3 +47,18 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: lib/mcp/tools/write.ts, __tests__/mcp-tools.test.ts.
 - Test: nuovo caso «says the plan was already sent when it has been».
 - Verifiche: tsc 0, eslint 0, vitest 967/967.
+
+### QA-03 — FATTA (commit 5d65caf)
+- Problema: dopo «Crea N bozze» la schermata del risultato restava scorsa a metà: `window.scrollTo` non fa nulla perché l'area agenzia scorre dentro `<main>`.
+- Fix: `useEffect` su `finished` che scorre `document.querySelector("main")` in cima e porta il focus sul titolo (`tabIndex={-1}`); stesso schema applicato a `components/clients/metricool-import.tsx` (unico altro `window.scrollTo` nell'area agenzia; quelli del portale restano: lì lo scroll è sulla finestra).
+- File: components/posts/import/import-wizard.tsx, components/clients/metricool-import.tsx, e2e/post-import.spec.mjs.
+- Test: asserzione `toBeInViewport()` sul titolo del risultato nell'e2e (da rilanciare domattina).
+- Verifiche: tsc 0, eslint 0, vitest 967/967.
+
+### QA-04 — FATTA (commit 64f220e)
+- Problema: il portale prometteva «riceverai un'email» anche a referenti senza email (caso previsto: «il link lo mandi tu»).
+- Decisione: formula unica con due varianti — con email «riceverai un'email quando sarà pronta», senza «l'agenzia ti avviserà / ti avviseremo». Helper `newVersionNotice(hasEmail)` in review-pieces.tsx riusato dai tre pannelli; i «riceverai un messaggio» degli stati CHANGES_REQUESTED allineati alla stessa regola.
+- Fix: prop `reviewerHasEmail` a PostReview/BlogReview/AdsReview (dalla pagina, `Boolean(reviewer.email)`); subtitle della sezione «Modifiche richieste» nella home del portale con la stessa scelta.
+- File: components/portal/review-pieces.tsx, post-review.tsx, blog-review.tsx, ads-review.tsx, app/review/[token]/posts/[postId]/page.tsx, app/review/[token]/page.tsx, __tests__/portal-review.test.ts.
+- Test: nuovo caso «never promises an email to a reviewer without one» (render con e senza email). Asserzione e2e approval-flow non aggiunta (e2e opzionali stanotte).
+- Verifiche: tsc 0, eslint 0, vitest 968/968.
