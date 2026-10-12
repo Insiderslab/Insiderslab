@@ -214,6 +214,15 @@ select:focus-visible {
   }
 }
 
+/* Touch target — small text buttons/links get a 44×44 clickable area. */
+.touch-target {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+}
+
 /* Field — Heili Field (16px text, line-strong border, radius-md). */
 .field {
   width: 100%;

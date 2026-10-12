@@ -272,17 +272,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <div className="flex items-center gap-1 text-sm">
             <Link
               href={keep({ settimana: addDays(weekStart, -7), mese: monthKey(monthOfDay(addDays(weekStart, -7))) })}
-              className="rounded border border-border px-3 py-1.5 text-muted hover:text-foreground"
+              className="touch-target rounded border border-border px-3 text-muted hover:text-foreground"
               aria-label="Settimana prima"
             >
               ←
             </Link>
-            <Link href={keep({ settimana: startOfWeek(today), mese: monthKey(monthOfDay(today)) })} className="rounded border border-border px-3 py-1.5 text-muted hover:text-foreground">
+            <Link href={keep({ settimana: startOfWeek(today), mese: monthKey(monthOfDay(today)) })} className="touch-target rounded border border-border px-3 text-muted hover:text-foreground">
               Oggi
             </Link>
             <Link
               href={keep({ settimana: addDays(weekStart, 7), mese: monthKey(monthOfDay(addDays(weekStart, 7))) })}
-              className="rounded border border-border px-3 py-1.5 text-muted hover:text-foreground"
+              className="touch-target rounded border border-border px-3 text-muted hover:text-foreground"
               aria-label="Settimana dopo"
             >
               →
@@ -300,7 +300,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                     {dayLabel(day, true)}
                     {day === today ? " · oggi" : ""}
                   </h3>
-                  <Link href={newPostHref(day)} className="text-xs text-muted hover:text-foreground">
+                  <Link href={newPostHref(day)} className="touch-target -my-3 -mr-2 rounded px-2 text-xs text-muted hover:text-foreground">
                     + {newLabel}
                   </Link>
                 </div>

@@ -230,6 +230,11 @@ test("a 390 px niente scorrimento laterale", async ({ browser }) => {
   await expect(drawer).toHaveAttribute("inert", "");
   await expect(page.getByRole("button", { name: "Apri menu" })).toBeFocused();
 
+  // Touch targets of the shell are at least 44×44 (QA-13).
+  const menuBox = await page.getByRole("button", { name: "Apri menu" }).boundingBox();
+  expect(menuBox.width).toBeGreaterThanOrEqual(44);
+  expect(menuBox.height).toBeGreaterThanOrEqual(44);
+
   await page.getByTestId("import-paste").fill(sheet([["01/01/2020", "09:00", "Snapchat", "E2E import F", "manca.jpg"]]));
   await page.getByTestId("import-paste-read").click();
   await expect(page.getByTestId("import-row")).toHaveAttribute("data-state", "invalid");

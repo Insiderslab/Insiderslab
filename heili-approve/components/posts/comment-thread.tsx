@@ -207,14 +207,14 @@ export default function ThreadCard({
             className={`${inputClass} resize-y`}
           />
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setReplying(false)} className="px-2 text-xs text-muted hover:text-foreground">
+            <button type="button" onClick={() => setReplying(false)} className="btn btn-quiet btn-sm">
               Annulla
             </button>
             <button
               type="button"
               onClick={sendReply}
               disabled={pending || !reply.trim()}
-              className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              className="btn btn-primary btn-sm"
             >
               Rispondi
             </button>
@@ -225,11 +225,11 @@ export default function ThreadCard({
       <div className="mt-2 flex flex-wrap items-center justify-end gap-3 text-xs">
         {thread.resolved && <span className="mr-auto text-success">Risolto</span>}
         {canComment && !replying && !thread.resolved && (
-          <button type="button" onClick={() => setReplying(true)} className="text-muted hover:text-foreground">
+          <button type="button" onClick={() => setReplying(true)} className="btn btn-quiet btn-sm">
             Rispondi
           </button>
         )}
-        <button type="button" onClick={toggleResolved} disabled={pending} className="text-accent hover:underline disabled:opacity-50">
+        <button type="button" onClick={toggleResolved} disabled={pending} className="btn btn-quiet btn-sm">
           {thread.resolved ? "Riapri" : "Segna come risolto"}
         </button>
       </div>

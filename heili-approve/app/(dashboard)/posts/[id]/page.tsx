@@ -245,7 +245,7 @@ export default async function PostDetailPage({
 
   return (
     <div className="space-y-5">
-      <Link href={postsHref(kind)} className="text-sm text-muted hover:text-foreground">
+      <Link href={postsHref(kind)} className="inline-flex min-h-11 items-center text-sm text-muted hover:text-foreground">
         ← {BACK_LABELS[kind]}
       </Link>
 
@@ -435,7 +435,7 @@ export default async function PostDetailPage({
             key={t.id}
             href={`/posts/${post.id}?tab=${t.id}`}
             aria-current={tab === t.id ? "page" : undefined}
-            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
+            className={`-mb-px inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-3 text-sm ${
               tab === t.id ? "border-accent font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"
             }`}
           >
