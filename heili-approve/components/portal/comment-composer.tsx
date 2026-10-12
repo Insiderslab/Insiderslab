@@ -13,6 +13,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import DictationButton from "@/components/voice/dictation-button";
+import { useSpeechSupported } from "@/components/voice/use-speech-input";
 import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
 import { checkMomentInput } from "./helpers";
@@ -78,6 +79,8 @@ export default function CommentComposer({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dictating, setDictating] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const speechSupported = useSpeechSupported();
   const dirtyCallbackRef = useRef(onDirtyChange);
   const storageKey = draftStorageScope ? feedbackDraftKey(draftStorageScope, draft) : null;
   const initialStart = draft.kind === "moment" ? formatTimecode(draft.timeSec) : "";
@@ -320,6 +323,7 @@ export default function CommentComposer({
                 onListeningChange?.(listening);
                 reportDirty(listening || isDirty());
               }}
+              onErrorChange={setSpeechError}
               compact
             />
             <button
@@ -334,8 +338,13 @@ export default function CommentComposer({
             </div>
           </div>
           <span className="block text-xs text-muted">
-            {dictating ? "Ti ascolto…" : body.trim() ? "Bozza sul dispositivo · non inviata" : "Scrivi o detta"}
+            {dictating ? "Ti ascolto…" : body.trim() ? "Bozza sul dispositivo · non inviata" : speechSupported ? "Scrivi o detta" : "Scrivi il tuo commento"}
           </span>
+          {speechError && (
+            <p className="block text-xs text-error" role="alert">
+              {speechError}
+            </p>
+          )}
         </div>
       </div>
 

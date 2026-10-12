@@ -20,6 +20,8 @@ describe("voice input helpers", () => {
 
   it("returns useful browser and permission fallbacks", () => {
     expect(speechErrorMessage("not-allowed")).toContain("microfono");
+    expect(speechErrorMessage("not-allowed")).toContain("impostazioni del sito");
+    expect(speechErrorMessage("no-speech")).toContain("Non ti ho sentito");
     expect(speechErrorMessage("audio-capture")).toContain("microfono");
     expect(speechErrorMessage("unknown")).toContain("scrivi");
   });

@@ -70,6 +70,7 @@ export default function PlanReview({
   const [commentNotice, setCommentNotice] = useState<string | null>(null);
   const [commentPending, startComment] = useTransition();
   const [dictating, setDictating] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
 
   const progress = planProgress(plan.posts.map((p) => p.status));
   const selection = selectApproveAll(
@@ -271,7 +272,7 @@ export default function PlanReview({
           />
         </label>
         <div className="flex items-center justify-end gap-2">
-        <DictationButton value={comment} onChange={setComment} maxLength={5000} compact disabled={commentPending || busy} onListeningChange={setDictating} />
+        <DictationButton value={comment} onChange={setComment} maxLength={5000} compact disabled={commentPending || busy} onListeningChange={setDictating} onErrorChange={setSpeechError} />
         <button
           type="button"
           onClick={sendComment}
@@ -281,6 +282,11 @@ export default function PlanReview({
           {commentPending ? "Invio…" : "Invia il commento"}
         </button>
         </div>
+        {speechError && (
+          <p className="text-sm text-error" role="alert">
+            {speechError}
+          </p>
+        )}
         {commentError && (
           <p className="text-sm text-error" role="alert">
             {commentError}

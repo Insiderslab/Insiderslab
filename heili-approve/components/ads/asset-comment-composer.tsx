@@ -9,6 +9,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import DictationButton from "@/components/voice/dictation-button";
+import { useSpeechSupported } from "@/components/voice/use-speech-input";
 import { feedbackDraftKey, feedbackStorage, readFeedbackDraft, removeFeedbackDraft, writeFeedbackDraft } from "@/components/portal/feedback-draft";
 import { GOOGLE_ASSET_LABELS, formatAssetComment, googleAssetName, type GoogleAssetRef } from "@/lib/content/google-ads";
 
@@ -38,6 +39,8 @@ export default function AssetCommentComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dictating, setDictating] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const speechSupported = useSpeechSupported();
   const restoredRef = useRef(false);
   const dirtyCallbackRef = useRef(onDirtyChange);
   const storageKey = draftStorageScope ? feedbackDraftKey(draftStorageScope, { kind: "general" }) : null;
@@ -151,6 +154,7 @@ export default function AssetCommentComposer({
                 onListeningChange?.(listening);
                 dirtyCallbackRef.current?.(listening || body.trim() !== "");
               }}
+              onErrorChange={setSpeechError}
               compact
             />
             <button
@@ -165,8 +169,13 @@ export default function AssetCommentComposer({
             </div>
           </div>
           <span className="block text-xs text-muted">
-            {dictating ? "Ti ascolto…" : body.trim() ? "Bozza sul dispositivo · non inviata" : "Scrivi o detta"}
+            {dictating ? "Ti ascolto…" : body.trim() ? "Bozza sul dispositivo · non inviata" : speechSupported ? "Scrivi o detta" : "Scrivi il tuo commento"}
           </span>
+          {speechError && (
+            <p className="block text-xs text-error" role="alert">
+              {speechError}
+            </p>
+          )}
         </div>
       </div>
       {error ? (
