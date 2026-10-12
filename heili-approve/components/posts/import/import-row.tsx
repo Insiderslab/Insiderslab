@@ -95,6 +95,7 @@ export default function ImportRow({
 
   return (
     <li
+      id={`import-row-${row.id}`}
       className="panel space-y-3 p-3 sm:p-4"
       style={invalid ? { borderColor: "var(--color-error)", background: "var(--color-error-soft)" } : undefined}
       data-testid="import-row"

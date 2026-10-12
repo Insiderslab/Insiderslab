@@ -146,6 +146,18 @@ export default function ImportWizard({ client }: Props) {
   const already = states.filter((s) => s.existing);
   const invalidCount = states.filter((s) => s.invalid).length;
   const sendable = states.filter((s) => !s.invalid);
+  // Long sheets: jump to the rows that need fixing, or hide the ready ones.
+  const [onlyInvalid, setOnlyInvalid] = useState(false);
+  const invalidCursor = useRef(0);
+  const visibleStates = onlyInvalid ? states.filter((s) => s.invalid) : states;
+
+  function gotoNextInvalid() {
+    const invalids = states.filter((s) => s.invalid);
+    if (invalids.length === 0) return;
+    const target = invalids[invalidCursor.current % invalids.length];
+    invalidCursor.current += 1;
+    document.getElementById(`import-row-${target.row.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
   // A sendable row without the server's answer yet (check scheduled or in flight):
   // creating now would trust a stale picture of the rows.
   const isChecking = (s: (typeof states)[number]) => !s.invalid && !s.existing && serverChecks[s.row.id] === undefined;
@@ -542,7 +554,7 @@ export default function ImportWizard({ client }: Props) {
           </section>
 
           <ul className="space-y-3" data-testid="import-rows">
-            {states.map((s) => (
+            {visibleStates.map((s) => (
               <ImportRow
                 key={s.row.id}
                 row={s.row}
@@ -566,6 +578,23 @@ export default function ImportWizard({ client }: Props) {
               {invalidCount > 0 && <span className="text-error"> · {plural(invalidCount, "riga da correggere", "righe da correggere")}, non verrà importata</span>}
               {awaiting && <span className="text-muted"> · Controllo le righe…</span>}
             </p>
+            {invalidCount > 0 && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <button type="button" className="btn btn-sm" onClick={gotoNextInvalid} data-testid="import-goto-invalid">
+                  Vai alla prossima da correggere
+                </button>
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-accent"
+                    checked={onlyInvalid}
+                    onChange={(e) => setOnlyInvalid(e.target.checked)}
+                    data-testid="import-only-invalid"
+                  />
+                  Mostra solo da correggere
+                </label>
+              </div>
+            )}
             {sendable.length > 0 &&
               (planMonth ? (
                 <label className="flex min-h-11 items-center gap-3 text-sm">

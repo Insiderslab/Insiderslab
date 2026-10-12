@@ -132,6 +132,15 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   await expect(page.getByTestId("import-summary")).toContainText("1 riga da correggere");
   await expect(page.getByTestId("import-create")).toHaveText("Crea 2 bozze");
 
+  // Long sheets: filter to the rows to fix, and jump to the next one (QA-08).
+  await page.getByTestId("import-only-invalid").check();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0)).toHaveAttribute("data-state", "invalid");
+  await page.getByTestId("import-only-invalid").uncheck();
+  await expect(rows).toHaveCount(3);
+  await page.getByTestId("import-goto-invalid").click();
+  await expect(rows.nth(1)).toBeInViewport();
+
   // Fix the row in the grid.
   await bad.getByLabel("Data").fill(good);
   await bad.getByLabel("Reti").fill("Instagram|Facebook");
