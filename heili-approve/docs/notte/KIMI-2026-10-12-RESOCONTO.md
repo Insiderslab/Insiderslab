@@ -71,3 +71,11 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: lib/posts.ts, lib/mcp/tools/read.ts, app/(dashboard)/posts/[id]/page.tsx, __tests__/mcp-tools.test.ts.
 - Test: nuovo caso con commenti su versioni diverse, risolti, risposte agenzia, commento per variante e conversazione assistente → i quattro strumenti danno lo stesso numero (4) e il totale è la somma reale.
 - Verifiche: tsc 0, eslint 0, vitest 969/969.
+
+### K-02 — FATTA (commit 1320351)
+- Problema: Heili diceva «il button «Aggiungi al feedback»», ma nella chat il pulsante visibile è «Prepara il riepilogo per l'agenzia»; in più «button» in italiano.
+- Fix: costanti `ASSISTANT_BUTTONS` in lib/review-assistant/shared.ts (prepareSummary / submitChanges / addToFeedback) usate dal pannello (sorgente unica, `ASSISTANT_FEEDBACK_COPY.submitLabel` riusa la costante) e dai prompt; i prompt descrivono i due passi («prima il pulsante X, poi, controllando il riepilogo, Y») sia in modalità decisione sia feedback; aggiunta a SHARED_RULES la regola «call it "pulsante" (never "button") and quote its exact Italian label»; istruzioni vocali (live-config) con le stesse costanti e la stessa regola; «with the button «Approva»» → «pulsante «Approva»».
+- Nota: il prompt in modalità feedback mantiene il framing base + override finale (struttura voluta): il test verifica che l'override citi le etichette giuste e sia dopo il framing base.
+- File: lib/review-assistant/shared.ts, prompt.ts, live-config.ts, components/review/assistant-panel.tsx, __tests__/assistant-buttons.test.ts (nuovo).
+- Test: 4 casi — etichette esatte in decisione/feedback, voce per 3 tipi × 2 modalità, controllo statico che il pannello usi le costanti (niente letterali duplicati).
+- Verifiche: tsc 0, eslint 0, vitest 973/973.
