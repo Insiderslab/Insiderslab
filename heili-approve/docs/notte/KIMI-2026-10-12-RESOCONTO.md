@@ -124,3 +124,16 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: lib/post-import/rows.ts, table.ts, template.ts, components/posts/import/import-wizard.tsx, docs/AGENT-IMPORT.md, __tests__/post-import-service.test.ts, post-import-parse.test.ts.
 - Test: 3 nuovi casi (Reel su IG+FB, «Instagram: Reel» + merge JSON, errori) e roundtrip del modello aggiornato.
 - Verifiche: tsc 0, eslint 0, vitest 977/977.
+
+### QA-08 — FATTA (commit 0b61466)
+- Fix: nella barra sticky dell'import (quando ci sono righe da correggere) «Vai alla prossima da correggere» (scorre ciclicamente alle righe invalide, `scrollIntoView` sul `<li id="import-row-N">`) e filtro «Mostra solo da correggere».
+- Decisione: NON fatto il ripiego delle righe pronte in una riga di riepilogo (cambio UI più invasivo, rischio rottura e2e che compilano i campi; il filtro copre il bisogno principale). Barra sticky lasciata com'è (già compatta dopo le modifiche di QA-01).
+- File: components/posts/import/import-wizard.tsx, import-row.tsx, e2e/post-import.spec.mjs.
+- Test: e2e con filtro (resta 1 riga invalida) e salto alla riga in viewport (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 977/977.
+
+### QA-10 — FATTA (commit 7841890)
+- Fix: (1) microfono non supportato → il suggerimento sotto il campo diventa «Scrivi il tuo commento» invece di «Scrivi o detta» (hook `useSpeechSupported` riusato dai composer); (2) permesso negato → messaggio nel flusso della pagina sotto la riga dei comandi (niente popup `absolute` che copriva «Annulla»): il DictationButton solleva l'errore al genitore con `onErrorChange` e i tre composer (commento, asset ads, piano) lo mostrano con `role="alert"`; testo «Il microfono è bloccato: consentilo dalle impostazioni del sito e riprova, oppure scrivi»; (3) `no-speech` → «Non ti ho sentito: riprova, oppure scrivi il messaggio.»
+- File: components/voice/use-speech-input.ts, dictation-button.tsx, components/portal/comment-composer.tsx, components/ads/asset-comment-composer.tsx, components/portal/plan-review.tsx, __tests__/voice-input.test.ts.
+- Test: asserzioni sui nuovi testi in voice-input.test.ts. e2e con SpeechRecognition simulato non aggiunto (opzionale).
+- Verifiche: tsc 0, eslint 0, vitest 977/977.
