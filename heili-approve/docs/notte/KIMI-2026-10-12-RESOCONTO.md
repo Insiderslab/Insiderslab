@@ -79,3 +79,17 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: lib/review-assistant/shared.ts, prompt.ts, live-config.ts, components/review/assistant-panel.tsx, __tests__/assistant-buttons.test.ts (nuovo).
 - Test: 4 casi — etichette esatte in decisione/feedback, voce per 3 tipi × 2 modalità, controllo statico che il pannello usi le costanti (niente letterali duplicati).
 - Verifiche: tsc 0, eslint 0, vitest 973/973.
+
+### K-03 — FATTA (commit c3944a7)
+- Problema: «Seleziona le bozze da inviare (N)» contava anche i post in «Modifiche richieste» (reinviabili).
+- Decisione: opzione (a) — il testo diventa «Seleziona i post da inviare (N)». Motivo: la transizione `submit` in lib/domain.ts copre DRAFT e CHANGES_REQUESTED e `sendPlan` reinvia entrambi: il reinvio multiplo è voluto. Commento nel codice + helper `selectForSendLabel` in components/posts/helpers.ts.
+- File: components/posts/helpers.ts, components/posts/post-list.tsx, __tests__/posts-ui.test.ts.
+- Test: righe miste (bozza, modifiche richieste, approvato) → selezionabili 2, etichetta «post», non «bozze».
+- Verifiche: tsc 0, eslint 0, vitest 974/974.
+
+### K-08 — FATTA (commit 86faf42)
+- Problema: dopo «Chiedi modifiche» il campo commento e Heili sparivano fino al ricaricamento.
+- Fix: `feedbackOpen = post.status === "CHANGES_REQUESTED" || outcome === "changes"`; `canComment` resta vero dopo l'esito «changes» (mai dopo «approved»); `finish("changes")` riapre una bozza generale; hint e notice usano `feedbackOpen`; `assistantMode` diventa "feedback" come al reload. «Approva» non riappare (DecisionBar e approve restano legati a `canAct`). In ads-review l'esito è un oggetto: coperto anche «decisioni con tutto scartato» (CHANGES_REQUESTED); la bozza riaperta rispetta il tipo VariantDraft.
+- File: components/portal/post-review.tsx, blog-review.tsx, ads-review.tsx, e2e/assistant-after-changes.spec.mjs.
+- Test: esteso il primo test e2e: dopo «Chiedi modifiche», senza reload, visibili hint «puoi aggiungere altro», «Invia commento» e «Parla con Heili»; assenti «Approva» e «Chiedi modifiche». Da rilanciare domattina.
+- Verifiche: tsc 0, eslint 0, vitest 974/974.
