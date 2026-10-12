@@ -93,3 +93,21 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: components/portal/post-review.tsx, blog-review.tsx, ads-review.tsx, e2e/assistant-after-changes.spec.mjs.
 - Test: esteso il primo test e2e: dopo «Chiedi modifiche», senza reload, visibili hint «puoi aggiungere altro», «Invia commento» e «Parla con Heili»; assenti «Approva» e «Chiedi modifiche». Da rilanciare domattina.
 - Verifiche: tsc 0, eslint 0, vitest 974/974.
+
+### QA-06 — FATTA (commit 6eb93dd)
+- Fix: etichetta riga import «Titolo (visibile al cliente)» (la stessa forma già usata dall'editor, per coerenza); istruzioni del modello: «visibile anche al cliente (portale ed email)… se vuoto usiamo le prime parole»; docs/AGENT-IMPORT.md allineato. Il campo mostra già l'anteprima del titolo automatico nel placeholder/summary della riga.
+- File: components/posts/import/import-row.tsx, lib/post-import/template.ts, docs/AGENT-IMPORT.md.
+- Test: nessuno esistente citava quei testi; il template resta rileggibile (coperto da post-import-parse.test.ts).
+- Verifiche: tsc 0, eslint 0, vitest 974/974.
+
+### QA-11 — FATTA (commit 53637f1)
+- Fix: in `@media (max-width: 640px)` aggiunta `.field { font-size: 16px; min-height: 44px; }` (la specificità di `.field` batteva la regola sugli elementi). Anche l'input del BrandPicker usa `.field`, quindi è coperto.
+- File: app/globals.css, e2e/post-import.spec.mjs.
+- Test: controllo e2e a 390 px su fontSize ≥ 16 e altezza ≥ 44 (da rilanciare).
+- Verifiche: tsc 0, eslint 0 (css ignorato da eslint), vitest 974/974.
+
+### QA-12 — FATTA (commit 07adbe7)
+- Fix: drawer chiuso `inert` + `aria-hidden` sotto lg (matchMedia 1024 px); aperto: `role="dialog"` `aria-modal` con focus spostato dentro; Esc chiude (listener in DashboardShell) e il fuoco torna al pulsante «Apri menu» (ref passata a TopBar). Su desktop (lg) comportamento invariato.
+- File: components/sidebar.tsx, components/dashboard-shell.tsx, components/top-bar.tsx, e2e/post-import.spec.mjs.
+- Test: e2e a 390 px: aside inerte da chiuso, non inerte da aperto, Esc richiude e «Apri menu» è focused (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 974/974.
