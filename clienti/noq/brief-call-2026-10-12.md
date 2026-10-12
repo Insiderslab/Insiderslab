@@ -6,7 +6,7 @@ Fonti: Fireflies 22/09, 24/09, 05/10 (kick-off) e rapportino 09/10, thread email
 
 ## Situazione in 30 secondi
 - **Contratto firmato e pagato il 01/10**: 1.000 € + IVA per il mese di avvio, fino a fine ottobre circa. Siamo a metà mese.
-- **Promesso al kick-off del 05/10**: bozza della nuova landing **entro questa settimana** ("lunedì sentiamo... bozza"). Non è stata inviata. **Oggi la mostri** (`landing-creator-bozza-v1.html`).
+- **Promesso al kick-off del 05/10**: bozza della nuova landing **entro questa settimana** ("lunedì sentiamo... bozza"). Non è stata inviata. **Oggi la mostri** (`landing-creator-bozza-v2.html`).
 - **Priorità di Paolo** (mail 01/10): 1) sistemare la home page, 2) seguire la Brand Guide, 3) passaggio dei social da Jorge ("Orche"), che è pagato fino a ottobre, 4) usare i manuali già pronti invece di rifarli.
 - **Francesco** non vuole un audit di performance e sicurezza (lo fanno già loro prima del lancio). Vuole valore su home e landing.
 - **Sileola** è entrata nel team per outreach e onboarding guidato dei 50 Founding Creator (prova di 90 giorni). Il nostro materiale serve a lei.
