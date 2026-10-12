@@ -35,7 +35,6 @@ import {
   browseSummaryText,
   nextBrowseIndex,
   postLinkQuery,
-  progressLabel,
   startBrowseIndex,
   stepBrowseIndex,
   withApproved,
@@ -269,7 +268,8 @@ export default function Browse({
       onTouchEnd={onTouchEnd}
     >
       <div className="space-y-3">
-        <PlanProgressBar progress={progress} size="sm" label={progressLabel(progress)} />
+        {/* Same metric as the Panoramica: "N di M revisionati" + the detail. */}
+        <PlanProgressBar progress={progress} size="sm" />
         <p className="hidden text-center text-xs text-muted lg:block">Scorri con le frecce ← → della tastiera.</p>
       </div>
 

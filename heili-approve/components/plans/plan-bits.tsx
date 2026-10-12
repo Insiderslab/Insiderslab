@@ -10,6 +10,7 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "rea
 import type { PlanStatus } from "@/app/generated/prisma/client";
 import { ToneChip } from "@/components/status-badge";
 import { planStatusLabel, planStatusTone, type PlanProgress } from "@/lib/plan-rules";
+import { plural } from "@/lib/plural";
 
 export function PlanStatusChip({ status, sent }: { status: PlanStatus; sent: boolean }) {
   return <ToneChip tone={planStatusTone(status)}>{planStatusLabel(status, sent)}</ToneChip>;
@@ -42,8 +43,8 @@ export function PlanProgressBar({
       >
         <span className="block h-full bg-node" style={{ width: `${percent}%` }} />
       </div>
-      {size === "md" && progress.total > 0 && (
-        <p className="text-xs text-muted">{progress.approved} approvati{changes > 0 ? ` · ${changes} con modifiche richieste` : ""}</p>
+      {progress.changes !== undefined && progress.total > 0 && (
+        <p className="text-xs text-muted">{plural(progress.approved, "approvato", "approvati")}{changes > 0 ? ` · ${changes} con modifiche richieste` : ""}</p>
       )}
     </div>
   );

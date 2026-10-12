@@ -7,7 +7,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
-import { progressLabel, type PlanProgress } from "@/lib/plan-rules";
+import type { PlanProgress } from "@/lib/plan-rules";
 
 export default function MonthFrame({
   backHref,
@@ -53,7 +53,8 @@ export default function MonthFrame({
               {heading}
             </h1>
           </div>
-          <PlanProgressBar progress={progress} size="sm" label={progressLabel(progress)} />
+          {/* Same metric as the Panoramica: "N di M revisionati" + the detail. */}
+          <PlanProgressBar progress={progress} size="sm" />
           {progress.inReview > 0 && quick}
         </header>
       )}
