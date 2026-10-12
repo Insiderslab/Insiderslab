@@ -111,3 +111,16 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: components/sidebar.tsx, components/dashboard-shell.tsx, components/top-bar.tsx, e2e/post-import.spec.mjs.
 - Test: e2e a 390 px: aside inerte da chiuso, non inerte da aperto, Esc richiude e «Apri menu» è focused (da rilanciare).
 - Verifiche: tsc 0, eslint 0, vitest 974/974.
+
+### QA-13 — FATTA (commit c7cbf31)
+- Fix: nuova utility `.touch-target` (44×44) in globals.css; «Rispondi»/«Segna come risolto»/«Annulla» di comment-thread → `.btn .btn-quiet/.btn-primary .btn-sm` (44 px su mobile come da regola già esistente); caselle della lista post dentro label 44×44 e barra con `min-h-11`; frecce settimana e «+ Nuovo contenuto» del calendario con `touch-target`; «← Tutti i post» e schede della pagina post con `min-h-11`; pulsanti di post-actions → `.btn`/`.btn-primary`; «Apri menu» 44×44; chip «N da gestire» con `min-h-11`.
+- Non toccato: il «+» della vista mese (solo desktop, compare al hover del puntatore).
+- File: app/globals.css, comment-thread.tsx, post-list.tsx, post-actions.tsx, top-bar.tsx, calendar/page.tsx, posts/[id]/page.tsx, e2e/post-import.spec.mjs.
+- Test: misura e2e del bersaglio «Apri menu» ≥ 44×44 a 390 px (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 974/974.
+
+### QA-07 — FATTA (commit 9d6f514)
+- Fix: colonna facoltativa «Formato» nel modello e nel parser (`Post`/`Reel`/`Storia`, oppure `Rete: Formato`, es. «Instagram: Reel», più voci con `|`): mappa su `networkOptions` (si fonde con `network_options` JSON, la colonna visibile vince per rete); errori leggibili per formato sconosciuto, rete non nella riga, formato non offerto. Modello .xlsx/.csv aggiornato (riga esempio «Post»), istruzioni aggiornate, docs/AGENT-IMPORT.md aggiornato. Il wizard passa `format` al server.
+- File: lib/post-import/rows.ts, table.ts, template.ts, components/posts/import/import-wizard.tsx, docs/AGENT-IMPORT.md, __tests__/post-import-service.test.ts, post-import-parse.test.ts.
+- Test: 3 nuovi casi (Reel su IG+FB, «Instagram: Reel» + merge JSON, errori) e roundtrip del modello aggiornato.
+- Verifiche: tsc 0, eslint 0, vitest 977/977.
