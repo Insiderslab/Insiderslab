@@ -15,7 +15,7 @@
  * function the editor and the Metricool worker use.
  */
 
-import { NETWORKS, NETWORK_LABELS, isNetwork, type MediaItem, type Network, type NetworkOptions } from "@/lib/domain";
+import { NETWORKS, NETWORK_FORMATS, NETWORK_LABELS, isNetwork, type MediaItem, type Network, type NetworkOptions } from "@/lib/domain";
 import {
   isValidTimeZone,
   toZonedDateTimeString,
@@ -61,6 +61,8 @@ export interface RawRow {
   images: string;
   /** English `kind` column: only social posts are imported. */
   kind?: string;
+  /** Optional «Formato» column: "Post", "Reel", "Storia" or "Rete: Formato". */
+  format?: string;
   /** English `network_options` column: JSON object, passed through. */
   networkOptions?: string;
 }
@@ -424,6 +426,54 @@ function parseNetworkOptions(raw: string | undefined): { value: NetworkOptions; 
   return { value: {}, error: "Le opzioni di rete devono essere un oggetto JSON come {\"instagramData\": {\"type\": \"POST\"}}." };
 }
 
+/** Friendly names of the «Formato» column → Metricool `<network>Data.type`. */
+const FORMAT_VALUES: Record<string, string> = {
+  post: "POST",
+  reel: "REEL",
+  storia: "STORY",
+  story: "STORY",
+};
+
+/**
+ * The «Formato» column: "Post", "Reel" or "Storia" for every network of the
+ * row that offers it (Instagram and Facebook), or "Rete: Formato" for one
+ * network only ("Instagram: Reel"; several entries with "|"). Merged OVER the
+ * JSON `network_options`: the visible column wins.
+ */
+function parseFormatColumn(raw: string | undefined, networks: Network[]): { value: NetworkOptions; error?: string } {
+  const value = (raw ?? "").trim();
+  if (!value) return { value: {} };
+  const options: NetworkOptions = {};
+  for (const entry of value.split("|")) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const [maybeNetwork, maybeFormat] = trimmed.includes(":") ? trimmed.split(":", 2) : [null, trimmed];
+    const format = FORMAT_VALUES[fold((maybeFormat ?? "").trim())];
+    if (!format) {
+      return { value: {}, error: `Formato non riconosciuto: «${trimmed}». Usa Post, Reel o Storia (per esempio «Instagram: Reel»).` };
+    }
+    const targets: Network[] = [];
+    if (maybeNetwork === null) {
+      targets.push(...networks.filter((network) => NETWORK_FORMATS[network]?.includes(format)));
+    } else {
+      const wanted = fold(maybeNetwork.trim());
+      const network = networks.find((candidate) => fold(NETWORK_LABELS[candidate]) === wanted || candidate === wanted);
+      if (!network) return { value: {}, error: `Il formato «${trimmed}» riguarda una rete che non è nella riga.` };
+      if (!NETWORK_FORMATS[network]?.includes(format)) {
+        return { value: {}, error: `${NETWORK_LABELS[network]} non ha il formato «${format}».` };
+      }
+      targets.push(network);
+    }
+    if (targets.length === 0) {
+      return { value: {}, error: `Il formato «${format}» non vale per nessuna rete della riga (lo offrono Instagram e Facebook).` };
+    }
+    for (const network of targets) {
+      options[`${network}Data`] = { ...options[`${network}Data`], type: format };
+    }
+  }
+  return { value: options };
+}
+
 /**
  * Everything the pure rules say about one row. `draft` is set only when there
  * are no issues. `now` and the zone come from the caller so tests and the
@@ -525,6 +575,13 @@ export function evaluateRow(raw: RawRow, context: EvalContext): RowEvaluation {
   }
   const options = parseNetworkOptions(raw.networkOptions);
   if (options.error) add("row", options.error);
+  const formatOptions = parseFormatColumn(raw.format, networks);
+  if (formatOptions.error) add("row", formatOptions.error);
+  // The friendly «Formato» column merges over the JSON network_options, per network.
+  const networkOptions: NetworkOptions = { ...options.value };
+  for (const [key, data] of Object.entries(formatOptions.value)) {
+    networkOptions[key] = { ...networkOptions[key], ...data };
+  }
 
   // The publishing rules, the same ones the editor and the worker apply.
   if (publishAt) {
@@ -536,7 +593,7 @@ export function evaluateRow(raw: RawRow, context: EvalContext): RowEvaluation {
     });
     const rules = validateForNetworks({
       networks,
-      networkOptions: options.value,
+      networkOptions,
       text,
       firstCommentText: firstComment || null,
       media: placeholderMedia(known),
@@ -554,7 +611,7 @@ export function evaluateRow(raw: RawRow, context: EvalContext): RowEvaluation {
   const matched = images.flatMap(({ file }) => (file ? [file] : []));
   const draft: RowDraft | null =
     issues.length === 0 && publishAt && localDateTime
-      ? { publishAt, localDateTime, networks, title, text, firstComment: firstComment || null, files: matched, networkOptions: options.value }
+      ? { publishAt, localDateTime, networks, title, text, firstComment: firstComment || null, files: matched, networkOptions }
       : null;
   return { draft, issues, when: localDateTime ? formatWhen(localDateTime) : null, networks, images, title };
 }

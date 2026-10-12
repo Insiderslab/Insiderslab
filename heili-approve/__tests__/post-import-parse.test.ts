@@ -265,7 +265,7 @@ describe("template", () => {
     const { rows, ignoredColumns } = await parseSheetFile("modello.xlsx", xlsx.buffer.slice(xlsx.byteOffset, xlsx.byteOffset + xlsx.byteLength) as ArrayBuffer);
     expect(ignoredColumns).toEqual([]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ date: "15/10/2026", time: "10:30", networks: "Instagram, Facebook", images: "collezione-1.jpg, collezione-2.jpg" });
+    expect(rows[0]).toMatchObject({ date: "15/10/2026", time: "10:30", networks: "Instagram, Facebook", images: "collezione-1.jpg, collezione-2.jpg", format: "Post" });
     expect(rows[0].text).toContain("\n");
 
     const zip = await JSZip.loadAsync(xlsx);

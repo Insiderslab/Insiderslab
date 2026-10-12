@@ -100,6 +100,29 @@ describe("evaluateRow", () => {
     expect(messages(row({ images: "foto-1.jpg" }), ctx({ files: [{ ...photo, size: 301 * 1024 * 1024 }] }))).toEqual(["«Foto-1.jpg» supera il limite di 300 MB."]);
   });
 
+  it("maps «Formato» onto the networks that offer it", () => {
+    const reel = { name: "reel.mp4", size: 1000, type: "video", mimeType: "video/mp4" } as const;
+    const result = evaluateRow(row({ images: "reel.mp4", format: "Reel" }), ctx({ files: [reel] }));
+    expect(result.issues).toEqual([]);
+    expect(result.draft?.networkOptions).toEqual({ instagramData: { type: "REEL" }, facebookData: { type: "REEL" } });
+  });
+
+  it("applies «Rete: Formato» to one network only and merges with network_options", () => {
+    const reel = { name: "reel.mp4", size: 1000, type: "video", mimeType: "video/mp4" } as const;
+    const result = evaluateRow(
+      row({ images: "reel.mp4", format: "Instagram: Reel", networkOptions: '{"facebookData":{"type":"STORY"}}' }),
+      ctx({ files: [reel] })
+    );
+    expect(result.issues).toEqual([]);
+    expect(result.draft?.networkOptions).toEqual({ instagramData: { type: "REEL" }, facebookData: { type: "STORY" } });
+  });
+
+  it("flags an unknown format, a network not in the row and a format no network offers", () => {
+    expect(messages(row({ format: "Carosello" }))).toEqual([expect.stringContaining("Formato non riconosciuto")]);
+    expect(messages(row({ format: "LinkedIn: Reel" }))).toEqual([expect.stringContaining("non è nella riga")]);
+    expect(messages(row({ networks: "X", images: "", format: "Reel" }))).toEqual([expect.stringContaining("non vale per nessuna rete")]);
+  });
+
   it("refuses a time skipped by the spring-forward jump, and a non-social kind", () => {
     expect(messages(row({ date: "28/03/2027", time: "02:30" }))).toContain("Quest'ora non esiste quel giorno (cambio dell'ora legale): scegline un'altra.");
     expect(messages(row({ kind: "BLOG_ARTICLE" }))).toContain("In questa versione si importano solo post social.");

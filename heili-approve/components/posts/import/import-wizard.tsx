@@ -64,7 +64,7 @@ const extensionOf = (name: string) => name.toLowerCase().split(".").pop() ?? "";
 function toRaw(row: EditableRow): RawRow {
   return {
     sourceRow: row.sourceRow, date: row.date, time: row.time, networks: row.networks, text: row.text,
-    firstComment: row.firstComment, title: row.title, images: row.images, kind: row.kind, networkOptions: row.networkOptions,
+    firstComment: row.firstComment, title: row.title, images: row.images, kind: row.kind, format: row.format, networkOptions: row.networkOptions,
   };
 }
 

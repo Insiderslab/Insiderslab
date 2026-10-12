@@ -28,10 +28,10 @@ export type Table = string[][];
 
 // ─── Columns ─────────────────────────────────────────────────────────────────
 
-type Column = "date" | "time" | "networks" | "text" | "firstComment" | "title" | "images" | "kind" | "networkOptions";
+type Column = "date" | "time" | "networks" | "text" | "firstComment" | "title" | "images" | "format" | "kind" | "networkOptions";
 
 /** Standard order of the template. */
-export const TEMPLATE_HEADERS = ["Data", "Ora", "Reti", "Testo", "Primo commento", "Titolo", "Immagini"] as const;
+export const TEMPLATE_HEADERS = ["Data", "Ora", "Reti", "Testo", "Primo commento", "Titolo", "Immagini", "Formato"] as const;
 const DEFAULT_ORDER: Column[] = ["date", "time", "networks", "text", "firstComment", "title", "images"];
 
 /** Header → column, both languages (folded: no accents, spaces or punctuation). */
@@ -43,6 +43,7 @@ const HEADER_ALIASES: Record<string, Column> = {
   primocommento: "firstComment", commento: "firstComment", firstcomment: "firstComment", firstcommenttext: "firstComment",
   titolo: "title", title: "title", nome: "title",
   immagini: "images", immagine: "images", media: "images", mediafiles: "images", file: "images", files: "images", foto: "images", image: "images", images: "images", video: "images",
+  formato: "format", format: "format",
   kind: "kind", tipo: "kind",
   networkoptions: "networkOptions",
 };

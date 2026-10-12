@@ -87,7 +87,7 @@ python scripts/approve_import.py validate .\approve-posts.csv
 | `media_files` | no | Percorsi locali separati da `|`, relativi alla cartella del foglio. |
 | `media_durations` | no | Durate in secondi nello stesso ordine dei media, separate da `|`. |
 | `kind` | no | In questa versione è ammesso soltanto `SOCIAL_POST`, che è anche il valore predefinito. |
-| `network_options` | no | Oggetto JSON con le opzioni specifiche per rete. |
+| `network_options` | no | Oggetto JSON con le opzioni specifiche per rete. Per Reel/Storia si può usare anche la colonna «Formato» del modello del pannello (`Post`, `Reel`, `Storia` oppure `Rete: Formato`, es. `Instagram: Reel`), che si fonde con `network_options`. |
 
 Il [template CSV](templates/approve-posts.csv) è UTF-8. Sono supportati CSV con separatore virgola o punto e virgola, JSON e file `.xlsx` normali. I file `.xls` non sono supportati.
 
