@@ -223,7 +223,7 @@ export default function ImportRow({
           {!row.title.trim() && evaluation.title ? <span className="ml-2 truncate text-xs">· titolo: {evaluation.title}</span> : null}
         </summary>
         <div className="grid gap-3 pt-2 sm:grid-cols-2">
-          <Cell id={`${base}-title`} label="Titolo (interno)" invalid={has("title")}>
+          <Cell id={`${base}-title`} label="Titolo (visibile al cliente)" invalid={has("title")}>
             <input
               id={`${base}-title`}
               {...fieldProps("title")}

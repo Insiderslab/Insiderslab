@@ -29,7 +29,7 @@ const INSTRUCTIONS: Array<[string, string]> = [
   ["Reti", "Una o più reti separate da virgola o da |: Instagram, Facebook. Maiuscole e minuscole non contano. Reti possibili: Instagram, Facebook, LinkedIn, TikTok, X, Threads, Pinterest, YouTube, Google Business, Bluesky. «Tutte» usa le reti del cliente."],
   ["Testo", "Il testo completo del post, con gli a capo e gli hashtag. Ogni rete ha il suo limite di caratteri: l'anteprima ti avvisa."],
   ["Primo commento", "Facoltativo: il commento da pubblicare subito sotto il post."],
-  ["Titolo", "Facoltativo: il nome interno della bozza. Se lo lasci vuoto usiamo le prime parole del testo."],
+  ["Titolo", "Facoltativo: il titolo della bozza, visibile anche al cliente (portale ed email). Se lo lasci vuoto usiamo le prime parole del testo."],
   ["Immagini", "Facoltativo: i nomi dei file, separati da virgola o da |: foto-1.jpg, foto-2.jpg. Poi trascina i file (foto o video) nella pagina di importazione insieme al foglio: li abbiniamo per nome. Formati: JPG, PNG, WebP, GIF, MP4, MOV, WebM, fino a 300 MB."],
   ["Cosa succede", "Si creano sempre e solo bozze. Nulla viene inviato al cliente, approvato o programmato: lo fai tu dopo, dal piano o dall'elenco dei post. Importare lo stesso foglio due volte non duplica i post."],
 ];
