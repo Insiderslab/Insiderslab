@@ -43,6 +43,17 @@ Instagram, Facebook e il sito di La Bambola arrivano nei giorni successivi (vedi
 
 Il pacchetto 009 segue lo stesso percorso delle altre PR: prove, revisione separata, correzioni. Va in un rilascio successivo, non in quello di domattina.
 
+## 2c. Notte 11→12/10: cosa è stato unito su main (non ancora in produzione)
+
+| PR | Cosa | Stato |
+|---|---|---|
+| [#11](https://github.com/Insiderslab/vocero-crm/pull/11) | Pagina **Sintesi** e checklist **Primi passi** (scritta da DeepSeek, corretta da Claude: la Sintesi in produzione non si sarebbe aperta) | ✅ unita |
+| [#12](https://github.com/Insiderslab/vocero-crm/pull/12) | Test di usabilità E1–E10: errore dell'IA mai più silenzioso, lingue, caricamenti, ordine dei messaggi, rifiniture | ✅ unita dopo revisione + 8 correzioni |
+| [#10](https://github.com/Insiderslab/vocero-crm/pull/10) | Richieste dal sito | 🟡 bozza: in riallineamento, aspetta D1/D2 |
+| Kimi (R2) / DeepSeek (Conoscenza, Contatti) | sul PC di Stefano | da rivedere quando consegnano |
+
+**Rilasci:** quello del mattino resta su `0bc731e` (provato). Il **rilascio 3** porterà #11 e #12 (migrazioni attese **16**): script pronto dopo la prova del rilascio 2.
+
 ## 3. Domattina (tu, circa 45 minuti, in quest'ordine)
 
 ### 3.1 Rilascio (10 minuti, quasi tutti di attesa)
