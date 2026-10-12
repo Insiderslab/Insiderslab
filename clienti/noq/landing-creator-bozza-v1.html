@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOQ Landing Creator — bozza v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Palette provvisoria: da allineare ai colori e alle icone della Brand Guide NOQ (pag. 3-11) */
+  :root {
+    --bg: #0d0b0e;
+    --bg-2: #16131a;
+    --card: #1d1922;
+    --line: #2e2833;
+    --text: #f3eee8;
+    --muted: #a99fa6;
+    --gold: #c9a45c;
+    --gold-2: #e6c98d;
+    --rose: #b5476b;
+    --ok: #6fbf8e;
+    --draft: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.6;
+  }
+  a { color: inherit; }
+  h1, h2, h3 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; line-height: 1.1; margin: 0 0 .5em; }
+  h1 { font-size: clamp(2.4rem, 6vw, 4.4rem); }
+  h2 { font-size: clamp(1.9rem, 4vw, 2.8rem); }
+  h3 { font-size: 1.5rem; }
+  p { margin: 0 0 1em; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  section { padding: 88px 0; border-top: 1px solid var(--line); }
+  .eyebrow { color: var(--gold); letter-spacing: .18em; text-transform: uppercase; font-size: .78rem; font-weight: 600; margin-bottom: 14px; }
+  .lead { color: var(--muted); font-size: 1.1rem; max-width: 640px; }
+  .gold { color: var(--gold-2); }
+
+  /* Draft bar */
+  .draftbar { background: var(--draft); color: #1a1400; font-size: .85rem; padding: 8px 16px; text-align: center; font-weight: 500; }
+  .note { display: inline-block; margin-top: 10px; font-size: .78rem; color: #1a1400; background: var(--draft); padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+
+  /* Nav */
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; }
+  .logo { font-family: "Cormorant Garamond", serif; font-size: 1.6rem; font-weight: 700; letter-spacing: .04em; }
+  .logo span { color: var(--gold); }
+  .navlinks { display: flex; gap: 24px; align-items: center; font-size: .92rem; color: var(--muted); }
+  .navlinks a { text-decoration: none; }
+  @media (max-width: 760px) { .navlinks a:not(.btn) { display: none; } }
+
+  .btn { display: inline-block; text-decoration: none; padding: 14px 26px; border-radius: 999px; font-weight: 600; font-size: .95rem; border: 1px solid var(--gold); transition: .2s; cursor: pointer; }
+  .btn-gold { background: linear-gradient(135deg, var(--gold), var(--gold-2)); color: #1a1208; border: none; }
+  .btn-gold:hover { filter: brightness(1.08); }
+  .btn-ghost { color: var(--gold-2); background: transparent; }
+  .btn-ghost:hover { background: rgba(201,164,92,.1); }
+  .btn-sm { padding: 9px 18px; font-size: .85rem; }
+
+  /* Hero */
+  .hero { padding: 56px 0 96px; border-top: none; background:
+      radial-gradient(800px 400px at 85% 10%, rgba(181,71,107,.22), transparent 60%),
+      radial-gradient(700px 400px at 10% 90%, rgba(201,164,92,.14), transparent 60%); }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } }
+  .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 28px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+  .badge { border: 1px solid var(--line); background: rgba(255,255,255,.03); padding: 7px 14px; border-radius: 999px; font-size: .82rem; color: var(--muted); }
+  .badge b { color: var(--text); font-weight: 600; }
+  .video { aspect-ratio: 9/16; max-height: 520px; width: 100%; border-radius: 22px; border: 1px solid var(--line);
+    background: linear-gradient(160deg, #2a2030, #120f15); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px; position: relative; }
+  .play { width: 74px; height: 74px; border-radius: 50%; border: 2px solid var(--gold); display: grid; place-items: center; }
+  .play::after { content: ""; border-left: 22px solid var(--gold); border-top: 13px solid transparent; border-bottom: 13px solid transparent; margin-left: 6px; }
+  .video small { color: var(--muted); }
+
+  /* Cards */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 40px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 40px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  @media (max-width: 960px) { .grid-4 { grid-template-columns: 1fr 1fr; } .grid-3 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+  .card h3 { margin-bottom: .3em; }
+  .card p { color: var(--muted); font-size: .95rem; margin: 0; }
+  .card .tag { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+  .card.brand { grid-column: 1 / -1; background: linear-gradient(120deg, #2a1f14, #1d1922 60%); border-color: rgba(201,164,92,.45); display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .icon { width: 42px; height: 42px; border-radius: 12px; background: rgba(201,164,92,.12); color: var(--gold-2); display: grid; place-items: center; font-size: 1.2rem; margin-bottom: 14px; }
+
+  /* Calculator */
+  .calc { background: var(--bg-2); border: 1px solid var(--line); border-radius: 22px; padding: 30px; }
+  .calc label { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); margin-top: 18px; }
+  .calc label b { color: var(--text); }
+  input[type=range] { width: 100%; accent-color: var(--gold); margin-top: 8px; }
+  .result { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 26px; }
+  .res { border-radius: 14px; padding: 18px; border: 1px solid var(--line); }
+  .res.noq { border-color: var(--gold); background: rgba(201,164,92,.08); }
+  .res .k { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+  .res .v { font-family: "Cormorant Garamond", serif; font-size: 2.1rem; font-weight: 700; }
+  .res.noq .v { color: var(--gold-2); }
+  .delta { margin-top: 14px; font-size: .95rem; color: var(--ok); }
+  .fine { font-size: .78rem; color: var(--muted); margin-top: 12px; }
+
+  /* Steps */
+  .steps { counter-reset: s; }
+  .step { position: relative; padding-left: 58px; }
+  .step::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 0; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--gold); color: var(--gold-2); display: grid; place-items: center; font-family: "Cormorant Garamond", serif; font-size: 1.3rem; font-weight: 700; }
+
+  /* Founding */
+  .founding { background: radial-gradient(700px 360px at 50% 0%, rgba(201,164,92,.18), transparent 70%); }
+  .seats { display: flex; align-items: center; gap: 16px; margin: 22px 0; }
+  .bar { flex: 1; height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 24%; background: linear-gradient(90deg, var(--gold), var(--gold-2)); }
+  ul.check { list-style: none; padding: 0; margin: 0; }
+  ul.check li { padding: 8px 0 8px 30px; position: relative; border-bottom: 1px solid var(--line); }
+  ul.check li::before { content: "✦"; position: absolute; left: 0; color: var(--gold); }
+  .compare { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .95rem; }
+  .compare th, .compare td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  .compare th { color: var(--muted); font-weight: 500; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
+  .compare td:nth-child(2) { color: var(--gold-2); font-weight: 600; }
+
+  /* FAQ */
+  details { border-bottom: 1px solid var(--line); padding: 18px 0; }
+  summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  summary::after { content: "+"; color: var(--gold); font-size: 1.3rem; line-height: 1; }
+  details[open] summary::after { content: "–"; }
+  details p { color: var(--muted); margin: 12px 0 0; }
+
+  /* Form */
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+  @media (max-width: 640px) { form { grid-template-columns: 1fr; } }
+  form .full { grid-column: 1 / -1; }
+  input, select { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text); padding: 13px 14px; border-radius: 12px; font: inherit; }
+  input:focus, select:focus { outline: 1px solid var(--gold); }
+  .consent { font-size: .82rem; color: var(--muted); display: flex; gap: 10px; align-items: flex-start; }
+  .consent input { width: auto; margin-top: 4px; }
+
+  footer { border-top: 1px solid var(--line); padding: 36px 0; color: var(--muted); font-size: .85rem; }
+  .sticky { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  @media (min-width: 761px) { .sticky { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="draftbar">BOZZA v1 · InsidersLab · landing <b>Creator</b> per revisione con NOQ (12/10) · testi, numeri e palette da validare</div>
+
+<div class="wrap">
+  <nav>
+    <div class="logo">Not<span>Only</span>Queens</div>
+    <div class="navlinks">
+      <a href="#multi">Multi-Presence</a>
+      <a href="#guadagni">Guadagni</a>
+      <a href="#founding">Founding Creators</a>
+      <a href="#agenzie">Agenzie</a>
+      <a class="btn btn-gold btn-sm" href="#candidati">Candidati</a>
+    </div>
+  </nav>
+</div>
+
+<!-- 1. HERO -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Per creator · 18+ · Europa</div>
+      <h1>Il vero lusso non è l'accesso.<br><span class="gold">È il controllo.</span></h1>
+      <p class="lead">Una creator, quattro opportunità. Con il <b>Multi-Presence System</b> lavori su quattro categorie con identità separate, un solo wallet e una fee del <b>15%</b>.</p>
+      <div class="cta">
+        <a class="btn btn-gold" href="#candidati">Candidati come Founding Creator</a>
+        <a class="btn btn-ghost" href="#video">Guarda come funziona · 60s</a>
+      </div>
+      <div class="badges">
+        <span class="badge"><b>15%</b> fee piattaforma</span>
+        <span class="badge"><b>7</b> modi per guadagnare</span>
+        <span class="badge"><b>4</b> profili, 1 account</span>
+        <span class="badge">Identità verificata (KYC)</span>
+        <span class="badge">Nessuna app da scaricare</span>
+      </div>
+    </div>
+    <div class="video" id="video">
+      <div class="play" aria-hidden="true"></div>
+      <strong>Video di 60 secondi</strong>
+      <small>Paolo / avatar NOQ spiega il progetto: chi siamo, Multi-Presence, fee 15%, programma Founding.<br>Formato 9:16, riusabile su social e nelle email di outreach di Sileola.</small>
+      <span class="note">Da produrre</span>
+    </div>
+  </div>
+</header>
+
+<!-- 2. MULTI-PRESENCE -->
+<section id="multi">
+  <div class="wrap">
+    <div class="eyebrow">Multi-Presence System™</div>
+    <h2>Un account. Quattro identità. <span class="gold">Zero esposizione.</span></h2>
+    <p class="lead">Ogni categoria ha nickname, foto e pubblico propri. Scegli dove essere presente e mantieni separato ciò che vuoi tenere separato.</p>
+    <div class="grid-4">
+      <div class="card"><div class="icon">✦</div><div class="tag">Hot Creator</div><h3>Contenuti premium</h3><p>Foto, video e contenuti personalizzati, in abbonamento o pay-per-view.</p></div>
+      <div class="card"><div class="icon">◉</div><div class="tag">Live Creator</div><h3>Live in tempo reale</h3><p>Streaming dal browser con tariffa al minuto e sessioni prenotabili.</p></div>
+      <div class="card"><div class="icon">♛</div><div class="tag">Connection Creator</div><h3>Show e performance</h3><p>Drag, spettacolo e intrattenimento. Spazio senza contenuti adult.</p></div>
+      <div class="card"><div class="icon">❖</div><div class="tag">Pride Creator</div><h3>Modeling e servizi</h3><p>Modeling, promozione eventi e servizi digitali.</p></div>
+      <div class="card brand">
+        <div>
+          <div class="tag">Brand Creator</div>
+          <h3>Hai già un brand? Usa tutte e quattro in un solo profilo.</h3>
+          <p>Per professioniste già posizionate: un'unica identità visibile in tutte le sezioni, con tutte le funzionalità attive.</p>
+          <span class="note">Criterio d'accesso da decidere (P.IVA?)</span>
+        </div>
+        <a class="btn btn-ghost" href="#candidati">Richiedi lo status Brand</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. CALCOLATORE -->
+<section id="guadagni">
+  <div class="wrap grid-2">
+    <div>
+      <div class="eyebrow">Fai i conti</div>
+      <h2>Quanto resta <span class="gold">a te</span>.</h2>
+      <p class="lead">Una fee più bassa conta su ogni euro. Sposta i cursori e confronta con una piattaforma che trattiene il 20%.</p>
+      <ul class="check" style="margin-top:20px">
+        <li>Anteprima del guadagno netto prima di pubblicare</li>
+        <li>Wallet unico per tutte le categorie</li>
+        <li>Analytics per capire cosa rende di più</li>
+      </ul>
+    </div>
+    <div class="calc" aria-label="Calcolatore guadagni">
+      <label>Abbonati attivi <b id="subsV">200</b></label>
+      <input type="range" id="subs" min="10" max="2000" step="10" value="200">
+      <label>Prezzo abbonamento mensile <b id="priceV">€ 9,99</b></label>
+      <input type="range" id="price" min="4.99" max="29.99" step="1" value="9.99">
+      <label>Extra al mese (PPV, mance, live) <b id="extraV">€ 500</b></label>
+      <input type="range" id="extra" min="0" max="10000" step="100" value="500">
+      <div class="result">
+        <div class="res noq"><div class="k">Con NOQ (15%)</div><div class="v" id="noq">€ 0</div></div>
+        <div class="res"><div class="k">Fee 20%</div><div class="v" id="other">€ 0</div></div>
+      </div>
+      <div class="delta" id="delta"></div>
+      <div class="fine">Stima indicativa al lordo di commissioni di pagamento e tasse. <span class="note">Verificare: fee 15% su vendita + 15% su prelievo?</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 7 MODI -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">7 modi per guadagnare</div>
+    <h2>Non solo abbonamenti.</h2>
+    <div class="grid-3">
+      <div class="card"><div class="icon">①</div><h3>Abbonamenti</h3><p>Entrate ricorrenti dai fan che ti seguono ogni mese.</p></div>
+      <div class="card"><div class="icon">②</div><h3>Collezioni pay-per-view</h3><p>Set di foto e video a prezzo singolo, anche solo per abbonati.</p></div>
+      <div class="card"><div class="icon">③</div><h3>Mance e obiettivi</h3><p>Tip goal con barra di avanzamento che i fan vogliono completare.</p></div>
+      <div class="card"><div class="icon">④</div><h3>Chat privata</h3><p>Messaggi e contenuti personalizzati su richiesta.</p></div>
+      <div class="card"><div class="icon">⑤</div><h3>Live al minuto</h3><p>Decidi tu la tariffa e la durata delle sessioni.</p></div>
+      <div class="card"><div class="icon">⑥</div><h3>Sessioni su prenotazione</h3><p>Calendario con slot online prenotabili dai fan.</p></div>
+      <div class="card"><div class="icon">⑦</div><h3>Wishlist</h3><p>Lista desideri con prodotti che i fan possono regalarti.</p></div>
+      <div class="card" style="grid-column: span 2"><div class="icon">✓</div><h3>Tutto online, tutto tracciato</h3><p>Ogni interazione avviene sulla piattaforma. Nessun incontro di persona, ricevute e storico prelievi sempre disponibili.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. FOUNDING -->
+<section id="founding" class="founding">
+  <div class="wrap grid-2">
+    <div>
+      <div class="eyebrow">Programma Founding Creators</div>
+      <h2>50 posti. <span class="gold">Un anno gratis.</span></h2>
+      <p class="lead">Cerchiamo le prime 50 creator in Italia, Spagna, Germania ed Est Europa per costruire NOQ insieme a noi.</p>
+      <div class="seats"><div class="bar"><i></i></div><b>12 / 50</b></div>
+      <span class="note">Contatore reale da collegare</span>
+      <ul class="check" style="margin-top:20px">
+        <li>12 mesi di piano Pro gratuito</li>
+        <li>Onboarding guidato da una persona del team</li>
+        <li>Badge Founding Creator sul profilo</li>
+        <li>Visibilità in home e sui canali NOQ al lancio</li>
+        <li>Linea diretta con il team per proporre funzionalità</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Founding vs ingresso standard</h3>
+      <table class="compare">
+        <tr><th></th><th>Founding</th><th>Standard</th></tr>
+        <tr><td>Piano Pro</td><td>12 mesi gratis</td><td>3 mesi gratis + 9 al 50%</td></tr>
+        <tr><td>Onboarding</td><td>Guidato 1:1</td><td>Guide e supporto</td></tr>
+        <tr><td>Badge</td><td>Founding</td><td>—</td></tr>
+        <tr><td>Fee piattaforma</td><td>15%</td><td>15%</td></tr>
+      </table>
+      <div style="margin-top:22px"><a class="btn btn-gold" href="#candidati">Candidati ora</a></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. COME FUNZIONA -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Come funziona</div>
+    <h2>Online in quattro passi.</h2>
+    <div class="grid-4 steps">
+      <div class="step"><h3>Candidati</h3><p class="lead" style="font-size:.95rem">Due minuti: nome d'arte, social e categorie che ti interessano.</p></div>
+      <div class="step"><h3>Verifica</h3><p class="lead" style="font-size:.95rem">Documento e selfie dal browser. I dati restano privati.</p></div>
+      <div class="step"><h3>Scegli</h3><p class="lead" style="font-size:.95rem">Attiva una o più categorie, ognuna con la sua identità.</p></div>
+      <div class="step"><h3>Guadagna</h3><p class="lead" style="font-size:.95rem">Pubblica, vai in live e preleva dal tuo wallet.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. AGENZIE -->
+<section id="agenzie">
+  <div class="wrap grid-2">
+    <div>
+      <div class="eyebrow">Per agenzie</div>
+      <h2>Gestisci più talenti, <span class="gold">moltiplica le opportunità</span>.</h2>
+      <p class="lead">Ogni creator della tua agenzia può essere presente in quattro categorie con un solo account e un solo wallet.</p>
+      <a class="btn btn-ghost" href="#candidati">Entra nel programma agenzie pilota</a>
+    </div>
+    <ul class="check">
+      <li>Fee del 15% su ogni creator</li>
+      <li>Fino a quattro profili per creator, con un'unica verifica</li>
+      <li>Programma pilota: le prime agenzie aiutano a progettare la dashboard agenzia</li>
+      <li>Referente dedicato nel team NOQ</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 8. SICUREZZA -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Sicurezza e privacy</div>
+    <h2>Sicura per chi crea, <span class="gold">seria per chi guarda</span>.</h2>
+    <div class="grid-3">
+      <div class="card"><div class="icon">⛨</div><h3>Identità verificate</h3><p>Verifica d'identità e dell'età per creator e utenti, secondo le normative europee.</p></div>
+      <div class="card"><div class="icon">◐</div><h3>Identità separate</h3><p>Il multiprofilo ti permette di esprimerti senza esporre il tuo nome reale.</p></div>
+      <div class="card"><div class="icon">◎</div><h3>Moderazione</h3><p>Contenuti controllati, segnalazioni dirette e community selezionata.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. FAQ -->
+<section>
+  <div class="wrap" style="max-width:800px">
+    <div class="eyebrow">Domande frequenti</div>
+    <h2>Prima di candidarti</h2>
+    <details><summary>Quanto trattiene NOQ?</summary><p>Il 15% su ciò che vendi. <span class="note">Chiarire se la fee di prelievo del 15% si aggiunge.</span></p></details>
+    <details><summary>Devo usare il mio nome reale?</summary><p>No. Il nome reale serve solo per la verifica d'identità e non è mai pubblico. Su ogni categoria puoi usare un nickname diverso.</p></details>
+    <details><summary>Posso portare la mia community da un'altra piattaforma?</summary><p>Sì. Ti aiutiamo nell'onboarding a impostare profili e prezzi per trasferire i tuoi fan.</p></details>
+    <details><summary>Serve un'app?</summary><p>No. NOQ funziona dal browser, su telefono e computer.</p></details>
+    <details><summary>Come ricevo i pagamenti?</summary><p>Dal tuo wallet richiedi il prelievo con bonifico SEPA. <span class="note">Allineare con Paxum/SEPA</span></p></details>
+    <details><summary>In quali paesi è disponibile?</summary><p>Partiamo dall'Europa: Italia, Spagna, Germania ed Est Europa.</p></details>
+  </div>
+</section>
+
+<!-- 10. CANDIDATURA -->
+<section id="candidati">
+  <div class="wrap" style="max-width:820px">
+    <div class="eyebrow">Candidatura Founding Creator</div>
+    <h2>Prenota il tuo posto.</h2>
+    <p class="lead">Ti risponde una persona del team entro 48 ore.</p>
+    <form onsubmit="event.preventDefault(); this.querySelector('button').textContent='Grazie! (demo)';">
+      <input placeholder="Nome d'arte" required>
+      <input type="email" placeholder="Email" required>
+      <input class="full" placeholder="Link al tuo profilo social o alla tua pagina attuale">
+      <select><option>Paese</option><option>Italia</option><option>Spagna</option><option>Germania</option><option>Polonia</option><option>Romania</option><option>Altro</option></select>
+      <select><option>Categoria principale</option><option>Hot Creator</option><option>Live Creator</option><option>Connection Creator</option><option>Pride Creator</option><option>Brand Creator</option></select>
+      <label class="consent full"><input type="checkbox" required> Confermo di avere almeno 18 anni e accetto l'informativa privacy.</label>
+      <button class="btn btn-gold full" type="submit">Invia candidatura</button>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">NotOnlyQueens® · One Creator. Four Opportunities. · Powered by the NOQ® Multi-Presence System™ · Piattaforma riservata ai maggiori di 18 anni.</div>
+</footer>
+
+<a class="btn btn-gold sticky" href="#candidati">Candidati · 50 posti</a>
+
+<script>
+  const fmt = n => '€ ' + Math.round(n).toLocaleString('it-IT');
+  const $ = id => document.getElementById(id);
+  function calc() {
+    const subs = +$('subs').value, price = +$('price').value, extra = +$('extra').value;
+    const gross = subs * price + extra;
+    const noq = gross * 0.85, other = gross * 0.80;
+    $('subsV').textContent = subs;
+    $('priceV').textContent = '€ ' + price.toFixed(2).replace('.', ',');
+    $('extraV').textContent = fmt(extra);
+    $('noq').textContent = fmt(noq);
+    $('other').textContent = fmt(other);
+    $('delta').textContent = '+' + fmt(noq - other) + ' al mese, ' + fmt((noq - other) * 12) + " in un anno";
+  }
+  ['subs', 'price', 'extra'].forEach(id => $(id).addEventListener('input', calc));
+  calc();
+</script>
+</body>
+</html>
