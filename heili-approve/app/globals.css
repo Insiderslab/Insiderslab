@@ -99,12 +99,17 @@ select:focus-visible {
 }
 
 /* iOS Safari zooms in when a focused field's text is under 16px: fields are
-   always `field` (16px) on phones. */
+   always `field` (16px) on phones. `.field` outranks the bare elements, so it
+   needs the same rule (plus the 44px touch target). */
 @media (max-width: 640px) {
   input,
   textarea,
   select {
     font-size: 16px;
+  }
+  .field {
+    font-size: 16px;
+    min-height: 44px;
   }
 }
 

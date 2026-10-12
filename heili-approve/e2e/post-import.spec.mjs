@@ -212,6 +212,14 @@ test("a 390 px niente scorrimento laterale", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto(`/posts/import?clientId=${client.id}`);
   await expectNoHorizontalScroll(page);
+
+  // On phones fields are 16px tall text (no iOS zoom) and at least 44px high (QA-11).
+  const pasteBox = page.getByTestId("import-paste");
+  const fontSize = await pasteBox.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(fontSize).toBeGreaterThanOrEqual(16);
+  const height = (await pasteBox.boundingBox()).height;
+  expect(height).toBeGreaterThanOrEqual(44);
+
   await page.getByTestId("import-paste").fill(sheet([["01/01/2020", "09:00", "Snapchat", "E2E import F", "manca.jpg"]]));
   await page.getByTestId("import-paste-read").click();
   await expect(page.getByTestId("import-row")).toHaveAttribute("data-state", "invalid");
