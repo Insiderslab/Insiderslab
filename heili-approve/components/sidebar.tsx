@@ -10,7 +10,7 @@
  * when there are several. Workspace and "Heili by 3Runes" sit in the footer.
  */
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ContentKind } from "@/app/generated/prisma/client";
@@ -128,14 +128,40 @@ function ClientSwitcherFallback({ clients, currentClientId }: { clients: Switche
 }
 
 export default function Sidebar({ isOpen, onClose, workspaceName, variant, clients, currentClientId }: SidebarProps) {
+  const asideRef = useRef<HTMLElement>(null);
+  // The drawer exists below lg only; on desktop the rail is always visible.
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Closed drawer: out of the tab order and of the accessibility tree. Open
+  // drawer: a dialog, focus moves into it (Escape closes, in DashboardShell).
+  const hidden = !isOpen && !isDesktop;
+  const dialog = isOpen && !isDesktop;
+  useEffect(() => {
+    if (dialog) asideRef.current?.focus();
+  }, [dialog]);
+
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onClose} />}
 
       <aside
+        ref={asideRef}
+        inert={hidden || undefined}
+        aria-hidden={hidden || undefined}
+        role={dialog ? "dialog" : undefined}
+        aria-modal={dialog || undefined}
+        aria-label={dialog ? "Menu" : undefined}
+        tabIndex={dialog ? -1 : undefined}
         className={`
-          fixed top-0 left-0 z-50 flex h-dvh w-72 max-w-[85vw] shrink-0 flex-col border-r border-border bg-surface
+          fixed top-0 left-0 z-50 flex h-dvh w-72 max-w-[85vw] shrink-0 flex-col border-r border-border bg-surface outline-none
           transition-transform duration-200 ease-out
           lg:static lg:z-auto lg:h-full lg:w-64 lg:translate-x-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}

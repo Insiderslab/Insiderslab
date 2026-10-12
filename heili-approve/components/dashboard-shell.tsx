@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/top-bar";
 import HelpGuide from "@/components/help/help-guide";
@@ -35,6 +35,22 @@ export default function DashboardShell({
 }: DashboardShellProps) {
   const currentClient = clients.find((c) => c.id === currentClientId) ?? null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes the drawer; when it closes, focus goes back to its button.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !sidebarOpen) menuButtonRef.current?.focus();
+    wasOpen.current = sidebarOpen;
+  }, [sidebarOpen]);
 
   return (
     // h-dvh, not h-screen: on mobile browsers the URL bar eats into 100vh.
@@ -51,6 +67,7 @@ export default function DashboardShell({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           onMenuClick={() => setSidebarOpen(true)}
+          menuButtonRef={menuButtonRef}
           metricoolConnected={metricoolConnected}
           needsAttention={needsAttention}
           variant={variant}

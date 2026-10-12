@@ -220,6 +220,16 @@ test("a 390 px niente scorrimento laterale", async ({ browser }) => {
   const height = (await pasteBox.boundingBox()).height;
   expect(height).toBeGreaterThanOrEqual(44);
 
+  // The closed drawer stays out of keyboard reach; Escape closes it and the
+  // focus returns to its button (QA-12).
+  const drawer = page.locator("aside");
+  await expect(drawer).toHaveAttribute("inert", "");
+  await page.getByRole("button", { name: "Apri menu" }).click();
+  await expect(drawer).not.toHaveAttribute("inert", "");
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveAttribute("inert", "");
+  await expect(page.getByRole("button", { name: "Apri menu" })).toBeFocused();
+
   await page.getByTestId("import-paste").fill(sheet([["01/01/2020", "09:00", "Snapchat", "E2E import F", "manca.jpg"]]));
   await page.getByTestId("import-paste-read").click();
   await expect(page.getByTestId("import-row")).toHaveAttribute("data-state", "invalid");

@@ -53,6 +53,8 @@ function PageTitleWithKind({ variant }: { variant: AppVariant }) {
 
 interface TopBarProps {
   onMenuClick: () => void;
+  /** The drawer returns the focus here when it closes. */
+  menuButtonRef?: React.Ref<HTMLButtonElement>;
   metricoolConnected: boolean;
   needsAttention: number;
   variant: AppVariant;
@@ -62,6 +64,7 @@ interface TopBarProps {
 
 export default function TopBar({
   onMenuClick,
+  menuButtonRef,
   metricoolConnected,
   needsAttention,
   variant,
@@ -79,6 +82,7 @@ export default function TopBar({
     >
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         <button
+          ref={menuButtonRef}
           onClick={onMenuClick}
           className="-ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-foreground hover:bg-surface-sunken lg:hidden"
           aria-label="Apri menu"
