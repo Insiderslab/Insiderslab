@@ -138,6 +138,7 @@
   footer { border-top: 1px solid var(--line); padding: 36px 0; color: var(--muted); font-size: .85rem; }
   .sticky { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
   @media (min-width: 761px) { .sticky { display: none; } }
+  @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .sticky { display: none; } section { break-inside: avoid-page; } }
 </style>
 </head>
 <body>
