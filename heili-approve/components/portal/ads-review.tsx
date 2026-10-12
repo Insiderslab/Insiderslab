@@ -155,7 +155,13 @@ export default function AdsReview({
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
-  const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // After "Chiedi modifiche" (or decisions that reject everything) the page behaves
+  // like a reloaded CHANGES_REQUESTED one: more feedback (and Heili in feedback
+  // mode) stays available, "Invia le mie decisioni" never returns.
+  const changesRequested = outcome?.kind === "changes" || (outcome?.kind === "decisions" && outcome.result === "CHANGES_REQUESTED");
+  const approved = outcome?.kind === "decisions" && outcome.result === "APPROVED";
+  const feedbackOpen = post.status === "CHANGES_REQUESTED" || changesRequested;
+  const canComment = (post.canAct || feedbackOpen) && !approved;
   // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
   // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
   const assistantAvailable = assistantEnabled && canComment;
@@ -281,7 +287,7 @@ export default function AdsReview({
     setAssetDraft(null);
     setDraftKey((key) => key + 1);
     setDecisionError(null);
-    setNotice(post.status === "CHANGES_REQUESTED"
+    setNotice(feedbackOpen
       ? "Commento aggiunto alla richiesta di modifiche già inviata."
       : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
@@ -326,7 +332,12 @@ export default function AdsReview({
   function finish(next: Outcome) {
     setOutcome(next);
     setCommentDirty(false);
-    setDraft(null);
+    // "Chiedi modifiche": reopen a general draft so the client can add more right away.
+    setDraft(
+      next.kind === "changes" || (next.kind === "decisions" && next.result === "CHANGES_REQUESTED")
+        ? { variantId: "", draft: { kind: "general" } }
+        : null
+    );
     setAssetDraft(null);
     setDecisionError(null);
     setSheet(null);

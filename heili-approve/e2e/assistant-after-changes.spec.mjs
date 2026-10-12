@@ -225,6 +225,14 @@ test("cliente (390px): in revisione Heili c'è; un commento e «Chiedi modifiche
   await page.getByRole("button", { name: "Chiedi modifiche" }).click();
   await expect(page.getByText("Modifiche inviate all'agenzia.", { exact: true })).toBeVisible();
 
+  // K-08: without a reload the page is the CHANGES_REQUESTED one — the comment
+  // field and Heili (feedback mode) are right there; «Approva» never returns.
+  await expect(page.getByText("Hai già chiesto modifiche: puoi aggiungere altro")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Invia commento" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Parla con Heili" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approva", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Chiedi modifiche" })).toHaveCount(0);
+
   const row = await waitForStatus(db, state.fixture.post.id, "CHANGES_REQUESTED", 10_000);
   expect(row.currentVersionNumber).toBe(1);
   await context.close();

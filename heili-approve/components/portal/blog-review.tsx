@@ -136,7 +136,10 @@ export default function BlogReview({
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
-  const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // After "Chiedi modifiche" the page behaves like a reloaded CHANGES_REQUESTED
+  // one: more feedback (and Heili in feedback mode) stays available, "Approva" never returns.
+  const feedbackOpen = post.status === "CHANGES_REQUESTED" || outcome === "changes";
+  const canComment = (post.canAct || feedbackOpen) && outcome !== "approved";
   // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
   // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
   const assistantAvailable = assistantEnabled && canComment;
@@ -221,7 +224,7 @@ export default function BlogReview({
     setDraft({ kind: "general" });
     setDraftKey((key) => key + 1);
     setDecisionError(null);
-    setNotice(post.status === "CHANGES_REQUESTED"
+    setNotice(feedbackOpen
       ? "Commento aggiunto alla richiesta di modifiche già inviata."
       : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
@@ -232,7 +235,8 @@ export default function BlogReview({
   function finish(result: Outcome) {
     setOutcome(result);
     setCommentDirty(false);
-    setDraft(null);
+    // "Chiedi modifiche": reopen a general draft so the client can add more right away.
+    setDraft(result === "changes" ? { kind: "general" } : null);
     setDecisionError(null);
     setSheet(null);
     setAssistantOpen(false);
@@ -482,7 +486,7 @@ export default function BlogReview({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
             <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-            <p className="mt-1 text-sm text-muted">{feedbackHint(canComment, assistantEnabled, post.status === "CHANGES_REQUESTED")}</p>
+            <p className="mt-1 text-sm text-muted">{feedbackHint(canComment, assistantEnabled, feedbackOpen)}</p>
           </div>
           {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
         </div>
