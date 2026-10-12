@@ -21,6 +21,7 @@ import {
   parseMonthParam,
   parseStatusFilter,
   pruneNetworkOptions,
+  selectForSendLabel,
   setNetworkOption,
   sortThreadsByMoment,
   startOfDayUtc,
@@ -54,6 +55,14 @@ describe("status filters and commands", () => {
     expect(availableCommands("SCHEDULING")).toEqual([]);
     expect(availableCommands("SCHEDULED")).toEqual([]);
     expect(availableCommands("CANCELLED")).toEqual([]);
+  });
+
+  it("bulk-send bar: counts drafts and changes-requested, and says «post», not «bozze»", () => {
+    // Mixed rows (draft, changes requested, approved): the first two are sendable.
+    const sendable = (["DRAFT", "CHANGES_REQUESTED", "APPROVED"] as const).filter((status) => availableCommands(status).includes("submit"));
+    expect(sendable).toEqual(["DRAFT", "CHANGES_REQUESTED"]);
+    expect(selectForSendLabel(sendable.length)).toBe("Seleziona i post da inviare (2)");
+    expect(selectForSendLabel(sendable.length)).not.toContain("bozze");
   });
 
   it("freezes scheduled and cancelled posts", () => {

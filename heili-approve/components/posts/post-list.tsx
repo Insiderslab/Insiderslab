@@ -16,7 +16,7 @@ import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
 import QuickReviewLink from "@/components/share/quick-review-link";
 import { canTransition, type MediaType } from "@/lib/domain";
-import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, timeZoneAbbr } from "./helpers";
+import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, selectForSendLabel, timeZoneAbbr } from "./helpers";
 import { KindBadge, KindIcon, KindStatusBadge } from "./kind-badge";
 
 export interface PostListRow {
@@ -116,6 +116,8 @@ export default function PostList({
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Drafts and changes-requested posts can both be (re)sent: the bar's label
+  // (selectForSendLabel) says "post", matching this filter.
   const selectable = rows.filter((row) => canTransition(row.status, "submit"));
   // Rows can leave the list after a refresh: only count what is still selectable.
   const chosen = selectable.filter((row) => selected.has(row.id));
@@ -184,7 +186,7 @@ export default function PostList({
             <input type="checkbox" checked={allChosen} onChange={toggleAll} className="h-4 w-4 accent-accent" />
             {chosen.length > 0
               ? `${chosen.length} selezionati`
-              : `Seleziona le bozze da inviare (${selectable.length})`}
+              : selectForSendLabel(selectable.length)}
           </label>
           {chosen.length > 0 && (
             <>
