@@ -251,3 +251,10 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/env.ts, lib/mcp/config.ts, .env.example, __tests__/env.test.ts (nuovo).
 - Test: 4 casi — vuota/spazi → fallback; preferenza e barra finale; valore relativo → errore; getMcpConfig con vuota → URL assoluti.
 - Verifiche: tsc 0, eslint 0, vitest 993/993.
+
+### QA-25 — FATTA
+- Fix: in `checkImportRows` (il controllo server che il wizard esegue a ogni modifica) due righe con la stessa impronta (`draftFingerprint`) nello stesso foglio → la seconda è marcata «Uguale alla riga N: creerebbe una bozza identica» (N = numero di riga del foglio, coerente con l'etichetta «Riga N» del wizard).
+- Decisione (documentata nel resoconto): bloccante, non solo avviso — la scheda ammetteva entrambe; nel wizard una riga con issue non è «pronta», quindi non viene creata. Coerente con la promessa dell'import «non duplica mai»: per duplicare davvero basta cambiare un campo (titolo, ora). Il percorso automazione/MCP (source_id espliciti) non è toccato: lì la deduplica è responsabilità del chiamante.
+- File: lib/post-import/service.ts, __tests__/post-import-service.test.ts.
+- Test: nuovo caso — tre righe (due identiche + una con titolo diverso): la seconda non ok con il messaggio, la terza ok.
+- Verifiche: tsc 0, eslint 0, vitest 994/994.

@@ -207,6 +207,19 @@ describe("checkImportRows (preview)", () => {
     await expect(checkImportRows("workspace-1", request([]), NOW)).rejects.toThrow("Non ci sono righe");
     await expect(checkImportRows("workspace-1", request(Array.from({ length: 201 }, () => row())), NOW)).rejects.toThrow("al massimo 200");
   });
+
+  it("flags a row identical to an earlier one of the same sheet", async () => {
+    const checks = await checkImportRows(
+      "workspace-1",
+      request([row(), row({ sourceRow: 3 }), row({ sourceRow: 4, title: "Altro titolo" })]),
+      NOW
+    );
+    expect(checks[0].ok).toBe(true);
+    expect(checks[1].ok).toBe(false);
+    expect(checks[1].issues[0].message).toBe("Uguale alla riga 2: creerebbe una bozza identica");
+    // A different field makes it its own draft again.
+    expect(checks[2].ok).toBe(true);
+  });
 });
 
 describe("createImportedDrafts", () => {
