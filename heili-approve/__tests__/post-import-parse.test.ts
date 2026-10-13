@@ -273,9 +273,11 @@ describe("template", () => {
     expect(await zip.file("xl/workbook.xml")!.async("string")).toContain('name="Istruzioni"');
   });
 
-  it("csv version has a BOM and reads back the same", async () => {
+  it("csv version has a BOM, the Italian «;» separator, and reads back the same", async () => {
     const csv = buildTemplateCsv({ exampleDate: "15/10/2026" });
     expect(csv.startsWith("\uFEFF")).toBe(true);
+    // Italian Excel opens it in columns: ";" is its list separator.
+    expect(csv.split("\r\n", 1)[0]).toContain(";");
     const { rows } = parsePastedRows(csv);
     expect(rows[0]).toMatchObject({ date: "15/10/2026", networks: "Instagram, Facebook" });
   });

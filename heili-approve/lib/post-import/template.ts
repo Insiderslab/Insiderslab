@@ -40,10 +40,14 @@ function csvCell(value: string): string {
   return /[",\n\r;]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** UTF-8 CSV with a BOM, so Excel shows the accents correctly. */
+/**
+ * UTF-8 CSV with a BOM, so Excel shows the accents correctly. The separator
+ * is ";" — the Italian Excel list separator: with "," a double-clicked file
+ * would land all in one column. The importer sniffs both (detectDelimiter).
+ */
 export function buildTemplateCsv({ exampleDate }: TemplateOptions): string {
-  const lines = [[...TEMPLATE_HEADERS], EXAMPLE(exampleDate)].map((row) => row.map(csvCell).join(","));
-  return `﻿${lines.join("\r\n")}\r\n`;
+  const lines = [[...TEMPLATE_HEADERS], EXAMPLE(exampleDate)].map((row) => row.map(csvCell).join(";"));
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
 function escapeXml(value: string): string {

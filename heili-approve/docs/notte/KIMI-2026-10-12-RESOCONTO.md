@@ -237,3 +237,10 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: app/globals.css, e2e/post-import.spec.mjs.
 - Test: e2e — il bordo calcolato di un campo è rgb(123,143,149) (da rilanciare).
 - Verifiche: tsc 0, eslint 0 (css ignorato), vitest 989/989.
+
+### QA-23 — FATTA
+- Fix: il modello CSV ora usa «;» (separatore elenco di Excel in italiano) invece di «,»; BOM mantenuto (ora scritto come `\uFEFF` esplicito, più robusto del carattere letterale). L'importatore legge già entrambi (`detectDelimiter`), quindi i vecchi CSV con «,» continuano a funzionare. Nessuna riga `sep=;`: il parser la leggerebbe come prima riga di dati.
+- Nota di rischio gestita: in una prima stesura il BOM letterale si era perso nella riscrittura della riga (era un carattere invisibile nel file); il test esistente «csv version has a BOM» l'ha intercettato subito. Le celle con «,» o «;» dentro sono già virgolettate da `csvCell`.
+- File: lib/post-import/template.ts, __tests__/post-import-parse.test.ts.
+- Test: il caso del modello ora verifica anche che la prima riga contenga «;»; roundtrip invariato e verde. Verifica con Excel reale rimandata (la scheda diceva «da verificare»): la logica è quella standard dei CSV italiani.
+- Verifiche: tsc 0, eslint 0, vitest 989/989.
