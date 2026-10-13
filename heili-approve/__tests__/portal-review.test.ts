@@ -180,7 +180,7 @@ describe("AdsReview", () => {
         reviewerHasEmail: true,
       })
     );
-    expect(html).toContain("Creatività ads");
+    expect(html).toContain("Annuncio");
     expect(html).toContain("Saldi di primavera");
     expect(html).toContain("€30/giorno");
     expect(html).toContain("2 di 3 varianti decise");
@@ -339,7 +339,7 @@ describe("PostCard", () => {
     const ads = renderToStaticMarkup(
       createElement(PostCard, { post: { ...card, kind: "AD_CREATIVE", variantCount: 3 }, href: "/x" })
     );
-    expect(ads).toContain("Creatività ads");
+    expect(ads).toContain("Annuncio");
     expect(ads).toContain("Inizio campagna: </span>");
     expect(ads).toContain("3 varianti · Versione 1");
 

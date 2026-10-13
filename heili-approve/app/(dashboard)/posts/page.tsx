@@ -195,7 +195,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
               className="btn btn-sm"
               data-testid="posts-import-link"
             >
-              Importa da Excel
+              Importa post
             </Link>
           )}
           <Link

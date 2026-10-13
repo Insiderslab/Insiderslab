@@ -65,7 +65,7 @@ describe("share messages", () => {
       `Ciao Chiara, c'è un nuovo articolo da approvare: «Weekend d'autunno». Lo trovi qui: ${URL}`
     );
     expect(postLinkMessage({ ...base, kind: "AD_CREATIVE" })).toBe(
-      `Ciao Chiara, ci sono nuove creatività da approvare: «Weekend d'autunno». Le trovi qui: ${URL}`
+      `Ciao Chiara, ci sono nuovi annunci da approvare: «Weekend d'autunno». Li trovi qui: ${URL}`
     );
     expect(postLinkMessage({ ...base, kind: "BLOG_ARTICLE", status: "CHANGES_REQUESTED" })).toBe(
       `Ciao Chiara, ecco il link per rivedere l'articolo «Weekend d'autunno»: ${URL}`

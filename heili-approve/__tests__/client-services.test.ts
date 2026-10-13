@@ -184,8 +184,8 @@ describe("wording for several services", () => {
     expect(sortKinds(["AD_CREATIVE", "SOCIAL_POST"])).toEqual(["SOCIAL_POST", "AD_CREATIVE"]);
     expect(servicesSentence(["AD_CREATIVE", "BLOG_ARTICLE", "SOCIAL_POST"])).toBe("post social, articoli e creatività ads");
     expect(kindCountPhrase({ BLOG_ARTICLE: 1, SOCIAL_POST: 2 })).toBe("2 post social e 1 articolo");
-    expect(kindCountPhrase({ SOCIAL_POST: 1, BLOG_ARTICLE: 0, AD_CREATIVE: 3 })).toBe("1 post social e 3 creatività");
-    expect(kindCountPhrase({ AD_CREATIVE: 1, BLOG_ARTICLE: 2 }, { adSets: true })).toBe("2 articoli e 1 set di creatività");
+    expect(kindCountPhrase({ SOCIAL_POST: 1, BLOG_ARTICLE: 0, AD_CREATIVE: 3 })).toBe("1 post social e 3 annunci");
+    expect(kindCountPhrase({ AD_CREATIVE: 1, BLOG_ARTICLE: 2 }, { adSets: true })).toBe("2 articoli e 1 set di annunci");
   });
 
   it("writes a mixed review email that says what it holds", () => {
@@ -223,7 +223,7 @@ describe("unified portal", () => {
       ["Tutti", 3, false],
       ["Post social", 1, false],
       ["Articoli", 1, true],
-      ["Creatività ads", 1, false],
+      ["Annunci", 1, false],
     ]);
     expect(tabs[0].href).toBe("/review/tok");
     expect(tabs[2].href).toBe("/review/tok?tipo=blog");
@@ -241,11 +241,11 @@ describe("unified portal", () => {
 
   it("says what the client finds in the header", () => {
     expect(portalTagline(["AD_CREATIVE", "SOCIAL_POST", "BLOG_ARTICLE"])).toBe(
-      "I tuoi contenuti da approvare: post social, articoli e creatività ads"
+      "I tuoi contenuti da approvare: post social, articoli e annunci"
     );
     expect(portalTagline(["SOCIAL_POST"])).toBe("I tuoi post da approvare");
     expect(portalTagline(["BLOG_ARTICLE"])).toBe("I tuoi articoli da approvare");
-    expect(portalTagline(["AD_CREATIVE"])).toBe("Le tue creatività da approvare");
+    expect(portalTagline(["AD_CREATIVE"])).toBe("I tuoi annunci da approvare");
   });
 });
 

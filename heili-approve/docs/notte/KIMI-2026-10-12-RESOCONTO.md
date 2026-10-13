@@ -193,3 +193,17 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: components/posts/helpers.ts, app/(dashboard)/calendar/page.tsx, __tests__/posts-ui.test.ts.
 - Test: 3 asserzioni su `ucFirst`.
 - Verifiche: tsc 0, eslint 0, vitest 984/984.
+
+### QA-17 — FATTA
+- Glossario fissato: lato agenzia «Post social», «Articoli», «Creatività ads»; lato cliente (portale, email, WhatsApp) **«Annunci»**, mai «ads» né «creatività».
+- Lato cliente: `variant.ts` COUNT_WORDS→annunci e «set di annunci», nuova `clientServicesSentence` (quella esistente resta per l'agenzia); `notifications.ts` email batch AD→annunci; `share/messages.ts` WhatsApp→annunci; portale: nuova mappa `PORTAL_KIND_LABELS` (helpers) usata da tag, tabs e `KindLabel` («Annuncio»); tagline «I tuoi annunci da approvare»; ads-review tutti i testi→annunci; actions.ts «Questo set di annunci è già stato approvato».
+- Lato agenzia: `KIND_CONFIG.BLOG_ARTICLE.plural` «Articoli di blog»→«Articoli» (menu/dashboard coerenti); errori «Creatività non trovate»→«Creatività ads non trovate» (creative-decisions, export route); email agenzia «Creatività approvate»→«Creatività ads approvate»; pulsanti «Importa da Excel»→«Importa post» (come il titolo della pagina), help catalog allineato.
+- File: lib/variant.ts, lib/notifications.ts, lib/domain.ts, lib/creative-decisions.ts, lib/help/catalog.ts, components/share/messages.ts, components/portal/{helpers,kind-label,kind-tabs,portal-header,post-card,ads-review}, app/(dashboard)/posts/page.tsx, app/(dashboard)/plans/page.tsx, app/api/export/ads/[postId]/route.ts, app/review/[token]/{actions.ts,page.tsx}, __tests__/{glossary.test.ts (nuovo),client-services.test.ts,share-link.test.ts,portal-review.test.ts}, e2e/{client-services.spec.mjs,post-import.spec.mjs}.
+- Test: nuovo `__tests__/glossary.test.ts` (4 casi): parole cliente nelle funzioni condivise, portale, email/WhatsApp, e scansione statica di components/portal + app/review: nessun «creativit» nel codice del portale. Aggiornati i test esistenti alle nuove diciture; e2e client-services aggiornato (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 988/988 (worktree dedicata, vedi nota sotto).
+
+### NOTA DI SESSIONE — convivenza con deepseek/notte-2026-10-13 (IMPORTANTE per Claude)
+- Durante QA-17 un agente DeepSeek ha fatto checkout del suo branch `deepseek/notte-2026-10-13` **nella stessa working directory** (base: merge `ce1a782` del mio lavoro della notte 12/10 fino a K-04+QA-15, più una revisione del mio QA-11 in globals.css, più il suo lavoro H-01 «dock di Heili nel portale»). Le mie modifiche QA-17 non committate si sono trovate nella sua tree; lui le ha riconosciute («QA-17 esterno» nel suo resoconto) e NON le ha committate.
+- Per non collidere ho spostato il mio lavoro in una **worktree separata** (`%TEMP%\opencode\kimi-wt`, branch `kimi/notte-2026-10-12`) e ho committato QA-17 da lì. Da qui in poi lavoro solo nella worktree.
+- Le copie delle mie modifiche QA-17 rimaste nella tree principale (quella di deepseek) andrebbero tolte da chi ci lavora (o da me quando deepseek avrà finito): sono i file del commit QA-17 sul mio branch. Non le ho tolte io perché deepseek era attivo in quel momento.
+- Il branch di deepseek NON contiene i miei commit di questa notte (K-05, K-06, K-07, QA-14, QA-16, QA-17): il merge finale li dovrà includere; attenzione ai file toccati da entrambi (components/portal/*, app/review/*, e2e/month-review.spec.mjs).

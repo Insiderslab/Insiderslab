@@ -9,7 +9,7 @@
 
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { KIND_CONFIG, formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
-import { KIND_UI, kindParam, parseKindParam, servicesSentence, sortKinds } from "@/lib/variant";
+import { clientServicesSentence, kindParam, parseKindParam, sortKinds } from "@/lib/variant";
 
 const FALLBACK_TIME_ZONE = "Europe/Rome";
 
@@ -334,19 +334,29 @@ export function portalWording(kinds: readonly ContentKind[]): PortalWording {
 }
 
 /**
+ * Client-facing kind names (glossary): the portal says "Annunci", never
+ * "ads" — the agency-only term for them stays in the dashboard.
+ */
+export const PORTAL_KIND_LABELS: Record<ContentKind, { one: string; many: string }> = {
+  SOCIAL_POST: { one: "Post social", many: "Post social" },
+  BLOG_ARTICLE: { one: "Articolo", many: "Articoli" },
+  AD_CREATIVE: { one: "Annuncio", many: "Annunci" },
+};
+
+/**
  * Line under the client's name in the portal header, from the client's
- * services: "I tuoi post da approvare", "I tuoi articoli da approvare", "Le
- * tue creatività da approvare", or for several "I tuoi contenuti da
- * approvare: post social, articoli e creatività".
+ * services: "I tuoi post da approvare", "I tuoi articoli da approvare", "I
+ * tuoi annunci da approvare", or for several "I tuoi contenuti da
+ * approvare: post social, articoli e annunci".
  */
 export function portalTagline(kinds: readonly ContentKind[]): string {
   const sorted = sortKinds(kinds);
-  if (sorted.length > 1) return `I tuoi contenuti da approvare: ${servicesSentence(sorted)}`;
+  if (sorted.length > 1) return `I tuoi contenuti da approvare: ${clientServicesSentence(sorted)}`;
   switch (sorted[0]) {
     case "BLOG_ARTICLE":
       return "I tuoi articoli da approvare";
     case "AD_CREATIVE":
-      return "Le tue creatività da approvare";
+      return "I tuoi annunci da approvare";
     default:
       return "I tuoi post da approvare";
   }
@@ -386,7 +396,7 @@ export function parsePortalKind(
 }
 
 /**
- * "Tutti · Post social · Articoli · Creatività" with the number of items
+ * "Tutti · Post social · Articoli · Annunci" with the number of items
  * waiting for the client in each; empty when the portal shows one kind only
  * (no tabs then) (pure).
  */
@@ -403,7 +413,7 @@ export function portalKindTabs(
     { kind: null, label: "Tutti", toAct: toAct(null), href: base, active: selected === null },
     ...kinds.map((kind) => ({
       kind,
-      label: KIND_UI[kind].serviceLabel,
+      label: PORTAL_KIND_LABELS[kind].many,
       toAct: toAct(kind),
       href: `${base}?tipo=${kindParam(kind)}`,
       active: selected === kind,

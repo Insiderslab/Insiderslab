@@ -1,7 +1,7 @@
 // "Importa post": creating social drafts from a sheet in the agency panel,
 // against the running app (APP_VARIANT=all, METRICOOL_FAKE=1). Run with: sh e2e/run.sh (see README).
 //
-// 1. From the posts list: "Importa da Excel", the client picker, the template (.xlsx / .csv).
+ // 1. From the posts list: "Importa post", the client picker, the template (.xlsx / .csv).
 // 2. The downloaded template is uploaded back with its pictures: the row is read and ready.
 // 3. Pasted rows (tab separated): one row is wrong (date in the past, unknown network, missing
 //    picture) and is red with the reasons; the others are ready. After fixing it, "Crea 3 bozze"

@@ -147,15 +147,16 @@ const BATCH_WORDS: Record<
     cta: ["Leggi l'articolo", "Leggi gli articoli"],
     reminderOne: (title) => `l'articolo "${title}" aspetta la tua revisione`,
   },
+  // Client side (glossary): "annunci", never "ads".
   AD_CREATIVE: {
-    one: "una creatività",
-    many: (n) => `${n} creatività`,
-    newOne: "Nuova creatività",
-    newMany: (n) => `${n} nuove creatività`,
-    heading: "Creatività da approvare",
+    one: "un annuncio",
+    many: (n) => `${n} annunci`,
+    newOne: "Nuovo annuncio",
+    newMany: (n) => `${n} nuovi annunci`,
+    heading: "Annunci da approvare",
     howTo: "Puoi vedere le anteprime per posizionamento, approvare o scartare ogni variante e lasciare commenti.",
-    cta: ["Rivedi le creatività", "Rivedi le creatività"],
-    reminderOne: (title) => `le creatività "${title}" aspettano la tua revisione`,
+    cta: ["Rivedi l'annuncio", "Rivedi gli annunci"],
+    reminderOne: (title) => `gli annunci "${title}" aspettano la tua revisione`,
   },
   MIXED: {
     one: "un contenuto",
@@ -619,7 +620,7 @@ export async function notifyApproved(postId: string): Promise<void> {
       const { variants } = readAdSummary(version?.content);
       const byVariant = new Map(decisions.map((d) => [d.variantId, d]));
       await sendToAgency(post.workspaceId, `Approvato: ${post.title}`, {
-        heading: "Creatività approvate",
+        heading: "Creatività ads approvate",
         paragraphs: [
           `${who} ha deciso le varianti della versione ${post.currentVersionNumber} di "${post.title}".`,
           "Scarica dal pannello il pacchetto delle varianti approvate e, una volta caricate, segnale come consegnate.",
