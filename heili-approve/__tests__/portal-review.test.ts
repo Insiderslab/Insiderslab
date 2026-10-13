@@ -15,6 +15,7 @@ vi.mock("@/app/review/[token]/actions", () => ({
 
 import AdsReview from "@/components/portal/ads-review";
 import BlogReview from "@/components/portal/blog-review";
+import CommentComposer from "@/components/portal/comment-composer";
 import PostCard from "@/components/portal/post-card";
 import PostReview from "@/components/portal/post-review";
 import { OpenFeedbackNotice, savedFeedbackBlocker } from "@/components/portal/review-pieces";
@@ -180,7 +181,7 @@ describe("AdsReview", () => {
         reviewerHasEmail: true,
       })
     );
-    expect(html).toContain("Creatività ads");
+    expect(html).toContain("Annuncio");
     expect(html).toContain("Saldi di primavera");
     expect(html).toContain("€30/giorno");
     expect(html).toContain("2 di 3 varianti decise");
@@ -277,6 +278,19 @@ describe("PostReview (social) keeps its wording", () => {
     expect(withoutEmail).toContain("l&#x27;agenzia ti avviserà quando la nuova versione sarà pronta");
   });
 
+  it("does not offer «Annulla» while the comment field is empty (U-06)", () => {
+    const html = renderToStaticMarkup(
+      createElement(CommentComposer, {
+        draft: { kind: "general" },
+        mediaLabel: null,
+        onSubmit: async () => null,
+        onCancel: () => {},
+      })
+    );
+    // The empty comment field has nothing to discard: no full-width cancel.
+    expect(html).not.toContain(">Annulla<");
+  });
+
   it("puts the preview before collapsed details and keeps the complete copy accessible", () => {
     const post: PortalPost = {
       ...base,
@@ -339,7 +353,7 @@ describe("PostCard", () => {
     const ads = renderToStaticMarkup(
       createElement(PostCard, { post: { ...card, kind: "AD_CREATIVE", variantCount: 3 }, href: "/x" })
     );
-    expect(ads).toContain("Creatività ads");
+    expect(ads).toContain("Annuncio");
     expect(ads).toContain("Inizio campagna: </span>");
     expect(ads).toContain("3 varianti · Versione 1");
 

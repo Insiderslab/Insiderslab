@@ -354,16 +354,19 @@ export default function CommentComposer({
         </p>
       )}
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          onClick={cancel}
-          disabled={busy}
-          className="min-h-11 rounded-md border border-border bg-background px-4 text-sm hover:border-border-hover disabled:opacity-50"
-        >
-          Annulla
-        </button>
-      </div>
+      {/* U-06: a vuoto «Annulla» non serve; compare quando c'è qualcosa da scartare. */}
+      {isDirty() && (
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={cancel}
+            disabled={busy}
+            className="min-h-11 rounded-md border border-border bg-background px-4 text-sm hover:border-border-hover disabled:opacity-50"
+          >
+            Annulla
+          </button>
+        </div>
+      )}
     </form>
   );
 }
