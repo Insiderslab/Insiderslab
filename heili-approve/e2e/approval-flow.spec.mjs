@@ -139,8 +139,10 @@ test("cliente (390px): commento con pin e richiesta di modifiche", async ({ brow
   await page.getByTestId("heili-dock-button").click();
   await expect(page.getByTestId("heili-dock")).toBeVisible();
   await expect(page.getByRole("region", { name: "Assistente di revisione" })).toHaveCount(0);
+  // H-03: dalla home la Guida porta al primo post da rivedere.
   await expect(page.getByTestId("heili-guide-status")).toBeVisible();
-  await page.getByRole("button", { name: "Chiudi Heili" }).click();
+  await expect(page.getByTestId("heili-guide-next")).toHaveAttribute("href", new RegExp(`/posts/${state.imagePostId}$`));
+  await page.keyboard.press("Escape");
   await expect(page.getByTestId("heili-dock")).not.toBeVisible();
 
   const image = page.getByRole("region", { name: "Anteprima del post" }).locator("img").first();

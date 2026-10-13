@@ -76,6 +76,23 @@ describe("Heili dock tabs", () => {
   });
 });
 
+describe("Guida: il prossimo passo", () => {
+  it("dalla home porta al primo post da rivedere, dopo il filtro del portale", () => {
+    const destinations = [
+      destination({ id: "plan", href: `/review/${token}/piani/1`, kind: "plan" }),
+      destination({ id: "view", href: `/review/${token}/mese/2026-10`, kind: "view" }),
+      destination({ id: "next", href: `/review/${token}/posts/p2`, kind: "next" }),
+      destination({ id: "evil", href: "https://example.com/next", kind: "next" }),
+      destination({ id: "home", href: `/review/${token}`, kind: "home" }),
+    ];
+    const filtered = filterDestinations(token, destinations);
+    const next = nextStepDestination(filtered);
+    expect(next?.id).toBe("next");
+    expect(next?.href).toBe(`/review/${token}/posts/p2`);
+    expect(shortcutDestinations(filtered, next).map((d) => d.kind)).toEqual(["plan", "view", "home"]);
+  });
+});
+
 describe("registrazione della pagina", () => {
   it("the latest page wins and a late clear never wipes a newer registration", () => {
     const first = { id: 1, key: "home", read: () => context() };
