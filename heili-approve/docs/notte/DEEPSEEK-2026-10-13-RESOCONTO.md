@@ -2,9 +2,9 @@
 
 ## Riepilogo in cima
 
-- **Fatte:** H-01, H-02, U-01, H-03, H-04, U-03, U-02, U-06, U-07
-- **Saltate:** niente finora
-- **Resta da fare:** U-05 → U-04 → U-08 → H-05 (ordine del piano)
+- **Fatte:** H-01, H-02, U-01, H-03, H-04, U-03, U-02, U-06, U-07, U-05, U-04, U-08, H-05
+- **Saltate:** niente di previsto; **e2e e schermate impossibili** (vedi punto 1 e 2 sotto)
+- **Resta da fare:** niente sul piano; la verifica visiva/e2e delle attività H/U resta all'ambiente completo
 - **Da controllare da Claude domattina:**
   1. **e2e non eseguibili stanotte** (mancano Postgres, Redis, worker e Playwright su questa macchina; `sh` non c'è). Le spec e2e sono state aggiornate solo dove il percorso cambia; vanno eseguite in CI/ambiente completo.
   2. **Schermate prima/dopo non fatte** per lo stesso motivo: l'app non parte senza database. La cartella `docs/notte/shots-13-10/` non è stata creata.
@@ -70,3 +70,21 @@
 ### U-07 — Attesa ed errori della chat (fatta, commit `ecb2b60`)
 
 - «Heili sta scrivendo» con tre puntini, animazione solo con `prefers-reduced-motion: no-preference` (`.typing-dots` in `globals.css`). Errore su una riga con «Riprova»; il testo scritto non si perde (torna nella casella quando il server non l'ha salvato). Test unit su sorgente e gate reduced-motion.
+
+### U-05 — Home più diretta (fatta, commit `0bd3f25`)
+
+- Un solo invito principale (il pulsante in evidenza; la scheda del piano resta una porta quieta «Apri il piano»), niente «0 approvati» (né «0» con soli cambi richiesti) nella barra di avanzamento, titolo ridotto e frase su ciò che aspetta il cliente in evidenza.
+- I tre passi «Guarda · Commenta · Concludi» solo alla prima visita (localStorage per token), poi riga compatta «Come funziona?» che apre la Guida di Heili. Test su progress bar a zero e riga compatta.
+
+### U-04 — Barra delle decisioni su telefono (fatta, commit `01f7415`)
+
+- Pulsanti 48 px/16 px, nessun ritorno a capo a 390 px anche per «Invia le mie decisioni» (che mantiene la sua larghezza). Il principale non cambia (QA-09). Test unit sulle classi delle tre barre.
+
+### U-08 — Sfoglia su telefono (K-10) (fatta, commit `ae24629`)
+
+- Intestazione della card su due righe compatte (titolo fra le frecce, poi stato e versione), avanzamento con nuova taglia `xs` della `PlanProgressBar`, spazio riservato sotto la card su telefono: il pulsante galleggiante di Heili resta sopra la barra (`--decision-bar-h`) e fuori dall'immagine. **Verifica visiva 390×844 non fatta**: serve l'ambiente con database.
+- Nota: il timeout dei test vitest è passato a 15 s in `vitest.config.ts` (i render delle pagine con il dock superavano i 5 s sotto carico; verifiche invariate).
+
+### H-05 — Documento «Guida a voce» (fatta, `docs/HEILI-GUIDA-VOCALE.md`)
+
+- Proposta completa e volutamente **non implementata**: sessione live di portale senza media, strumento `navigate` con soli id validati dal server, consegna della direttiva via polling sulla rotta voce, limiti/costi, rischi di iniezione e contromisure, test necessari. Da rivedere con Claude e Stefano.
