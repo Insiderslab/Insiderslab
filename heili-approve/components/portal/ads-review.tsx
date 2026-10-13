@@ -34,7 +34,8 @@ import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdVariantReview, { type AdCommentRequest } from "@/components/ads/ad-variant-review";
 import AssetCommentComposer from "@/components/ads/asset-comment-composer";
 import AdDecisionBadge from "@/components/ads/decision-badge";
-import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
+import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
+import type { HeiliDestination } from "@/components/portal/heili/types";
 import {
   AD_PLACEMENTS,
   AD_PLATFORM_LABELS,
@@ -58,7 +59,6 @@ import {
 } from "./helpers";
 import KindLabel from "./kind-label";
 import {
-  AssistantToggle,
   AssistantActionButton,
   DecisionBar,
   ReviewNav,
@@ -121,9 +121,8 @@ export default function AdsReview({
   historySlot,
 }: AdsReviewProps) {
   const router = useRouter();
-  const assistantRef = useRef<HTMLDivElement>(null);
-  const assistantControl = useRef<AssistantPanelHandle>(null);
   const assistantSend = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
+  const heili = useHeili();
   const variants = post.content.variants;
   const { campaign } = post.content;
 
@@ -143,7 +142,6 @@ export default function AdsReview({
   const [commentListening, setCommentListening] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
   // Bumped after Heili's feedback was added: the next conversation starts fresh.
   const [assistantKey, setAssistantKey] = useState(0);
   const [compareOpen, setCompareOpen] = useState(false);
@@ -258,6 +256,17 @@ export default function AdsReview({
 
   function requestComment(variantId: string, request: AdCommentRequest) {
     if (request.timeSec !== undefined) {
+      if (heili.pick) {
+        heili.completePick({
+          kind: "moment",
+          mediaIndex: request.mediaIndex,
+          timeSec: request.timeSec,
+          x: request.x,
+          y: request.y,
+          variantId,
+        });
+        return;
+      }
       openDraft(variantId, {
         kind: "moment",
         mediaIndex: request.mediaIndex,
@@ -266,6 +275,10 @@ export default function AdsReview({
         y: request.y,
       });
     } else if (request.x !== undefined && request.y !== undefined) {
+      if (heili.pick) {
+        heili.completePick({ kind: "pin", mediaIndex: request.mediaIndex, x: request.x, y: request.y, variantId });
+        return;
+      }
       openDraft(variantId, { kind: "pin", mediaIndex: request.mediaIndex, x: request.x, y: request.y });
     }
   }
@@ -341,7 +354,7 @@ export default function AdsReview({
     setAssetDraft(null);
     setDecisionError(null);
     setSheet(null);
-    setAssistantOpen(false);
+    heili.closeDock();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -361,15 +374,15 @@ export default function AdsReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
-    if (assistantControl.current?.isLoadingFeedback()) {
+    if (heili.control.current?.isLoadingFeedback()) {
       setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
       return;
     }
     setDecisionError(null);
-    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
-      setAssistantOpen(true);
+    if (heili.open || heili.control.current?.hasPendingFeedback()) {
+      heili.openDock("feedback");
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await assistantControl.current?.requestChanges();
+      await heili.control.current?.requestChanges();
     } else {
       await requestSavedChanges();
     }
@@ -377,15 +390,15 @@ export default function AdsReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
-    if (assistantControl.current?.isLoadingFeedback()) {
+    if (heili.control.current?.isLoadingFeedback()) {
       setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
       return;
     }
     setDecisionError(null);
-    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
-      setAssistantOpen(true);
+    if (heili.open || heili.control.current?.hasPendingFeedback()) {
+      heili.openDock("feedback");
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await assistantControl.current?.approve();
+      await heili.control.current?.approve();
     } else {
       openSheet("send");
     }
@@ -500,25 +513,56 @@ export default function AdsReview({
       if (result.stale) setStale(true);
       throw new Error(result.error);
     }
-    setAssistantOpen(false);
+    heili.closeDock();
     setAssistantKey((key) => key + 1);
     setDecisionError(null);
     setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
   }
 
-  async function toggleAssistant() {
+  function openAssistant() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
       requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
       return;
     }
-    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
-    const open = !assistantOpen;
-    setAssistantOpen(open);
-    if (open) {
-      requestAnimationFrame(() => assistantRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
-    }
+    heili.openDock("feedback");
   }
+
+  // ─── Heili: what this page offers the dock ─────────────────────────────────
+
+  const heiliHeading = campaign.name.trim() || post.title;
+  const heiliDestinations: HeiliDestination[] = [];
+  if (nextHref) {
+    heiliDestinations.push({ id: "next", label: "Rivedi il prossimo contenuto", href: nextHref, kind: "next" });
+  }
+  heiliDestinations.push({ id: "home", label: "Torna all'inizio", href: homeHref, kind: "home" });
+  const hasVideoVariant = variants.some((variant) => variant.media.some((m) => m.type === "video"));
+
+  useHeiliPage({
+    page: "ads",
+    title: `gli annunci «${heiliHeading}»`,
+    summary: canAct ? "Da decidere" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
+    destinations: heiliDestinations,
+    services: listKinds,
+    review: assistantAvailable
+      ? {
+          postId: post.id,
+          versionNumber: post.versionNumber,
+          mode: assistantMode,
+          kind: "AD_CREATIVE",
+          heading: heiliHeading,
+          sessionKey: assistantKey,
+          canPickPoint: canComment && variants.some((variant) => variant.media.length > 0),
+          canPickMoment: canComment && hasVideoVariant,
+          getContext,
+          variantNames,
+          getPointContext,
+          onSubmitChanges: canAct ? submitFromAssistant : addFromAssistant,
+          onApprove: canAct ? sendFromAssistant : undefined,
+          onRequestSavedChanges: requestSavedChanges,
+        }
+      : undefined,
+  });
 
   function reload() {
     setStale(false);
@@ -548,7 +592,7 @@ export default function AdsReview({
     <div className="space-y-6">
       <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato queste creatività nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="L'agenzia ha aggiornato questi annunci nel frattempo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
@@ -708,7 +752,6 @@ export default function AdsReview({
             onRequestGeneralComment={canComment ? () => openDraft(variant.id, { kind: "general" }) : undefined}
             composer={
               draft?.variantId === variant.id && canComment ? (
-                <div hidden={assistantOpen}>
                 <VariantComposer
                   key={draftKey}
                   variant={variant}
@@ -717,7 +760,7 @@ export default function AdsReview({
                   onDirtyChange={setCommentDirty}
                   onListeningChange={setCommentListening}
                   assistantAction={
-                    assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                    assistantAvailable ? <AssistantActionButton onToggle={openAssistant} /> : undefined
                   }
                   onSubmit={(input) => submitComment(variant.id, input)}
                   onCancel={() => {
@@ -728,14 +771,12 @@ export default function AdsReview({
                     setDecisionError(null);
                   }}
                 />
-                </div>
               ) : undefined
             }
             onCommentAsset={canComment ? (asset) => openAssetDraft(variant.id, asset) : undefined}
             activeAsset={assetDraft?.variantId === variant.id ? assetDraft.asset : null}
             assetComposer={
               assetDraft?.variantId === variant.id && canComment ? (
-                <div hidden={assistantOpen}>
                 <AssetCommentComposer
                   key={`${assetDraft.asset.kind}-${assetDraft.asset.index}`}
                   asset={assetDraft.asset}
@@ -743,7 +784,7 @@ export default function AdsReview({
                   onDirtyChange={setCommentDirty}
                   onListeningChange={setCommentListening}
                   assistantAction={
-                    assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                    assistantAvailable ? <AssistantActionButton onToggle={openAssistant} /> : undefined
                   }
                   onSubmit={(body) => submitComment(variant.id, { body })}
                   onCancel={() => {
@@ -755,7 +796,6 @@ export default function AdsReview({
                     setDecisionError(null);
                   }}
                 />
-                </div>
               ) : undefined
             }
             draftPin={draftPinOf(draft, variant.id)}
@@ -793,25 +833,8 @@ export default function AdsReview({
               </button>
             )}
           {assistantAvailable && (
-            <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-              <AssistantPanel
-                key={`${post.id}-${post.versionNumber}-${assistantKey}`}
-                controlRef={assistantControl}
-                onRequestSavedChanges={requestSavedChanges}
-                token={token}
-                postId={post.id}
-                versionNumber={post.versionNumber}
-                mode={assistantMode}
-                onSubmitChanges={canAct ? submitFromAssistant : addFromAssistant}
-                onApprove={canAct ? sendFromAssistant : undefined}
-                kind="AD_CREATIVE"
-                getContext={getContext}
-                variantNames={variantNames}
-                getPointContext={getPointContext}
-              />
-            </AssistantToggle>
+            <p className="text-sm text-muted">Apri Heili dal pulsante in basso a destra per scrivere, dettare o parlare a voce.</p>
           )}
-          <div hidden={assistantOpen}>
           {draft?.variantId === "" && canComment && (
             <CommentComposer
               key={draftKey}
@@ -821,7 +844,7 @@ export default function AdsReview({
               onDirtyChange={setCommentDirty}
               onListeningChange={setCommentListening}
               assistantAction={
-                assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                assistantAvailable ? <AssistantActionButton onToggle={openAssistant} /> : undefined
               }
               onSubmit={(input) => submitComment(null, input)}
               onCancel={() => {
@@ -834,7 +857,6 @@ export default function AdsReview({
               framed={false}
             />
           )}
-          </div>
           <div className="border-t border-border pt-4">
             <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
           <CommentList
@@ -896,7 +918,7 @@ export default function AdsReview({
             : `Le varianti approvate saranno usate per la campagna (${post.dateLabel.toLowerCase()}: ${post.publishLabel}). L'agenzia vedrà anche le note sulle varianti scartate.`}
         </p>
         <p className="text-sm text-muted">
-          Stai decidendo sulla versione {post.versionNumber}: verranno usate esattamente le creatività che vedi.
+          Stai decidendo sulla versione {post.versionNumber}: verranno usati esattamente gli annunci che vedi.
         </p>
         {canAct && <OpenFeedbackNotice comments={post.comments} ads />}
         <SheetError error={sheetError} stale={stale} onReload={reload} />
@@ -1093,14 +1115,14 @@ function AdsStatusNotice({ post, hasEmail }: { post: PortalAdsPost; hasEmail: bo
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text = hasEmail
-      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando le nuove creatività saranno pronte."
-      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando le nuove creatività saranno pronte.";
+      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando i nuovi annunci saranno pronti."
+      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando i nuovi annunci saranno pronti.";
   } else if (post.status === "DELIVERED") {
-    text = "Le creatività approvate sono state consegnate per la campagna. Per cambiare qualcosa, contatta l'agenzia.";
+    text = "Gli annunci approvati sono stati consegnati per la campagna. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {
-    text = "Queste creatività sono in aggiornamento: ricarica la pagina tra poco.";
+    text = "Questi annunci sono in aggiornamento: ricarica la pagina tra poco.";
   } else {
-    text = `${post.approvedLabel ? `Hai inviato le tue decisioni ${post.approvedLabel}. ` : "Le creatività sono approvate. "}L'agenzia preparerà la campagna (inizio ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
+    text = `${post.approvedLabel ? `Hai inviato le tue decisioni ${post.approvedLabel}. ` : "Gli annunci sono approvati. "}L'agenzia preparerà la campagna (inizio ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
   }
   return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }

@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { PortalQueue } from "./types";
 import type { PortalWording } from "./helpers";
@@ -120,46 +120,6 @@ export function SuccessPanel({
         {wording.homeLabel}
       </Link>
     </section>
-  );
-}
-
-/** Compact assistant action, kept beside the other feedback tools. */
-export function AssistantToggle({
-  open,
-  mounted = open,
-  showButton = true,
-  onToggle,
-  containerRef,
-  children,
-}: {
-  open: boolean;
-  /** Keep local feedback while the panel is collapsed, after its first opening. */
-  mounted?: boolean;
-  /** The compact trigger can live inside the manual composer action row. */
-  showButton?: boolean;
-  onToggle: () => void;
-  containerRef: RefObject<HTMLDivElement | null>;
-  /** The panel, rendered while open. */
-  children: ReactNode;
-}) {
-  return (
-    <div ref={containerRef} className="scroll-mt-4 space-y-3">
-      {showButton && <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={open ? "Chiudi Heili" : "Parla con Heili"}
-        className={`flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${open ? "border-accent bg-accent/5" : "border-border bg-background hover:border-accent"}`}
-      >
-        <HeiliAssistantIcon className="h-7 w-7" />
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-foreground">{open ? "Torna al commento manuale" : "Parla con Heili"}</span>
-          <span className="block truncate text-xs text-muted">Conversazione guidata, anche a voce</span>
-        </span>
-        <span className="ml-auto text-lg text-muted" aria-hidden="true">{open ? "←" : "→"}</span>
-      </button>}
-      {mounted && <div hidden={!open}>{children}</div>}
-    </div>
   );
 }
 

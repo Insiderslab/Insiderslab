@@ -37,7 +37,7 @@ type ReviewHomeProps = {
  *
  * One portal per client: when it shows more than one kind (the client's
  * services, plus kinds it already has items of), tabs "Tutti · Post social ·
- * Articoli · Creatività" filter the list (`?tipo=social|blog|ads`), each with
+ * Articoli · Annunci" filter the list (`?tipo=social|blog|ads`), each with
  * the number of items waiting for the client.
  */
 export default async function ReviewHomePage({ params, searchParams }: ReviewHomeProps) {

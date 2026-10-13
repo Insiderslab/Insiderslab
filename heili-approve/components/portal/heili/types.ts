@@ -53,6 +53,10 @@ export interface HeiliReviewContext {
   heading: string;
   /** Rigenera il pannello dopo «Aggiungi al feedback». */
   sessionKey: number;
+  /** La pagina ha un'immagine su cui indicare un punto. */
+  canPickPoint?: boolean;
+  /** La pagina ha un video su cui indicare il momento. */
+  canPickMoment?: boolean;
   getVideoTime?: () => number | null;
   getPointContext?: () => HeiliPoint | null;
   getSelection?: () => BlogAnchor | null;

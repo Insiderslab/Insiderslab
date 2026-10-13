@@ -22,7 +22,8 @@ import {
 } from "@/app/review/[token]/actions";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
-import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
+import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
+import type { HeiliDestination } from "@/components/portal/heili/types";
 import { buildAnchor } from "@/lib/content/blog-text";
 import type { BlogAnchor } from "@/lib/content/types";
 import BottomSheet from "./bottom-sheet";
@@ -30,7 +31,6 @@ import CommentComposer, { type CommentDraft, type CommentSubmission } from "./co
 import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
-  AssistantToggle,
   AssistantActionButton,
   DecisionBar,
   ReviewNav,
@@ -109,10 +109,9 @@ export default function BlogReview({
 }: BlogReviewProps) {
   const router = useRouter();
   const readerRef = useRef<HTMLDivElement>(null);
-  const assistantRef = useRef<HTMLDivElement>(null);
-  const assistantControl = useRef<AssistantPanelHandle>(null);
   const lastSelection = useRef<BlogAnchor | null>(null);
   const assistantApproval = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
+  const heili = useHeili();
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(
@@ -124,7 +123,6 @@ export default function BlogReview({
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
   // Bumped after Heili's feedback was added: the next conversation starts fresh.
   const [assistantKey, setAssistantKey] = useState(0);
 
@@ -239,7 +237,7 @@ export default function BlogReview({
     setDraft(result === "changes" ? { kind: "general" } : null);
     setDecisionError(null);
     setSheet(null);
-    setAssistantOpen(false);
+    heili.closeDock();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -259,15 +257,15 @@ export default function BlogReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
-    if (assistantControl.current?.isLoadingFeedback()) {
+    if (heili.control.current?.isLoadingFeedback()) {
       setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
       return;
     }
     setDecisionError(null);
-    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
-      setAssistantOpen(true);
+    if (heili.open || heili.control.current?.hasPendingFeedback()) {
+      heili.openDock("feedback");
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await assistantControl.current?.requestChanges();
+      await heili.control.current?.requestChanges();
     } else {
       await requestSavedChanges();
     }
@@ -275,15 +273,15 @@ export default function BlogReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
-    if (assistantControl.current?.isLoadingFeedback()) {
+    if (heili.control.current?.isLoadingFeedback()) {
       setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
       return;
     }
     setDecisionError(null);
-    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
-      setAssistantOpen(true);
+    if (heili.open || heili.control.current?.hasPendingFeedback()) {
+      heili.openDock("feedback");
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await assistantControl.current?.approve();
+      await heili.control.current?.approve();
     } else {
       openSheet("approve");
     }
@@ -386,25 +384,51 @@ export default function BlogReview({
       if (result.stale) setStale(true);
       throw new Error(result.error);
     }
-    setAssistantOpen(false);
+    heili.closeDock();
     setAssistantKey((key) => key + 1);
     setDecisionError(null);
     setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
   }
 
-  async function toggleAssistant() {
+  function openAssistant() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
       requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
       return;
     }
-    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
-    const open = !assistantOpen;
-    setAssistantOpen(open);
-    if (open) {
-      requestAnimationFrame(() => assistantRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
-    }
+    heili.openDock("feedback");
   }
+
+  // ─── Heili: what this page offers the dock ─────────────────────────────────
+
+  const heiliHeading = post.title;
+  const heiliDestinations: HeiliDestination[] = [];
+  if (nextHref) {
+    heiliDestinations.push({ id: "next", label: "Rivedi il prossimo contenuto", href: nextHref, kind: "next" });
+  }
+  heiliDestinations.push({ id: "home", label: "Torna all'inizio", href: homeHref, kind: "home" });
+
+  useHeiliPage({
+    page: "article",
+    title: `l'articolo «${heiliHeading}»`,
+    summary: canAct ? "Da approvare" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
+    destinations: heiliDestinations,
+    services: listKinds,
+    review: assistantAvailable
+      ? {
+          postId: post.id,
+          versionNumber: post.versionNumber,
+          mode: assistantMode,
+          kind: "BLOG_ARTICLE",
+          heading: heiliHeading,
+          sessionKey: assistantKey,
+          getSelection,
+          onSubmitChanges: canAct ? submitFromAssistant : addFromAssistant,
+          onApprove: canAct ? approveFromAssistant : undefined,
+          onRequestSavedChanges: requestSavedChanges,
+        }
+      : undefined,
+  });
 
   function reload() {
     setStale(false);
@@ -499,24 +523,6 @@ export default function BlogReview({
               Commento generale
             </button>
           )}
-        {assistantAvailable && (
-          <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-            <AssistantPanel
-              key={`${post.id}-${post.versionNumber}-${assistantKey}`}
-              controlRef={assistantControl}
-              onRequestSavedChanges={requestSavedChanges}
-              token={token}
-              postId={post.id}
-              versionNumber={post.versionNumber}
-              mode={assistantMode}
-              onSubmitChanges={canAct ? submitFromAssistant : addFromAssistant}
-              onApprove={canAct ? approveFromAssistant : undefined}
-              kind="BLOG_ARTICLE"
-              getSelection={getSelection}
-            />
-          </AssistantToggle>
-        )}
-        <div hidden={assistantOpen}>
         {draft?.kind === "general" && canComment && (
           <CommentComposer
             key={draftKey}
@@ -527,7 +533,7 @@ export default function BlogReview({
             onDirtyChange={setCommentDirty}
             onListeningChange={setCommentListening}
             assistantAction={
-              assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+              assistantAvailable ? <AssistantActionButton onToggle={openAssistant} /> : undefined
             }
             onCancel={() => {
               setCommentDirty(false);
@@ -540,7 +546,6 @@ export default function BlogReview({
             framed={false}
           />
         )}
-        </div>
         {notice && <p className="text-sm text-success" role="status">{notice}</p>}
         <div className="border-t border-border pt-4">
           <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
@@ -592,7 +597,7 @@ export default function BlogReview({
       )}
 
       <BottomSheet
-        open={draft?.kind === "passage" && canComment && !assistantOpen}
+        open={draft?.kind === "passage" && canComment}
         title="Commenta il passaggio"
         onClose={() => {
           if (commentDirty) {
@@ -620,7 +625,7 @@ export default function BlogReview({
             onDirtyChange={setCommentDirty}
             onListeningChange={setCommentListening}
             assistantAction={
-              assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+              assistantAvailable ? <AssistantActionButton onToggle={openAssistant} /> : undefined
             }
             onCancel={() => {
               setCommentDirty(false);

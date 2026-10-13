@@ -103,6 +103,13 @@ export interface AssistantPanelProps {
   onRequestSavedChanges?: () => Promise<void>;
   /** False when the dock around the panel shows title and help itself. */
   showHeader?: boolean;
+  /**
+   * «Indica un punto sull'immagine»: chiude il dock e trasforma il prossimo
+   * tocco sull'immagine nel marcatore di un punto, dentro il messaggio.
+   */
+  onPickPoint?: () => void;
+  /** Come sopra, per il momento del video. */
+  onPickMoment?: () => void;
 }
 
 export interface AssistantPanelHandle {
@@ -220,6 +227,8 @@ export function AssistantPanel({
   controlRef,
   onRequestSavedChanges,
   showHeader = true,
+  onPickPoint,
+  onPickMoment,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const feedbackMode = mode === "feedback";
@@ -743,6 +752,20 @@ export function AssistantPanel({
                 {pointContext && (
                   <Chip onClick={insertPointContext} disabled={composerDisabled}>
                     Usa il punto selezionato ({Math.round(pointContext.x * 100)}%, {Math.round(pointContext.y * 100)}%)
+                  </Chip>
+                )}
+              </div>
+            )}
+            {(onPickPoint || onPickMoment) && (
+              <div className="flex flex-wrap gap-2">
+                {onPickPoint && (
+                  <Chip onClick={onPickPoint} disabled={composerDisabled}>
+                    Indica un punto sull&apos;immagine
+                  </Chip>
+                )}
+                {onPickMoment && (
+                  <Chip onClick={onPickMoment} disabled={composerDisabled}>
+                    Indica il momento sul video
                   </Chip>
                 )}
               </div>

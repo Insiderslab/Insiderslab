@@ -220,6 +220,8 @@ export default function HeiliDock() {
                   getContext={review.getContext}
                   variantNames={review.variantNames}
                   getPointContext={review.getPointContext}
+                  onPickPoint={review.canPickPoint ? () => heili.beginPick("point") : undefined}
+                  onPickMoment={review.canPickMoment ? () => heili.beginPick("moment") : undefined}
                 />
               </div>
             )}
