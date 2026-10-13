@@ -860,17 +860,26 @@ export function AssistantPanel({
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
             ))}
             {pendingVisible !== null && <Bubble role="CLIENT" content={pendingVisible} pending />}
-            {busy === "send" && <p className="text-xs text-muted">L&apos;assistente sta scrivendo…</p>}
+            {busy === "send" && (
+              <p className="flex items-center gap-1 text-xs text-muted" role="status">
+                Heili sta scrivendo
+                <span className="typing-dots inline-flex gap-0.5" aria-hidden="true">
+                  <span>·</span>
+                  <span>·</span>
+                  <span>·</span>
+                </span>
+              </p>
+            )}
             {busy === "finalize" && <p className="text-xs text-muted">Preparo il riepilogo per l&apos;agenzia…</p>}
           </>
         )}
       </div>
 
       {error && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-error" role="alert">
-          <span>{error}</span>
+        <div className="flex items-center justify-between gap-3 border-l-2 border-error pl-2 text-sm text-error" role="alert">
+          <span className="min-w-0 flex-1">{error}</span>
           {canRetry && (
-            <button type="button" onClick={() => sendMessage(true)} className="underline underline-offset-2">
+            <button type="button" onClick={() => sendMessage(true)} className="min-h-9 shrink-0 font-medium underline underline-offset-2">
               Riprova
             </button>
           )}
