@@ -63,7 +63,7 @@ Sei l'agente che ha scritto i branch `muse/ux-core`, `muse/page-viste`, `muse/ac
 - **Nit:** il messaggio di `desktop/local-server.cjs` deve nominare il percorso reale (`app-dist`). `main.cjs:280-282` deve mostrarlo, non ignorarlo.
 
 ## Prove (per ogni branch)
-- `npm ci`, già autorizzato da Stefano per questo lavoro.
+- `npm ci`: incollandoti questo prompt Stefano lo autorizza, solo per questo lavoro e solo nella cartella `heili-platform`.
 - `npm run lint`
 - `npm test` (build + `node --test`): **tutto verde**, con il **numero di test** prima e dopo nel registro.
 - Prova anche **senza build** (`node --test tests/*.test.mjs` dopo aver tolto `dist`): i test che hanno bisogno della build devono essere **rossi** con il messaggio chiaro, non verdi.
