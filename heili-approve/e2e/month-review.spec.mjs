@@ -130,7 +130,7 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await expect(page.getByTestId("browse-state")).toHaveText("Da approvare");
   await expect(card.getByRole("img").first()).toBeVisible();
   await expect(page.getByTestId("browse-position")).toHaveText("Post 1 di 5");
-  await expect(page.getByText("0 di 5 approvati").first()).toBeVisible();
+  await expect(page.getByText("0 di 5 revisionati").first()).toBeVisible();
   for (const id of ["browse-comment", "browse-approve"]) {
     const box = await page.getByTestId(id).boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -142,7 +142,7 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await page.getByTestId("browse-approve").click();
   await expect(cardTitle(page)).toContainText(planPosts[1].title);
   await expect(page.getByTestId("browse-position")).toHaveText("Post 2 di 5");
-  await expect(page.getByText("1 di 5 approvati").first()).toBeVisible();
+  await expect(page.getByText("1 di 5 revisionati").first()).toBeVisible();
   expect(["APPROVED", "SCHEDULING", "SCHEDULED"]).toContain((await postRow(db, planPosts[0].id)).status);
   await expect(page).toHaveURL(/i=2/);
 
@@ -206,7 +206,7 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await sheet.getByRole("button", { name: "Sì, approva 3 post" }).click();
   await expect(page.getByTestId("browse-outcome")).toContainText("Fatto! 3 post approvati.");
   await expect(page.getByTestId("browse-summary-text")).toHaveText("4 approvati, 1 con commento");
-  await expect(page.getByText("4 di 5 approvati").first()).toBeVisible();
+  await expect(page.getByText("4 di 5 revisionati").first()).toBeVisible();
   await viewportShot(page, "mese-sfoglia-fine-mobile.png");
 
   // The same approval as one by one: scheduling on (fake) Metricool through the worker.

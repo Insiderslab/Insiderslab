@@ -312,6 +312,7 @@ export async function submitForReviewAction(
       clientCount: new Set(sent.map((p) => p.clientId)).size,
       clientsWithoutReviewers: result.clientsWithoutReviewers,
       clientsWithoutEmail: result.clientsWithoutEmail,
+      clientsWithoutScheduling: result.clientsWithoutScheduling,
     };
     // Nobody to email (reviewers without an address): the item is ready, the agency shares the link.
     const linkOnly = result.clientsWithoutReviewers.length === 0 && nobodyEmailed(recipients);

@@ -86,10 +86,16 @@ test("il modello compilato si rilegge, con le immagini abbinate per nome", async
   ]);
   await expect(page.getByTestId("import-source")).toContainText("modello.xlsx · 1 riga");
   const row = page.getByTestId("import-row");
+  // Sheet and pictures dropped together: the debounced server check must see the
+  // pictures too (QA-01). The row is "Controllo…" until the answer, then stays ready.
+  await expect(page.getByTestId("import-summary")).toContainText("Controllo le righe…");
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…");
   await expect(row).toHaveAttribute("data-state", "ready");
   await expect(row.getByText("Trovato")).toHaveCount(2);
+  await expect(row.getByText("Immagine non trovata")).toHaveCount(0);
   await expect(row.getByLabel("Reti")).toHaveValue("Instagram, Facebook");
   await expect(page.getByTestId("import-create")).toHaveText("Crea 1 bozza");
+  await expect(page.getByTestId("import-create")).toBeEnabled();
   await context.close();
 });
 
@@ -126,6 +132,15 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   await expect(page.getByTestId("import-summary")).toContainText("1 riga da correggere");
   await expect(page.getByTestId("import-create")).toHaveText("Crea 2 bozze");
 
+  // Long sheets: filter to the rows to fix, and jump to the next one (QA-08).
+  await page.getByTestId("import-only-invalid").check();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0)).toHaveAttribute("data-state", "invalid");
+  await page.getByTestId("import-only-invalid").uncheck();
+  await expect(rows).toHaveCount(3);
+  await page.getByTestId("import-goto-invalid").click();
+  await expect(rows.nth(1)).toBeInViewport();
+
   // Fix the row in the grid.
   await bad.getByLabel("Data").fill(good);
   await bad.getByLabel("Reti").fill("Instagram|Facebook");
@@ -138,6 +153,8 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   await page.getByTestId("import-create").click();
 
   await expect(page.getByTestId("import-result-title")).toHaveText("Create 3 bozze", { timeout: 60_000 });
+  // The agency shell scrolls inside <main>: after creating, the result is at the top (QA-03).
+  await expect(page.getByTestId("import-result-title")).toBeInViewport();
   await expect(page.getByTestId("import-result-list").getByText("Bozza creata")).toHaveCount(3);
   await expect(page.getByTestId("import-plan-note")).toContainText("Piano social");
 
@@ -204,6 +221,29 @@ test("a 390 px niente scorrimento laterale", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto(`/posts/import?clientId=${client.id}`);
   await expectNoHorizontalScroll(page);
+
+  // On phones fields are 16px tall text (no iOS zoom) and at least 44px high (QA-11).
+  const pasteBox = page.getByTestId("import-paste");
+  const fontSize = await pasteBox.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(fontSize).toBeGreaterThanOrEqual(16);
+  const height = (await pasteBox.boundingBox()).height;
+  expect(height).toBeGreaterThanOrEqual(44);
+
+  // The closed drawer stays out of keyboard reach; Escape closes it and the
+  // focus returns to its button (QA-12).
+  const drawer = page.locator("aside");
+  await expect(drawer).toHaveAttribute("inert", "");
+  await page.getByRole("button", { name: "Apri menu" }).click();
+  await expect(drawer).not.toHaveAttribute("inert", "");
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveAttribute("inert", "");
+  await expect(page.getByRole("button", { name: "Apri menu" })).toBeFocused();
+
+  // Touch targets of the shell are at least 44×44 (QA-13).
+  const menuBox = await page.getByRole("button", { name: "Apri menu" }).boundingBox();
+  expect(menuBox.width).toBeGreaterThanOrEqual(44);
+  expect(menuBox.height).toBeGreaterThanOrEqual(44);
+
   await page.getByTestId("import-paste").fill(sheet([["01/01/2020", "09:00", "Snapchat", "E2E import F", "manca.jpg"]]));
   await page.getByTestId("import-paste-read").click();
   await expect(page.getByTestId("import-row")).toHaveAttribute("data-state", "invalid");

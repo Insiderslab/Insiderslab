@@ -69,6 +69,7 @@ import {
   savedFeedbackBlocker,
   UNSAVED_COMMENT_MESSAGE,
   OpenFeedbackNotice,
+  newVersionNotice,
 } from "./review-pieces";
 import type { PortalAdsPost, PortalQueue, PortalVariantDecision } from "./types";
 
@@ -88,6 +89,8 @@ export interface AdsReviewProps {
   /** Kinds in the client's list (wording of the navigation). */
   listKinds: ContentKind[];
   assistantEnabled: boolean;
+  /** False when the reviewer has no email: notices must not promise one. */
+  reviewerHasEmail: boolean;
   /** Server-rendered "Cosa è cambiato", if there is an earlier version. */
   changesSlot?: ReactNode;
   /** Server-rendered history of earlier versions and their comments. */
@@ -113,6 +116,7 @@ export default function AdsReview({
   queue,
   listKinds,
   assistantEnabled,
+  reviewerHasEmail,
   changesSlot,
   historySlot,
 }: AdsReviewProps) {
@@ -151,7 +155,13 @@ export default function AdsReview({
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
-  const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // After "Chiedi modifiche" (or decisions that reject everything) the page behaves
+  // like a reloaded CHANGES_REQUESTED one: more feedback (and Heili in feedback
+  // mode) stays available, "Invia le mie decisioni" never returns.
+  const changesRequested = outcome?.kind === "changes" || (outcome?.kind === "decisions" && outcome.result === "CHANGES_REQUESTED");
+  const approved = outcome?.kind === "decisions" && outcome.result === "APPROVED";
+  const feedbackOpen = post.status === "CHANGES_REQUESTED" || changesRequested;
+  const canComment = (post.canAct || feedbackOpen) && !approved;
   // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
   // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
   const assistantAvailable = assistantEnabled && canComment;
@@ -277,7 +287,7 @@ export default function AdsReview({
     setAssetDraft(null);
     setDraftKey((key) => key + 1);
     setDecisionError(null);
-    setNotice(post.status === "CHANGES_REQUESTED"
+    setNotice(feedbackOpen
       ? "Commento aggiunto alla richiesta di modifiche già inviata."
       : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
@@ -322,7 +332,12 @@ export default function AdsReview({
   function finish(next: Outcome) {
     setOutcome(next);
     setCommentDirty(false);
-    setDraft(null);
+    // "Chiedi modifiche": reopen a general draft so the client can add more right away.
+    setDraft(
+      next.kind === "changes" || (next.kind === "decisions" && next.result === "CHANGES_REQUESTED")
+        ? { variantId: "", draft: { kind: "general" } }
+        : null
+    );
     setAssetDraft(null);
     setDecisionError(null);
     setSheet(null);
@@ -549,11 +564,10 @@ export default function AdsReview({
               rejected={outcome.rejected.map(nameOf)}
               result={outcome.result}
               publishLabel={post.publishLabel}
+              hasEmail={reviewerHasEmail}
             />
           ) : (
-            <p className="text-sm">
-              L&apos;agenzia preparerà una nuova versione: riceverai un&apos;email quando sarà pronta da rivedere.
-            </p>
+            <p className="text-sm">{newVersionNotice(reviewerHasEmail)}</p>
           )}
         </SuccessPanel>
       )}
@@ -587,7 +601,7 @@ export default function AdsReview({
         variantCount={variants.length}
       />
 
-      {outcome === null && !post.canAct && <AdsStatusNotice post={post} />}
+      {outcome === null && !post.canAct && <AdsStatusNotice post={post} hasEmail={reviewerHasEmail} />}
 
       {changesSlot}
 
@@ -1044,18 +1058,22 @@ function OutcomeSummary({
   rejected,
   result,
   publishLabel,
+  hasEmail,
 }: {
   approved: string[];
   rejected: string[];
   result: "APPROVED" | "CHANGES_REQUESTED";
   publishLabel: string;
+  hasEmail: boolean;
 }) {
   return (
     <div className="space-y-2 text-sm">
       <p>
         {result === "APPROVED"
           ? `L'agenzia userà le varianti approvate per la campagna, con inizio ${publishLabel}.`
-          : "Hai scartato tutte le varianti: l'agenzia preparerà nuove proposte e riceverai un'email quando saranno pronte."}
+          : hasEmail
+            ? "Hai scartato tutte le varianti: l'agenzia preparerà nuove proposte e riceverai un'email quando saranno pronte."
+            : "Hai scartato tutte le varianti: l'agenzia preparerà nuove proposte e ti avviserà quando saranno pronte."}
       </p>
       {approved.length > 0 && (
         <p>
@@ -1071,11 +1089,12 @@ function OutcomeSummary({
   );
 }
 
-function AdsStatusNotice({ post }: { post: PortalAdsPost }) {
+function AdsStatusNotice({ post, hasEmail }: { post: PortalAdsPost; hasEmail: boolean }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
-    text =
-      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando le nuove creatività saranno pronte.";
+    text = hasEmail
+      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando le nuove creatività saranno pronte."
+      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando le nuove creatività saranno pronte.";
   } else if (post.status === "DELIVERED") {
     text = "Le creatività approvate sono state consegnate per la campagna. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {

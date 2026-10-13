@@ -37,6 +37,7 @@ import { formatTimecode } from "@/lib/domain";
 import {
   ACTION_AREA_LABELS,
   ACTION_PRIORITY_LABELS,
+  ASSISTANT_BUTTONS,
   ASSISTANT_FEEDBACK_COPY,
   ASSISTANT_KIND_COPY,
   MAX_CLIENT_MESSAGE_LENGTH,
@@ -867,7 +868,7 @@ export function AssistantPanel({
                       : "Invio…"
                     : feedbackMode
                       ? ASSISTANT_FEEDBACK_COPY.submitLabel
-                      : "Invia le modifiche all'agenzia"}
+                      : ASSISTANT_BUTTONS.submitChanges}
                 </ActionButton>
               ) : (
                 <ActionButton
@@ -875,7 +876,7 @@ export function AssistantPanel({
                   disabled={busy !== null || live.phase === "preparing" || live.phase === "connecting" || live.phase === "closing" || (!voiceBusy && session?.status !== "OPEN")}
                   primary={readiness === "ready_changes"}
                 >
-                  {busy === "finalize" ? "Preparo il riepilogo…" : "Prepara il riepilogo per l'agenzia"}
+                  {busy === "finalize" ? "Preparo il riepilogo…" : ASSISTANT_BUTTONS.prepareSummary}
                 </ActionButton>
               )}
               {!controlRef && !feedbackMode && onApprove && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>

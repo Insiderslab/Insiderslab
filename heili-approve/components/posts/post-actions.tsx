@@ -86,9 +86,9 @@ export default function PostActions({
     run(() => submitForReviewAction([postId], { reviewDueAt }));
   }
 
-  const primary = "rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50";
-  const secondary =
-    "rounded border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:border-border-hover disabled:opacity-50";
+  // The app's own button styles: 44px tall on phones, consistent with the rest.
+  const primary = "btn btn-primary";
+  const secondary = "btn";
 
   return (
     <div className="space-y-3">

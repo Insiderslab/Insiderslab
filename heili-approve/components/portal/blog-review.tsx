@@ -42,6 +42,7 @@ import {
   UNSAVED_COMMENT_MESSAGE,
   OpenFeedbackNotice,
   feedbackHint,
+  newVersionNotice,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
 
@@ -56,6 +57,8 @@ export interface BlogReviewProps {
   /** Kinds in the client's list (wording of the navigation). */
   listKinds: ContentKind[];
   assistantEnabled: boolean;
+  /** False when the reviewer has no email: notices must not promise one. */
+  reviewerHasEmail: boolean;
   /** Server-rendered "Cosa è cambiato" (BlogVersionDiff), if there is an earlier version. */
   changesSlot?: ReactNode;
   /** Server-rendered "Dettagli per i motori di ricerca". */
@@ -99,6 +102,7 @@ export default function BlogReview({
   queue,
   listKinds,
   assistantEnabled,
+  reviewerHasEmail,
   changesSlot,
   seoSlot,
   historySlot,
@@ -132,7 +136,10 @@ export default function BlogReview({
 
   const ref = { id: post.id, versionNumber: post.versionNumber };
   const canAct = post.canAct && outcome === null;
-  const canComment = (post.canAct || post.status === "CHANGES_REQUESTED") && outcome === null;
+  // After "Chiedi modifiche" the page behaves like a reloaded CHANGES_REQUESTED
+  // one: more feedback (and Heili in feedback mode) stays available, "Approva" never returns.
+  const feedbackOpen = post.status === "CHANGES_REQUESTED" || outcome === "changes";
+  const canComment = (post.canAct || feedbackOpen) && outcome !== "approved";
   // Heili is wherever the client can comment: deciding (IN_REVIEW) or, after
   // «Chiedi modifiche», adding feedback (CHANGES_REQUESTED, current version).
   const assistantAvailable = assistantEnabled && canComment;
@@ -217,7 +224,7 @@ export default function BlogReview({
     setDraft({ kind: "general" });
     setDraftKey((key) => key + 1);
     setDecisionError(null);
-    setNotice(post.status === "CHANGES_REQUESTED"
+    setNotice(feedbackOpen
       ? "Commento aggiunto alla richiesta di modifiche già inviata."
       : "Commento salvato e visibile all’agenzia. Quando hai finito, premi «Chiedi modifiche» per inviare la richiesta.");
     return null;
@@ -228,7 +235,8 @@ export default function BlogReview({
   function finish(result: Outcome) {
     setOutcome(result);
     setCommentDirty(false);
-    setDraft(null);
+    // "Chiedi modifiche": reopen a general draft so the client can add more right away.
+    setDraft(result === "changes" ? { kind: "general" } : null);
     setDecisionError(null);
     setSheet(null);
     setAssistantOpen(false);
@@ -429,7 +437,7 @@ export default function BlogReview({
           <p className="text-sm">
             {outcome === "approved"
               ? `L'agenzia lo pubblicherà sul sito così come l'hai approvato. ${publishSentence}`
-              : "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da rivedere."}
+              : newVersionNotice(reviewerHasEmail)}
           </p>
         </SuccessPanel>
       )}
@@ -460,7 +468,7 @@ export default function BlogReview({
         )}
       </header>
 
-      {outcome === null && !post.canAct && <BlogStatusNotice post={post} />}
+      {outcome === null && !post.canAct && <BlogStatusNotice post={post} hasEmail={reviewerHasEmail} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)] lg:items-start">
         <div className="space-y-4">
@@ -478,7 +486,7 @@ export default function BlogReview({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Il tuo feedback</p>
             <h2 id="comments-title" className="mt-1 text-xl font-semibold">Cosa ne pensi?</h2>
-            <p className="mt-1 text-sm text-muted">{feedbackHint(canComment, assistantEnabled, post.status === "CHANGES_REQUESTED")}</p>
+            <p className="mt-1 text-sm text-muted">{feedbackHint(canComment, assistantEnabled, feedbackOpen)}</p>
           </div>
           {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
         </div>
@@ -650,11 +658,12 @@ export default function BlogReview({
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
 
-function BlogStatusNotice({ post }: { post: PortalBlogPost }) {
+function BlogStatusNotice({ post, hasEmail }: { post: PortalBlogPost; hasEmail: boolean }) {
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
-    text =
-      "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un messaggio quando la nuova versione dell'articolo sarà pronta.";
+    text = hasEmail
+      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando la nuova versione dell'articolo sarà pronta."
+      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando la nuova versione dell'articolo sarà pronta.";
   } else if (post.status === "DELIVERED") {
     text = "L'articolo è stato pubblicato sul sito. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {

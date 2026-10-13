@@ -99,6 +99,13 @@ describe("share messages", () => {
     expect(submitFollowUp({ clientCount: 1, clientsWithoutReviewers: ["Aurora"], clientsWithoutEmail: [] })).toContain(
       "Aurora non ha referenti attivi"
     );
+
+    expect(
+      submitFollowUp({ clientCount: 1, clientsWithoutReviewers: [], clientsWithoutEmail: [], clientsWithoutScheduling: ["Aurora"] })
+    ).toContain("Aurora non ha un brand Metricool collegato: i post approvati non potranno essere programmati");
+    expect(
+      submitFollowUp({ clientCount: 2, clientsWithoutReviewers: [], clientsWithoutEmail: [], clientsWithoutScheduling: ["Aurora", "Bianchi"] })
+    ).toContain("Aurora, Bianchi non hanno un brand Metricool collegato");
   });
 });
 

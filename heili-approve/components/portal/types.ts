@@ -139,6 +139,8 @@ export interface PortalClient {
   name: string;
   logoUrl: string | null;
   autoSchedule: boolean;
+  /** autoSchedule AND a Metricool brand: approvals are really scheduled. */
+  schedulingOn: boolean;
 }
 
 export interface PortalQueue {
@@ -192,6 +194,8 @@ export interface PortalPlan {
   /** "venerdì 9 ottobre" — due date in the client's zone, if any. */
   dueLabel: string | null;
   autoSchedule: boolean;
+  /** autoSchedule AND a Metricool brand: approvals are really scheduled. */
+  schedulingOn: boolean;
   posts: PortalPlanPost[];
   comments: PortalPlanComment[];
 }

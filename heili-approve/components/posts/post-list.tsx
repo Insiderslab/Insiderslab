@@ -16,7 +16,7 @@ import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { submitForReviewAction } from "@/app/(dashboard)/posts/actions";
 import QuickReviewLink from "@/components/share/quick-review-link";
 import { canTransition, type MediaType } from "@/lib/domain";
-import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, timeZoneAbbr } from "./helpers";
+import { DEFAULT_TIME_ZONE, formatDateTime, localPartsToUtc, selectForSendLabel, timeZoneAbbr } from "./helpers";
 import { KindBadge, KindIcon, KindStatusBadge } from "./kind-badge";
 
 export interface PostListRow {
@@ -116,6 +116,8 @@ export default function PostList({
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Drafts and changes-requested posts can both be (re)sent: the bar's label
+  // (selectForSendLabel) says "post", matching this filter.
   const selectable = rows.filter((row) => canTransition(row.status, "submit"));
   // Rows can leave the list after a refresh: only count what is still selectable.
   const chosen = selectable.filter((row) => selected.has(row.id));
@@ -165,13 +167,16 @@ export default function PostList({
 
   const checkbox = (row: PostListRow) =>
     canTransition(row.status, "submit") ? (
-      <input
-        type="checkbox"
-        checked={selected.has(row.id)}
-        onChange={() => toggle(row.id)}
-        aria-label={`Seleziona ${row.title}`}
-        className="h-4 w-4 accent-accent"
-      />
+      // The box is small; its label is the 44×44 touch target.
+      <label className="touch-target -m-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={selected.has(row.id)}
+          onChange={() => toggle(row.id)}
+          aria-label={`Seleziona ${row.title}`}
+          className="h-4 w-4 accent-accent"
+        />
+      </label>
     ) : (
       <span className="inline-block h-4 w-4" aria-hidden />
     );
@@ -180,11 +185,11 @@ export default function PostList({
     <div className="space-y-3">
       {selectable.length > 0 && (
         <div className="panel flex flex-col gap-3 p-3 text-sm sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex items-center gap-2">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2">
             <input type="checkbox" checked={allChosen} onChange={toggleAll} className="h-4 w-4 accent-accent" />
             {chosen.length > 0
               ? `${chosen.length} selezionati`
-              : `Seleziona le bozze da inviare (${selectable.length})`}
+              : selectForSendLabel(selectable.length)}
           </label>
           {chosen.length > 0 && (
             <>

@@ -70,6 +70,7 @@ export default function PlanReview({
   const [commentNotice, setCommentNotice] = useState<string | null>(null);
   const [commentPending, startComment] = useTransition();
   const [dictating, setDictating] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
 
   const progress = planProgress(plan.posts.map((p) => p.status));
   const selection = selectApproveAll(
@@ -156,7 +157,7 @@ export default function PlanReview({
             {outcome.approved === 1 ? "Fatto! 1 post approvato." : `Fatto! ${outcome.approved} post approvati.`}
           </p>
           <p className="text-sm">
-            {plan.autoSchedule
+            {plan.schedulingOn
               ? "L'agenzia li riceve subito e verranno programmati per le loro date."
               : "L'agenzia li riceve subito e li programmerà per le loro date."}
           </p>
@@ -271,7 +272,7 @@ export default function PlanReview({
           />
         </label>
         <div className="flex items-center justify-end gap-2">
-        <DictationButton value={comment} onChange={setComment} maxLength={5000} compact disabled={commentPending || busy} onListeningChange={setDictating} />
+        <DictationButton value={comment} onChange={setComment} maxLength={5000} compact disabled={commentPending || busy} onListeningChange={setDictating} onErrorChange={setSpeechError} />
         <button
           type="button"
           onClick={sendComment}
@@ -281,6 +282,11 @@ export default function PlanReview({
           {commentPending ? "Invio…" : "Invia il commento"}
         </button>
         </div>
+        {speechError && (
+          <p className="text-sm text-error" role="alert">
+            {speechError}
+          </p>
+        )}
         {commentError && (
           <p className="text-sm text-error" role="alert">
             {commentError}
@@ -312,7 +318,7 @@ export default function PlanReview({
         busy={busy}
       >
         <p className="text-base">
-          {plan.autoSchedule
+          {plan.schedulingOn
             ? `Approvi ${postsWord(toApprove)} così come li vedi: verranno programmati per le loro date.`
             : `Approvi ${postsWord(toApprove)} così come li vedi: l'agenzia li programmerà per le loro date.`}
         </p>

@@ -530,12 +530,24 @@ export const ASSISTANT_KIND_COPY: Record<AssistantContentKind, AssistantKindCopy
   },
 };
 
+/**
+ * The chat's conclusion buttons, exactly as the review panel labels them. The
+ * prompts (text and voice) quote these constants, so they can never diverge
+ * from the interface: first `prepareSummary`, then, in the summary,
+ * `submitChanges` (decision mode) or `addToFeedback` (feedback mode).
+ */
+export const ASSISTANT_BUTTONS = {
+  prepareSummary: "Prepara il riepilogo per l'agenzia",
+  submitChanges: "Invia le modifiche all'agenzia",
+  addToFeedback: "Aggiungi al feedback",
+} as const;
+
 /** Wording of the conversation in "feedback" mode (changes already requested). */
 export const ASSISTANT_FEEDBACK_COPY = {
   header: "Hai già chiesto modifiche: quello che aggiungi qui si somma al tuo feedback. Non approva e non invia nulla al posto tuo.",
   intro:
     "Ciao! Hai già chiesto modifiche e l'agenzia sta preparando la nuova versione. Dimmi pure cos'altro vorresti aggiungere: lo segno per l'agenzia. Puoi scrivere o dettare a voce.",
-  submitLabel: "Aggiungi al feedback",
+  submitLabel: ASSISTANT_BUTTONS.addToFeedback,
   submitting: "Aggiungo…",
   draftLabel: "Messaggio da aggiungere al feedback (non ancora inviato; puoi modificarlo qui)",
   summaryHint: "Controlla il riepilogo, poi premi «Aggiungi al feedback»: l'agenzia lo vedrà insieme alle tue richieste.",

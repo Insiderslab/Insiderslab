@@ -9,6 +9,7 @@ export default function DictationButton({
   maxLength,
   disabled = false,
   onListeningChange,
+  onErrorChange,
   compact = false,
 }: {
   value: string;
@@ -16,6 +17,8 @@ export default function DictationButton({
   maxLength: number;
   disabled?: boolean;
   onListeningChange?: (listening: boolean) => void;
+  /** When set, the parent renders the error in the page flow (no floating popup). */
+  onErrorChange?: (message: string | null) => void;
   /** Icon-sized control for placement immediately beside a submit button. */
   compact?: boolean;
 }) {
@@ -24,6 +27,10 @@ export default function DictationButton({
   useEffect(() => {
     onListeningChange?.(speech.listening);
   }, [onListeningChange, speech.listening]);
+
+  useEffect(() => {
+    onErrorChange?.(speech.error);
+  }, [onErrorChange, speech.error]);
 
   if (!speech.supported) {
     return compact ? (
@@ -56,7 +63,7 @@ export default function DictationButton({
         {!compact && (speech.listening ? "Ferma dettatura" : "Detta il commento")}
       </button>
       {!compact && speech.listening && <p className="text-xs text-accent">Ti ascolto. Il testo resta modificabile prima dell’invio.</p>}
-      {speech.error && (
+      {speech.error && !(compact && onErrorChange) && (
         <p className={`${compact ? "absolute right-0 top-full z-10 mt-1 w-56 rounded-md border border-error/30 bg-surface p-2 shadow-sm" : ""} text-xs text-error`} role="alert">
           {speech.error}
         </p>

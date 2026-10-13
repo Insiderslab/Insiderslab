@@ -333,6 +333,7 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
           queue={queue}
           listKinds={listKinds}
           assistantEnabled={assistantEnabled}
+          reviewerHasEmail={Boolean(reviewer.email)}
           changesSlot={changesSlot}
           seoSlot={<SeoDetails content={content} />}
           historySlot={historySlot}
@@ -369,6 +370,7 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
           queue={queue}
           listKinds={listKinds}
           assistantEnabled={assistantEnabled}
+          reviewerHasEmail={Boolean(reviewer.email)}
           changesSlot={changesSlot}
           historySlot={historySlot}
         />
@@ -409,9 +411,11 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
           name: post.client.name,
           logoUrl: post.client.logoUrl,
           autoSchedule: reviewer.client.autoSchedule,
+          schedulingOn: reviewer.client.autoSchedule && reviewer.client.metricoolBlogId !== null,
         }}
         queue={queue}
         assistantEnabled={assistantEnabled}
+        reviewerHasEmail={Boolean(reviewer.email)}
         openAssistant={openAssistant}
         publishInPast={post.publishAt.getTime() < now.getTime()}
         changesSlot={changes ? <VersionChanges changes={changes} currentNumber={current.number} /> : undefined}

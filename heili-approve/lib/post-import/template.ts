@@ -20,6 +20,7 @@ const EXAMPLE = (date: string): string[] => [
   "Link in bio per ordinare",
   "Lancio collezione autunno",
   "collezione-1.jpg, collezione-2.jpg",
+  "Post",
 ];
 
 const INSTRUCTIONS: Array<[string, string]> = [
@@ -29,8 +30,9 @@ const INSTRUCTIONS: Array<[string, string]> = [
   ["Reti", "Una o più reti separate da virgola o da |: Instagram, Facebook. Maiuscole e minuscole non contano. Reti possibili: Instagram, Facebook, LinkedIn, TikTok, X, Threads, Pinterest, YouTube, Google Business, Bluesky. «Tutte» usa le reti del cliente."],
   ["Testo", "Il testo completo del post, con gli a capo e gli hashtag. Ogni rete ha il suo limite di caratteri: l'anteprima ti avvisa."],
   ["Primo commento", "Facoltativo: il commento da pubblicare subito sotto il post."],
-  ["Titolo", "Facoltativo: il nome interno della bozza. Se lo lasci vuoto usiamo le prime parole del testo."],
+  ["Titolo", "Facoltativo: il titolo della bozza, visibile anche al cliente (portale ed email). Se lo lasci vuoto usiamo le prime parole del testo."],
   ["Immagini", "Facoltativo: i nomi dei file, separati da virgola o da |: foto-1.jpg, foto-2.jpg. Poi trascina i file (foto o video) nella pagina di importazione insieme al foglio: li abbiniamo per nome. Formati: JPG, PNG, WebP, GIF, MP4, MOV, WebM, fino a 300 MB."],
+  ["Formato", "Facoltativo: Post, Reel o Storia (vale per Instagram e Facebook; un video verticale va di solito in Reel). Per una sola rete: «Instagram: Reel». Vuoto = Post."],
   ["Cosa succede", "Si creano sempre e solo bozze. Nulla viene inviato al cliente, approvato o programmato: lo fai tu dopo, dal piano o dall'elenco dei post. Importare lo stesso foglio due volte non duplica i post."],
 ];
 
@@ -97,7 +99,7 @@ export async function buildTemplateXlsx({ exampleDate }: TemplateOptions): Promi
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`
   );
   zip.file("xl/styles.xml", STYLES_XML);
-  zip.file("xl/worksheets/sheet1.xml", sheetXml([[...TEMPLATE_HEADERS], EXAMPLE(exampleDate)], [14, 9, 24, 60, 30, 28, 34], { header: 1, body: 0 }));
+  zip.file("xl/worksheets/sheet1.xml", sheetXml([[...TEMPLATE_HEADERS], EXAMPLE(exampleDate)], [14, 9, 24, 60, 30, 28, 34, 16], { header: 1, body: 0 }));
   zip.file(
     "xl/worksheets/sheet2.xml",
     sheetXml([["Colonna", "Come si compila"], ...INSTRUCTIONS.map(([a, b]) => [a, b])], [18, 110], { header: 1, body: 2 })

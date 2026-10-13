@@ -29,6 +29,8 @@ interface ImportRowProps {
   extraIssues: RowIssue[];
   /** An earlier import already created this exact post. */
   existing: boolean;
+  /** True while the server check for this row is scheduled or in flight. */
+  checking: boolean;
   files: Map<string, DroppedFile>;
   disabled: boolean;
   zone: string;
@@ -73,6 +75,7 @@ export default function ImportRow({
   evaluation,
   extraIssues,
   existing,
+  checking,
   files,
   disabled,
   zone,
@@ -92,10 +95,11 @@ export default function ImportRow({
 
   return (
     <li
+      id={`import-row-${row.id}`}
       className="panel space-y-3 p-3 sm:p-4"
       style={invalid ? { borderColor: "var(--color-error)", background: "var(--color-error-soft)" } : undefined}
       data-testid="import-row"
-      data-state={invalid ? "invalid" : existing ? "existing" : "ready"}
+      data-state={invalid ? "invalid" : existing ? "existing" : checking ? "checking" : "ready"}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="label-caps">Riga {row.sourceRow}</span>
@@ -103,6 +107,8 @@ export default function ImportRow({
           <ToneChip tone="error">Da correggere</ToneChip>
         ) : existing ? (
           <ToneChip tone="neutral">Già importata</ToneChip>
+        ) : checking ? (
+          <ToneChip tone="neutral">Controllo…</ToneChip>
         ) : (
           <ToneChip tone="success">Pronta</ToneChip>
         )}
@@ -218,7 +224,7 @@ export default function ImportRow({
           {!row.title.trim() && evaluation.title ? <span className="ml-2 truncate text-xs">· titolo: {evaluation.title}</span> : null}
         </summary>
         <div className="grid gap-3 pt-2 sm:grid-cols-2">
-          <Cell id={`${base}-title`} label="Titolo (interno)" invalid={has("title")}>
+          <Cell id={`${base}-title`} label="Titolo (visibile al cliente)" invalid={has("title")}>
             <input
               id={`${base}-title`}
               {...fieldProps("title")}

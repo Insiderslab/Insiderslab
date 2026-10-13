@@ -34,8 +34,9 @@ type StartOptions = {
 };
 
 const SPEECH_ERRORS: Record<string, string> = {
-  "not-allowed": "Consenti l’uso del microfono al browser, oppure scrivi il messaggio.",
-  "service-not-allowed": "Consenti l’uso del microfono al browser, oppure scrivi il messaggio.",
+  "not-allowed": "Il microfono è bloccato: consentilo dalle impostazioni del sito e riprova, oppure scrivi il messaggio.",
+  "service-not-allowed": "Il microfono è bloccato: consentilo dalle impostazioni del sito e riprova, oppure scrivi il messaggio.",
+  "no-speech": "Non ti ho sentito: riprova, oppure scrivi il messaggio.",
   "audio-capture": "Non trovo un microfono disponibile su questo dispositivo.",
   network: "Il riconoscimento vocale non è disponibile senza connessione.",
 };
@@ -49,6 +50,11 @@ export function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor 
     webkitSpeechRecognition?: SpeechRecognitionConstructor;
   };
   return browser.SpeechRecognition ?? browser.webkitSpeechRecognition ?? null;
+}
+
+/** True when this browser can dictate (SSR-safe). */
+export function useSpeechSupported(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => getSpeechRecognitionConstructor() !== null, () => false);
 }
 
 export function speechErrorMessage(code: string): string {
@@ -85,11 +91,7 @@ export function useSpeechInput({
   onConversationTurn?: (value: string) => void;
   maxLength: number;
 }) {
-  const supported = useSyncExternalStore(
-    noopSubscribe,
-    () => getSpeechRecognitionConstructor() !== null,
-    () => false
-  );
+  const supported = useSpeechSupported();
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -144,7 +146,8 @@ export function useSpeechInput({
         // event submit a partial transcript as a conversation turn.
         cancelledRef.current = true;
         submitOnEndRef.current = false;
-        if (event.error !== "aborted" && event.error !== "no-speech") setError(speechErrorMessage(event.error));
+        // "aborted" is our own cancel(); "no-speech" deserves a message too.
+        if (event.error !== "aborted") setError(speechErrorMessage(event.error));
       };
       recognition.onend = () => {
         recognitionRef.current = null;

@@ -79,7 +79,7 @@ python scripts/approve_import.py validate .\approve-posts.csv
 | --- | --- | --- |
 | `source_id` | sì | Identificativo stabile e univoco nel file, massimo 128 caratteri. Deve iniziare con una lettera o cifra; poi accetta lettere, cifre, `_ . : / -`. Riutilizzare lo stesso valore per ripetere in sicurezza una creazione. |
 | `client_id` | sì | ID ottenuto con `clients` o `resolve`. Non usare il nome libero del cliente. |
-| `title` | sì | Titolo interno della bozza. |
+| `title` | sì | Titolo della bozza, visibile anche al cliente (portale ed email). |
 | `publish_at` | sì | ISO 8601 con offset, per esempio `2026-10-15T10:30:00+02:00`. |
 | `networks` | sì | Reti separate da `|`, per esempio `instagram|facebook`. In JSON può essere un array; i valori vengono normalizzati in minuscolo. |
 | `text` | sì | Testo completo del post. |
@@ -87,7 +87,7 @@ python scripts/approve_import.py validate .\approve-posts.csv
 | `media_files` | no | Percorsi locali separati da `|`, relativi alla cartella del foglio. |
 | `media_durations` | no | Durate in secondi nello stesso ordine dei media, separate da `|`. |
 | `kind` | no | In questa versione è ammesso soltanto `SOCIAL_POST`, che è anche il valore predefinito. |
-| `network_options` | no | Oggetto JSON con le opzioni specifiche per rete. |
+| `network_options` | no | Oggetto JSON con le opzioni specifiche per rete. Per Reel/Storia si può usare anche la colonna «Formato» del modello del pannello (`Post`, `Reel`, `Storia` oppure `Rete: Formato`, es. `Instagram: Reel`), che si fonde con `network_options`. |
 
 Il [template CSV](templates/approve-posts.csv) è UTF-8. Sono supportati CSV con separatore virgola o punto e virgola, JSON e file `.xlsx` normali. I file `.xls` non sono supportati.
 

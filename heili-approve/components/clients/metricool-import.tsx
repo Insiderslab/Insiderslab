@@ -15,7 +15,7 @@
  */
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { importMetricoolClientsAction } from "@/app/(dashboard)/clients/import/actions";
 import { BrandLogo, NetworkChips } from "@/components/clients/brand-parts";
 import { NETWORK_LABELS } from "@/lib/domain";
@@ -68,6 +68,11 @@ export default function MetricoolImport({ rows, candidates, fake }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // The agency shell scrolls inside <main>, not on the window: show the result from the top.
+  useEffect(() => {
+    if (summary) document.querySelector("main")?.scrollTo({ top: 0 });
+  }, [summary]);
 
   const importable = rows.filter((row) => !row.linkedTo);
   const linkedCount = rows.length - importable.length;
@@ -142,7 +147,6 @@ export default function MetricoolImport({ rows, candidates, fake }: Props) {
           return;
         }
         setSummary(result.data);
-        window.scrollTo({ top: 0 });
       } catch {
         setError("Si è verificato un errore imprevisto. Riprova tra poco.");
       }

@@ -53,6 +53,8 @@ function PageTitleWithKind({ variant }: { variant: AppVariant }) {
 
 interface TopBarProps {
   onMenuClick: () => void;
+  /** The drawer returns the focus here when it closes. */
+  menuButtonRef?: React.Ref<HTMLButtonElement>;
   metricoolConnected: boolean;
   needsAttention: number;
   variant: AppVariant;
@@ -62,6 +64,7 @@ interface TopBarProps {
 
 export default function TopBar({
   onMenuClick,
+  menuButtonRef,
   metricoolConnected,
   needsAttention,
   variant,
@@ -79,8 +82,9 @@ export default function TopBar({
     >
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         <button
+          ref={menuButtonRef}
           onClick={onMenuClick}
-          className="-ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-foreground hover:bg-surface-sunken lg:hidden"
+          className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-foreground hover:bg-surface-sunken lg:hidden"
           aria-label="Apri menu"
         >
           <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true">
@@ -105,7 +109,7 @@ export default function TopBar({
 
       <div className="flex shrink-0 items-center gap-3">
         {needsAttention > 0 && (
-          <Link href="/posts?status=attention" className="chip chip-stale hover:underline">
+          <Link href="/posts?status=attention" className="chip chip-stale !min-h-11 !px-3 hover:underline">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
               <path d="M12 8v5M12 16.5v.01" />
               <circle cx="12" cy="12" r="9" />

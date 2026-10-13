@@ -1,7 +1,11 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { formatPlanSlot } from "@/components/portal/helpers";
 import { planLinkMessage } from "@/components/share/messages";
 import { planEmailCopy } from "@/lib/notifications";
+import { plural } from "@/lib/plural";
 import {
   addPlanMonths,
   byPublishAsc,
@@ -117,6 +121,16 @@ describe("plan status", () => {
     expect(progressLabel({ approved: 0, total: 1 })).toBe("0 di 1 approvato");
     expect(progressPercent({ approved: 3, total: 12 })).toBe(25);
     expect(progressPercent({ approved: 0, total: 0 })).toBe(0);
+  });
+
+  it("progress bar: one metric in every view, with the singular detail right", () => {
+    // Panoramica, Griglia and Sfoglia share PlanProgressBar's default label.
+    const html = renderToStaticMarkup(createElement(PlanProgressBar, { progress: { approved: 1, changes: 1, total: 3 }, size: "sm" }));
+    expect(html).toContain("2 di 3 revisionati");
+    expect(html).toContain("1 approvato · 1 con modifiche richieste");
+    expect(html).not.toContain("1 approvati");
+    expect(plural(1, "commento", "commenti")).toBe("1 commento");
+    expect(plural(2, "commento", "commenti")).toBe("2 commenti");
   });
 
   it("is decided when nothing waits for the client and something got an answer", () => {

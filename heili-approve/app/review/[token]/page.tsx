@@ -171,7 +171,11 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
       {standaloneGroups.inProgress.length > 0 && (
         <Section
           title="Modifiche richieste"
-          subtitle="In lavorazione dall'agenzia: riceverai un'email quando la nuova versione sarà pronta."
+          subtitle={
+            reviewer.email
+              ? "In lavorazione dall'agenzia: riceverai un'email quando la nuova versione sarà pronta."
+              : "In lavorazione dall'agenzia: ti avviseremo quando la nuova versione sarà pronta."
+          }
           count={standaloneGroups.inProgress.length}
         >
           {standaloneGroups.inProgress.map((post) => (

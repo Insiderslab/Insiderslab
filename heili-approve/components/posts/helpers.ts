@@ -544,6 +544,15 @@ export function formatBytes(bytes: number): string {
   return `${mb < 10 ? mb.toFixed(1).replace(".", ",") : Math.round(mb)} MB`;
 }
 
+/**
+ * Label of the bulk-send bar in the posts list. The selection covers every
+ * post that can be (re)sent — drafts AND changes-requested (same rule as
+ * `sendPlan`, lib/domain.ts "submit") — so the text says "post", not "bozze".
+ */
+export function selectForSendLabel(selectableCount: number): string {
+  return `Seleziona i post da inviare (${selectableCount})`;
+}
+
 /** "0:07" or "0:12–0:15". */
 export const formatMoment = formatTimeRange;
 

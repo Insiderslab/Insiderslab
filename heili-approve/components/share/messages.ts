@@ -85,15 +85,25 @@ export function submitFollowUp({
   clientCount,
   clientsWithoutReviewers,
   clientsWithoutEmail,
+  clientsWithoutScheduling = [],
 }: {
   clientCount: number;
   clientsWithoutReviewers: readonly string[];
   clientsWithoutEmail: readonly string[];
+  /** Auto-schedule clients without a Metricool brand: approvals cannot be scheduled. */
+  clientsWithoutScheduling?: readonly string[];
 }): string {
   const parts: string[] = [];
   if (clientsWithoutReviewers.length > 0) {
     parts.push(
       `Attenzione: ${clientsWithoutReviewers.join(", ")} non ha referenti attivi, quindi nessuno riceverà l'email. Aggiungili nella scheda del cliente.`
+    );
+  }
+  if (clientsWithoutScheduling.length > 0) {
+    parts.push(
+      clientsWithoutScheduling.length === 1
+        ? `Attenzione: ${clientsWithoutScheduling[0]} non ha un brand Metricool collegato: i post approvati non potranno essere programmati. Sceglilo nella scheda del cliente.`
+        : `Attenzione: ${clientsWithoutScheduling.join(", ")} non hanno un brand Metricool collegato: i post approvati non potranno essere programmati. Sceglilo nella scheda del cliente.`
     );
   }
   if (clientsWithoutEmail.length > 0) {
