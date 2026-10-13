@@ -177,6 +177,24 @@ export function visiblePendingMessage(
   return last?.role === "CLIENT" && last.content === pending ? null : pending;
 }
 
+/** Parola di stato della chiamata vocale (H-04), con la sua tinta. */
+export type LiveTone = "waiting" | "listening" | "speaking" | "paused";
+
+export function liveStatus(
+  phase: "preparing" | "connecting" | "active" | "closing",
+  state: { muted: boolean; speaking: boolean }
+): { label: string; tone: LiveTone } {
+  if (phase === "preparing") return { label: "Preparo il contesto di immagini e video…", tone: "waiting" };
+  if (phase === "connecting") return { label: "Collegamento al microfono…", tone: "waiting" };
+  if (phase === "closing") return { label: "Salvo la conversazione…", tone: "waiting" };
+  if (state.muted) return { label: "In pausa", tone: "paused" };
+  if (state.speaking) return { label: "Heili sta parlando", tone: "speaking" };
+  return { label: "In ascolto", tone: "listening" };
+}
+
+/** Quanto resta acceso «Heili sta parlando» dopo l'ultimo frammento ricevuto. */
+const SPEAKING_MS = 1600;
+
 /** Polls a reader while mounted; re-renders only when its key changes. */
 function usePolled<T>(read: (() => T | null) | undefined, key: (value: T) => string): T | null {
   const [state, setState] = useState<{ key: string; value: T } | null>(null);
@@ -386,6 +404,27 @@ export function AssistantPanel({
 
   const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reloadAfterVoice });
   const voiceBusy = live.phase !== "idle";
+
+  // «Heili sta parlando»: si accende quando arrivano frammenti della risposta
+  // e si spegne da solo dopo l'ultimo (nessun cambio dentro useLiveConversation).
+  const assistantTextRef = useRef(live.assistantText);
+  const lastAssistantDeltaRef = useRef(0);
+  const [assistantSpeaking, setAssistantSpeaking] = useState(false);
+  useEffect(() => {
+    if (!live.assistantText) return;
+    assistantTextRef.current = live.assistantText;
+    lastAssistantDeltaRef.current = Date.now();
+  }, [live.assistantText]);
+  useEffect(() => {
+    if (live.phase !== "active") {
+      const reset = window.setTimeout(() => setAssistantSpeaking(false), 0);
+      return () => window.clearTimeout(reset);
+    }
+    const poll = window.setInterval(() => {
+      setAssistantSpeaking(assistantTextRef.current.length > 0 && Date.now() - lastAssistantDeltaRef.current < SPEAKING_MS);
+    }, 400);
+    return () => window.clearInterval(poll);
+  }, [live.phase]);
   const messages = session?.messages ?? [];
   const pendingVisible = visiblePendingMessage(pendingMessage, messages);
   const lastMessage = messages.at(-1);
@@ -675,6 +714,10 @@ export function AssistantPanel({
 
   const sendHighlighted = completed ? session?.verdict === "changes" : readiness === "ready_changes";
   const approveHighlighted = completed ? session?.verdict === "approve" : readiness === "ready_approve";
+  const callStatus = liveStatus(voiceBusy && live.phase !== "idle" ? live.phase : "connecting", {
+    muted: live.muted,
+    speaking: assistantSpeaking,
+  });
 
   return (
     <section ref={panelRef} className="space-y-3 rounded-xl border border-border bg-background p-3" aria-label="Assistente di revisione">
@@ -690,6 +733,83 @@ export function AssistantPanel({
             </p>
           </div>
         </header>
+      )}
+
+      {!loading && done === null && canChat && (
+        <div className="space-y-2 rounded-lg border border-border bg-surface p-3" aria-label="Parla a voce">
+          {!live.supported ? (
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Parla a voce</p>
+              <p className="text-xs text-muted">
+                La voce richiede un browser con microfono e una connessione sicura. Puoi scrivere il tuo messaggio qui sotto.
+              </p>
+            </div>
+          ) : !voiceBusy ? (
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={startConversation}
+                disabled={composerDisabled}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                <MicrophoneIcon />
+                Parla a voce
+              </button>
+              <p className="text-xs text-muted">
+                Oppure scrivi: Heili risponde qui sotto. La voce è generata dall&apos;AI e la decisione resta sempre tua.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="flex items-center gap-2 text-sm font-semibold" role="status" aria-live="polite" data-testid="live-status">
+                <LiveToneDot tone={callStatus.tone} />
+                {callStatus.label}
+              </p>
+              {live.phase === "active" && live.remainingSeconds !== null && (
+                <p className="text-xs text-muted" role="timer" aria-live="off">
+                  Tempo rimasto: {formatCountdown(live.remainingSeconds)}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {live.phase === "active" && (
+                  <button
+                    type="button"
+                    onClick={live.toggleMicrophone}
+                    aria-pressed={live.muted}
+                    className="min-h-11 rounded-md border border-border bg-background px-3 text-sm"
+                  >
+                    {live.muted ? "Riattiva microfono" : "Silenzia"}
+                  </button>
+                )}
+                {live.playbackBlocked && (
+                  <button type="button" onClick={() => void live.enablePlayback()} className="min-h-11 rounded-md border border-accent px-3 text-sm text-accent">
+                    Attiva audio
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void live.stop().catch(() => {})}
+                  disabled={live.phase === "closing"}
+                  className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50"
+                >
+                  {live.phase === "preparing" ? "Annulla preparazione" : live.phase === "connecting" ? "Annulla collegamento" : "Termina"}
+                </button>
+              </div>
+              {(live.clientText || live.assistantText) && (
+                <div className="max-h-40 space-y-2 overflow-y-auto rounded border border-border bg-background p-2 text-sm" aria-live="off" aria-label="Sottotitoli">
+                  {live.clientText && <p><strong>Tu: </strong>{live.clientText}</p>}
+                  {live.assistantText && <p><strong>Heili: </strong>{live.assistantText}</p>}
+                </div>
+              )}
+              <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l&apos;agenzia.</p>
+            </div>
+          )}
+          {live.error && (
+            <p className="text-sm text-error" role="alert">
+              {live.error}
+            </p>
+          )}
+        </div>
       )}
 
       <div
@@ -869,63 +989,6 @@ export function AssistantPanel({
                 <span className="text-xs text-muted">Messaggi rimasti: {messagesLeft}</span>
               )}
             </div>
-
-            <div className="space-y-3 border-t border-border pt-3">
-              <div className="flex items-start gap-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold">Conversazione vocale</p>
-                  <p className="text-xs text-muted">
-                    Una conversazione naturale sul post: puoi interrompere Heili parlando, anche mentre risponde.
-                    La voce è generata dall’AI. Scegli tu quando inviare il feedback.
-                  </p>
-                </div>
-              </div>
-              {live.error && <p className="text-sm text-error" role="alert">{live.error}</p>}
-              {!live.supported ? (
-                <p className="text-xs text-muted">La chiamata richiede un browser con microfono e una connessione sicura. Puoi sempre usare la chat.</p>
-              ) : !voiceBusy ? (
-                <button type="button" onClick={startConversation} disabled={composerDisabled}
-                  className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50">
-                  Inizia conversazione vocale
-                </button>
-              ) : (
-                <>
-                  <p className="text-sm font-medium" role="status">
-                    {live.phase === "preparing" ? "Sto preparando il contesto delle immagini e dei video… Il microfono è ancora spento." : live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
-                  </p>
-                  {live.phase === "active" && live.remainingSeconds !== null && (
-                    <p className="text-xs text-muted" role="timer" aria-live="off">
-                      Tempo rimasto: {formatCountdown(live.remainingSeconds)}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {live.phase === "active" && (
-                      <button type="button" onClick={live.toggleMicrophone} aria-pressed={live.muted}
-                        className="min-h-11 rounded-md border border-border bg-background px-3 text-sm">
-                        {live.muted ? "Riattiva microfono" : "Disattiva microfono"}
-                      </button>
-                    )}
-                    {live.playbackBlocked && (
-                      <button type="button" onClick={() => void live.enablePlayback()} className="min-h-11 rounded-md border border-accent px-3 text-sm text-accent">Attiva audio</button>
-                    )}
-                    <button type="button" onClick={() => void live.stop().catch(() => {})} disabled={live.phase === "closing"}
-                      className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50">
-                      {live.phase === "preparing" ? "Annulla preparazione" : live.phase === "connecting" ? "Annulla collegamento" : "Termina conversazione"}
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l’agenzia.</p>
-                </>
-              )}
-              {(live.clientText || live.assistantText) && (
-                <details className="text-sm" open>
-                  <summary className="cursor-pointer text-xs text-muted">Trascrizione in diretta</summary>
-                  <div className="mt-2 max-h-60 space-y-2 overflow-y-auto" aria-live="off">
-                    {live.clientText && <p><strong>Tu: </strong>{live.clientText}</p>}
-                    {live.assistantText && <p><strong>Heili: </strong>{live.assistantText}</p>}
-                  </div>
-                </details>
-              )}
-            </div>
           </div>
 
           {(hasClientMessages || completed || live.clientText) && (
@@ -972,6 +1035,26 @@ export function AssistantPanel({
 }
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
+
+function MicrophoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" />
+    </svg>
+  );
+}
+
+/** Parola + punto di stato: nessuna animazione, leggibile anche con reduced motion. */
+function LiveToneDot({ tone }: { tone: LiveTone }) {
+  const colors: Record<LiveTone, string> = {
+    waiting: "bg-warning",
+    listening: "bg-accent",
+    speaking: "bg-success",
+    paused: "bg-border",
+  };
+  return <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${colors[tone]}`} aria-hidden="true" />;
+}
 
 function Chip({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: ReactNode }) {
   return (
