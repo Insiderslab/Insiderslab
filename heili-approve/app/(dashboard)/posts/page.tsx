@@ -200,7 +200,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
           )}
           <Link
             href={newHref}
-            className="rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover"
+            className="btn btn-primary"
           >
             {newLabel}
           </Link>

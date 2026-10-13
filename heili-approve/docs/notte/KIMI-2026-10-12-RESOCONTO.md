@@ -207,3 +207,11 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Per non collidere ho spostato il mio lavoro in una **worktree separata** (`%TEMP%\opencode\kimi-wt`, branch `kimi/notte-2026-10-12`) e ho committato QA-17 da lì. Da qui in poi lavoro solo nella worktree.
 - Le copie delle mie modifiche QA-17 rimaste nella tree principale (quella di deepseek) andrebbero tolte da chi ci lavora (o da me quando deepseek avrà finito): sono i file del commit QA-17 sul mio branch. Non le ho tolte io perché deepseek era attivo in quel momento.
 - Il branch di deepseek NON contiene i miei commit di questa notte (K-05, K-06, K-07, QA-14, QA-16, QA-17): il merge finale li dovrà includere; attenzione ai file toccati da entrambi (components/portal/*, app/review/*, e2e/month-review.spec.mjs).
+
+### QA-18 — FATTA
+- Fix: «Nuovo contenuto» nella lista post ora usa `btn btn-primary` come gli altri pulsanti (era una classe ad hoc: testo non centrato, angoli squadrati, altezza < 44).
+- Il caso «calendar/page.tsx:150» della scheda non esiste più: il «+ Nuovo contenuto» del calendario è stato sistemato con QA-13 (touch-target) e non usa quella classe.
+- Nota: restano altri pulsanti con la classe ad hoc (`bg-accent px-4 py-2…`) in clients/page.tsx, posts/page.tsx (stato vuoto), client-form, archive-button, ad-review, blog-review, post-review (area agenzia): non toccati per minimalità — se si vuole uniformare tutto, valutare una passata unica.
+- File: app/(dashboard)/posts/page.tsx.
+- Test: nessun test asseriva quella classe; verifica visiva rimandata agli screenshot e2e (SHOTS/E1-posts-m.png) domattina.
+- Verifiche: tsc 0, eslint 0, vitest 988/988.
