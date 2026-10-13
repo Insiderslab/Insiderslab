@@ -328,7 +328,9 @@ export default function ReviewerList({
         </div>
       )}
 
-      {!archived && (
+      {/* With no reviewer yet, the first one is created from the quick form
+          in "Link per il cliente" above: one path, not two identical forms. */}
+      {!archived && reviewers.length > 0 && (
         <form onSubmit={handleAdd} className="space-y-4 border-t border-border pt-5" data-testid="add-reviewer-form">
           <p className="label-caps">Aggiungi referente</p>
           <div className="grid gap-4 sm:grid-cols-2">

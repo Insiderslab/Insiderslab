@@ -266,3 +266,9 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/post-import/table.ts, __tests__/post-import-parse.test.ts.
 - Test: nuovo caso per la regola intestazioni (errore chiaro + riga di dati invariata); aggiornate le attese del seriale Excel al formato italiano (1900 e 1904).
 - Verifiche: tsc 0, eslint 0, vitest 995/995.
+
+### QA-27 — FATTA
+- Fix: il modulo «Aggiungi referente» in `ReviewerList` compare solo se il cliente ha già almeno un referente; il primo si crea dal modulo rapido «Chi approva per …?» in «Link per il cliente» (stessa pagina, subito sopra). Un solo percorso per il primo referente, il modulo completo (con «Invia il link via email») per i successivi — come già suggeriva il testo «Altre persone, email e nuovi link: Referenti».
+- File: components/clients/reviewer-list.tsx, e2e/share-link.spec.mjs.
+- Test: e2e — su cliente appena creato `add-reviewer-form` assente, dopo «Crea link» presente (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 995/995.
