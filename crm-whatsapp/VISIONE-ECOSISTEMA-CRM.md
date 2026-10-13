@@ -149,3 +149,19 @@ Se l'accesso standard non bastasse, servirebbe il Tech Provider, e allora sono s
 | 6 | **La Bambola: l'obiettivo è partire con tutti i canali** se Instagram/Facebook nel CRM sono pronti in tempo; se no, WhatsApp + sito prima e gli altri canali appena pronti, nello stesso CRM | Per non aspettare l'App Review: le persone che gestiscono Instagram e la Pagina di La Bambola ricevono un ruolo (tester) nell'app, così il canale funziona con l'accesso standard durante il pilota |
 | 1 | Unione PR #3: spiegata, decisione in attesa | — |
 | 4 | Clientify: spiegata, decisione in attesa | Verificato su Clientify: 1 sola automazione pubblicata ("Nuovo Lead"); i canali dell'inbox non sono leggibili via API (manca l'addon) |
+
+## 10. Clienti e team: due sistemi diversi (13/10/2026)
+
+**Decisione di Stefano:** la gestione dei clienti e la gestione del team vanno tenute separate.
+
+| | **Heili CRM** (crm.heili.cloud) | **Heili Work** (heili-platform) |
+|---|---|---|
+| Per chi | i **clienti** delle aziende | il **team** di InsidersLab (e domani quello dei clienti) |
+| Cosa contiene | conversazioni WhatsApp, Instagram e sito; pipeline; agente per i clienti | aree, progetti, compiti, note, notifiche (oggi su Monday); procedure del team |
+| Cervello | agente IA del CRM con la base di conoscenza dell'azienda | Vice-Ste: ronda delle 8:00, priorità, recap, risposte su procedure e compiti |
+| WhatsApp | i numeri delle aziende | **oggi:** usa il CRM come semplice consegna (porta «invia modello ai numeri del team», solo verso la lista del team). **Domani:** un numero suo |
+
+**Percorso:**
+1. **Ora.** L'assistente interno sul +1 555 resta nel CRM come soluzione ponte, con accesso riservato al team. La ronda si genera **fuori** dal CRM (n8n o Vice-Ste, partendo da Monday) e arriva su WhatsApp attraverso la porta del CRM. Il CRM non legge Monday e non conserva dati del team, salvo la lista dei numeri.
+2. **Quando Heili Work sarà in produzione** (oggi è sul branch `codex/heili-work-locale`, solo in locale): Heili Work prende il posto di Monday come fonte dei compiti, e la ronda la genera Heili Work, chiamando la stessa porta del CRM.
+3. **Dopo.** Heili Work ottiene un suo canale WhatsApp. L'assistente interno e la ronda lasciano il CRM, che resta solo per i clienti.
