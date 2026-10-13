@@ -1,4 +1,4 @@
-# Cosa serve da Stefano: domattina, 11/10/2026 (circa 45 minuti)
+# Cosa serve da Stefano: rilascio del 13/10/2026 (circa 45 minuti)
 
 Il piano completo e le 8 prove sono in `PIANO-FINE-PIATTAFORMA.md`. Qui ci sono solo i passi, in ordine. I blocchi **A** e **B** si possono fare **in parallelo**.
 
@@ -8,17 +8,21 @@ Sul VPS, come root:
 cd /root/heili-diag && curl -fsSLO https://raw.githubusercontent.com/Insiderslab/Insiderslab/claude/exciting-rubin-mow1yu/crm-whatsapp/rilascio-crm.sh && bash rilascio-crm.sh
 ```
 
-Porta in produzione due cose:
+Porta in produzione:
 - il **livello canali** (fase R1, invisibile: prepara Instagram e Facebook);
-- l'**assistente interno**: accesso riservato, «Rimuovi dati demo», rinomina delle organizzazioni, pagina Agente corretta, limite di token.
+- l'**assistente interno**: accesso riservato, «Rimuovi dati demo», rinomina delle organizzazioni, pagina Agente corretta, limite di token;
+- la pagina **Sintesi** e la checklist **Primi passi**;
+- le correzioni del **test di usabilità**: errore dell'IA mai più silenzioso, lingue, caricamenti, ordine dei messaggi.
 
 Lo script fa, in ordine:
 - controlli, compresa nessuna transazione lunga sul database;
 - backup;
-- aggiornamento del codice al commit `0bc731e`;
+- aggiornamento del codice al commit `65f06f3`;
 - build e riavvio;
-- migrazioni 13 → **15**;
+- migrazioni 13 → **16**;
 - controllo del livello canali V1–V7.
+
+Se la prima riga incollata esce come `^[[200~cd: command not found`, il terminale del browser ha rovinato l'incolla: incolla di nuovo.
 
 Se scrive **STOP**, non tocca niente: incollami l'output. Se scrive **ATTENZIONE** sul livello canali, il CRM funziona lo stesso, ma incollami l'output.
 

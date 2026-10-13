@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Rilascio del CRM (Heili CRM / vocero-crm) sul VPS — 2° rilascio, 11/10/2026.
+# Rilascio del CRM (Heili CRM / vocero-crm) sul VPS — 2° rilascio, 13/10/2026.
 #
-#   bash rilascio-crm.sh                      → rilascio di main @ TARGET (PR #7 livello canali R1 + PR #8 assistente interno)
+#   bash rilascio-crm.sh                      → rilascio di main @ TARGET (PR #7 canali R1, #8 assistente interno, #11 Sintesi, #12 usabilità)
 #   bash rilascio-crm.sh attiva-pulsante ID   → aggiunge META_APP_ID e META_ES_CONFIG_ID (=ID) e riavvia
 #
 # Si ferma al primo controllo che non torna e spiega cosa fare. Non stampa
@@ -9,9 +9,9 @@
 set -euo pipefail
 
 APP_DIR=${RILASCIO_APP_DIR:-/opt/vocero}
-TARGET=${RILASCIO_TARGET:-0bc731e3716cdd11855c465be7d2458523b8ed1a}   # main dopo la PR #8
+TARGET=${RILASCIO_TARGET:-65f06f37c6ccbdd54400379f7f7d7853eec7aa9b}   # main dopo le PR #7, #8, #11, #12
 PREV=e23332ed0bc3a087f0ec915d97488aecc42b6304        # rilascio del 10/10 (per tornare indietro)
-MIG_EXPECTED=15                                      # 0000–0014
+MIG_EXPECTED=16                                      # 0000–0015
 APP_ID=609974691965875                               # app Meta del CRM (non segreto)
 PG=vocero-postgres
 APP=vocero-app
@@ -108,7 +108,8 @@ if docker compose logs app --since 10m 2>&1 | grep -q "\[migrate\].*fall"; then
 fi
 MIG_AFTER=$(psqlq "select count(*) from drizzle.__drizzle_migrations;")
 [ "$MIG_AFTER" = "$MIG_EXPECTED" ] || stop "migrazioni applicate: $MIG_AFTER (attese $MIG_EXPECTED)"
-psqlq "select restrict_to_allowlist from agent_profile limit 1;" > /dev/null || stop "colonna restrict_to_allowlist mancante"
+psqlq "select restrict_to_allowlist, error_reply from agent_profile limit 1;" > /dev/null || stop "colonne nuove di agent_profile mancanti"
+psqlq "select agent_retry_at from conversation limit 1;" > /dev/null || stop "colonna agent_retry_at mancante"
 ok "CRM acceso (200), migrazioni $MIG_BEFORE → $MIG_AFTER"
 
 echo "== 3b. Livello canali =="
