@@ -181,3 +181,9 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/mcp/tools/read.ts, lib/mcp/tools/write.ts, __tests__/mcp-tools.test.ts.
 - Test: nuovo caso «uses the singular in the Italian summaries when there is exactly one» (1 cliente, 1 commento: i tre strumenti + list_open_feedback al singolare); il plurale resta coperto dal caso K-01 («4 commenti aperti»).
 - Verifiche: tsc 0, eslint 0, vitest 982/982.
+
+### QA-14 — FATTA
+- Fix: la mappa `THE` di post-share-panel è diventata `TO_THE` con preposizioni articolate («al post», «all'articolo», «alle creatività») e la frase è «…porta direttamente {TO_THE[kind]} nella revisione di …». Usata solo in quel punto. e2e share-link non controllava quel testo.
+- File: components/share/post-share-panel.tsx, __tests__/share-link.test.ts.
+- Test: nuovo caso che renderizza il pannello per i tre tipi e verifica la forma giusta (e l'assenza di «a il/a l'/a le»).
+- Verifiche: tsc 0, eslint 0, vitest 983/983.
