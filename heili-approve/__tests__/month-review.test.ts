@@ -222,8 +222,12 @@ describe("month route /review/<token>/mese/<YYYY-MM>", () => {
 
   it("shows the reviewer's social posts of that month", async () => {
     db.posts.push(summary("a", { clientId: "c1" }), summary("b", { clientId: "c1", publishAt: new Date("2026-10-20T09:00:00Z") }));
-    const element = (await renderMonth("token-c1", "2026-10")) as { props: { children: { props: { heading: string } } } };
-    expect(element.props.children.props.heading).toBe("Post di ottobre");
+    const element = (await renderMonth("token-c1", "2026-10")) as { props: { children: unknown } };
+    // The page also mounts the Heili registration: find the month frame among its children.
+    const children = (Array.isArray(element.props.children) ? element.props.children : [element.props.children]) as Array<{
+      props?: { heading?: string };
+    }>;
+    expect(children.find((child) => child.props?.heading)?.props?.heading).toBe("Post di ottobre");
   });
 
   it("answers 404 for another client's month, an empty month and a malformed one", async () => {

@@ -101,6 +101,8 @@ export interface AssistantPanelProps {
   controlRef?: Ref<AssistantPanelHandle>;
   /** Existing saved-comment flow, used when this assistant has no feedback yet. */
   onRequestSavedChanges?: () => Promise<void>;
+  /** False when the dock around the panel shows title and help itself. */
+  showHeader?: boolean;
 }
 
 export interface AssistantPanelHandle {
@@ -109,6 +111,8 @@ export interface AssistantPanelHandle {
   requestChanges(): Promise<void>;
   approve(): Promise<void>;
   close(): Promise<boolean>;
+  /** Aggiunge un marcatore al messaggio in bozza (flusso «Indica un punto»). */
+  insertMarker(marker: string): void;
 }
 
 type ComposerAction = "prepare" | "send" | "approve" | "add";
@@ -215,6 +219,7 @@ export function AssistantPanel({
   getPointContext,
   controlRef,
   onRequestSavedChanges,
+  showHeader = true,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const feedbackMode = mode === "feedback";
@@ -613,6 +618,7 @@ export function AssistantPanel({
     requestChanges,
     approve,
     close,
+    insertMarker,
   }));
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -622,17 +628,19 @@ export function AssistantPanel({
 
   return (
     <section ref={panelRef} className="space-y-3 rounded-xl border border-border bg-background p-3" aria-label="Assistente di revisione">
-      <header className="flex items-start gap-2">
-        <HeiliAssistantIcon className="h-7 w-7" />
-        <div className="min-w-0 space-y-1">
-          <h2 className="text-sm font-semibold">Heili</h2>
-          <p className="text-xs text-muted">
-            {feedbackMode
-              ? ASSISTANT_FEEDBACK_COPY.header
-              : "Ti aiuta a spiegare all'agenzia cosa cambiare. Non approva e non invia nulla al posto tuo."}
-          </p>
-        </div>
-      </header>
+      {showHeader && (
+        <header className="flex items-start gap-2">
+          <HeiliAssistantIcon className="h-7 w-7" />
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-sm font-semibold">Heili</h2>
+            <p className="text-xs text-muted">
+              {feedbackMode
+                ? ASSISTANT_FEEDBACK_COPY.header
+                : "Ti aiuta a spiegare all'agenzia cosa cambiare. Non approva e non invia nulla al posto tuo."}
+            </p>
+          </div>
+        </header>
+      )}
 
       <div
         ref={scrollRef}

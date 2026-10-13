@@ -10,6 +10,8 @@ import {
   portalNoun,
   portalPath,
 } from "@/components/portal/helpers";
+import HeiliPage from "@/components/portal/heili/heili-page";
+import type { HeiliDestination } from "@/components/portal/heili/types";
 import KindTabs from "@/components/portal/kind-tabs";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
 import { clientServices } from "@/lib/clients";
@@ -94,8 +96,45 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const firstName = reviewer.name.trim().split(/\s+/)[0] || reviewer.name;
   const reviewProgress = planProgress(posts.map((post) => post.status));
 
+  // What Heili can offer from here: only server-built portal destinations.
+  const destinations: HeiliDestination[] = [];
+  if (groups.toReview.length > 0) {
+    destinations.push({
+      id: "next",
+      label: groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Rivedi il prossimo post",
+      href: portalPath(token, groups.toReview[0].id),
+      kind: "next",
+    });
+  }
+  if (firstWaitingPlan) {
+    destinations.push({ id: "plan", label: "Rivedi il piano del mese", href: firstWaitingPlan.href, kind: "plan" });
+  }
+  if (offers.length > 0) {
+    const name = offerMonthName(offers[0].month, now, timeZone);
+    destinations.push({
+      id: "month",
+      label: `Rivedi tutto ${name} insieme`,
+      href: portalMonthPath(token, offers[0].month),
+      kind: "view",
+    });
+  }
+
   return (
     <main className="space-y-8">
+      <HeiliPage
+        context={{
+          page: "home",
+          title: "Questa è la tua pagina di revisione",
+          summary:
+            groups.toReview.length === 0
+              ? "Nessun contenuto da approvare in questo momento"
+              : groups.toReview.length === 1
+                ? "1 contenuto da rivedere"
+                : `${groups.toReview.length} contenuti da rivedere`,
+          destinations,
+          services: kindsShown,
+        }}
+      />
       <section className="space-y-4 py-3 sm:py-5">
         <p className="label-caps">Il tuo spazio di revisione</p>
         <div className="flex flex-wrap items-end justify-between gap-5">

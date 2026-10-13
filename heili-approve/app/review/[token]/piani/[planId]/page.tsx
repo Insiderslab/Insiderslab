@@ -14,10 +14,12 @@ import {
   portalStatusLabel,
   portalTone,
 } from "@/components/portal/helpers";
+import HeiliPage from "@/components/portal/heili/heili-page";
+import type { HeiliDestination, HeiliPageKind } from "@/components/portal/heili/types";
 import PlanReview from "@/components/portal/plan-review";
 import type { PortalPlan } from "@/components/portal/types";
 import { NotFoundError } from "@/lib/errors";
-import { parseMonthView, parsePosition, type MonthView } from "@/lib/month-rules";
+import { parseMonthView, parsePosition, viewPath, type MonthView } from "@/lib/month-rules";
 import { byPublishAsc, instagramGridOrder, planHeading, planMonthName, planProgress } from "@/lib/plan-rules";
 import { getPlanForReviewer, openClientCommentCounts, type ReviewerPlan } from "@/lib/plans";
 import { listPostsForReviewer, type ReviewerRef } from "@/lib/posts";
@@ -103,12 +105,41 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
   const planPath = portalPlanPath(token, plan.id);
   const switcher = <ViewSwitch basePath={planPath} view={view} views={PLAN_VIEWS} />;
 
+  // Heili in this plan: server-built destinations for the current view.
+  const progressAll = planProgress(posts.map((p) => p.status));
+  const nextPlanPost = posts.find((p) => p.canAct);
+  const heiliDestinations = (page: HeiliPageKind): HeiliDestination[] => {
+    const list: HeiliDestination[] = [];
+    if (nextPlanPost) {
+      list.push({ id: "next", label: "Rivedi il prossimo post", href: portalPath(token, nextPlanPost.id), kind: "next" });
+    }
+    if (page !== "plan") list.push({ id: "plan", label: "Torna al piano", href: planPath, kind: "plan" });
+    if (page !== "plan-grid") list.push({ id: "grid", label: "Vai alla griglia", href: viewPath(planPath, "griglia"), kind: "view" });
+    if (page !== "browse") list.push({ id: "browse", label: "Rivedi veloce (Sfoglia)", href: viewPath(planPath, "sfoglia"), kind: "view" });
+    list.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
+    return list;
+  };
+  const heiliSummary = `${progressAll.total} post, ${progressAll.inReview} da rivedere`;
+  const heiliTitle = portalPlan.heading.charAt(0).toLowerCase() + portalPlan.heading.slice(1);
+  const heiliSlot = (page: HeiliPageKind) => (
+    <HeiliPage
+      context={{
+        page,
+        title: heiliTitle,
+        summary: heiliSummary,
+        destinations: heiliDestinations(page),
+        services: ["SOCIAL_POST"],
+      }}
+    />
+  );
+
   // Griglia and Sfoglia: every post of the month, same data and rules as the overview.
   if (view !== "panoramica") {
     const progress = planProgress(posts.map((p) => p.status));
     const sfoglia = view === "sfoglia";
     return (
       <main>
+        {heiliSlot(sfoglia ? "browse" : "plan-grid")}
         <MonthFrame
           backHref={planPath}
           backLabel="Piano del mese"
@@ -162,6 +193,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
 
   return (
     <main>
+      {heiliSlot("plan")}
       <PlanReview
         token={token}
         plan={portalPlan}

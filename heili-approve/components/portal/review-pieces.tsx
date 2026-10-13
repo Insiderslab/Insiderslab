@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import type { ReactNode, RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { PortalQueue } from "./types";
 import type { PortalWording } from "./helpers";
@@ -203,8 +203,25 @@ export function newVersionNotice(hasEmail: boolean): string {
 
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */
 export function DecisionBar({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // The floating Heili button sits above this bar: --decision-bar-h is its height.
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const update = () => {
+      document.documentElement.style.setProperty("--decision-bar-h", `${element.offsetHeight}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--decision-bar-h");
+    };
+  }, []);
   return (
     <div
+      ref={ref}
       className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >

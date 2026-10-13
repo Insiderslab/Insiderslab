@@ -273,10 +273,14 @@ describe("portal access to a plan", () => {
     db.posts.push(post("a"), post("b", { status: "DRAFT" }), post("x", { planId: "p2", clientId: "c2" }));
     const { default: Page } = await import("@/app/review/[token]/piani/[planId]/page");
     const element = (await Page({ params: Promise.resolve({ token: "token-c1", planId: "p1" }) })) as {
-      props: { children: { props: { plan: { posts: Array<{ id: string }> } } } };
+      props: { children: unknown };
     };
+    // The page also mounts the Heili registration: find the plan review among its children.
+    const children = (Array.isArray(element.props.children) ? element.props.children : [element.props.children]) as Array<{
+      props?: { plan?: { posts: Array<{ id: string }> } };
+    }>;
     // Only the client's visible posts of this plan: no draft, nothing of another client.
-    expect(element.props.children.props.plan.posts.map((p) => p.id)).toEqual(["a"]);
+    expect(children.find((child) => child.props?.plan)?.props?.plan?.posts.map((p) => p.id)).toEqual(["a"]);
   });
 });
 
