@@ -165,3 +165,7 @@ Se l'accesso standard non bastasse, servirebbe il Tech Provider, e allora sono s
 1. **Ora.** L'assistente interno sul +1 555 resta nel CRM come soluzione ponte, con accesso riservato al team. La ronda si genera **fuori** dal CRM (n8n o Vice-Ste, partendo da Monday) e arriva su WhatsApp attraverso la porta del CRM. Il CRM non legge Monday e non conserva dati del team, salvo la lista dei numeri.
 2. **Quando Heili Work sarà in produzione** (oggi è sul branch `codex/heili-work-locale`, solo in locale): Heili Work prende il posto di Monday come fonte dei compiti, e la ronda la genera Heili Work, chiamando la stessa porta del CRM.
 3. **Dopo.** Heili Work ottiene un suo canale WhatsApp. L'assistente interno e la ronda lasciano il CRM, che resta solo per i clienti.
+
+**Numeri (13/10/2026):**
+- **+39 347 718 5235** = numero di InsidersLab **per i clienti**. Va nel CRM, organizzazione «InsidersLab», in coexistence con l'app WhatsApp Business del telefono.
+- **+1 555 779 6249** = assistente interno del team, come ponte. È un **numero di prova di Meta**: verso numeri non presenti nella sua lista di destinatari di prova (massimo 5) può solo **rispondere** a chi scrive, non scrivere per primo. La ronda con modello raggiunge quindi al massimo 5 persone. Per un team più grande serve un numero vero per il team: quello che in futuro sarà di Heili Work.
