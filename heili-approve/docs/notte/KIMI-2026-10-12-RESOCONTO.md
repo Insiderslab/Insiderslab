@@ -258,3 +258,11 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/post-import/service.ts, __tests__/post-import-service.test.ts.
 - Test: nuovo caso — tre righe (due identiche + una con titolo diverso): la seconda non ok con il messaggio, la terza ok.
 - Verifiche: tsc 0, eslint 0, vitest 994/994.
+
+### QA-26 — FATTA
+- Fix (1) intestazioni: in `tableToRows`, se la prima riga contiene almeno una colonna riconosciuta e la prima cella NON sembra una data/seriale Excel, è trattata come intestazione anche sotto la soglia precedente (2 colonne note): un foglio «Giorno | Quando | Post» ora dà l'errore chiaro «Nella prima riga mancano le colonne: Reti, Testo…» invece di importare l'intestazione come «Riga 1» con errore di data. Una prima cella che è già una data resta dato nell'ordine standard (comportamento invariato, coperto da test).
+- Fix (2) date Excel: `serialToText` ora produce «15/10/2026» (e «15/10/2026 10:30», già accettato da evaluateRow via il fallback «joined») invece di «2026-10-15» — coerente con il placeholder e con ciò che l'utente vede in Excel. Le ore sole restano «10:30».
+- Nota: un primo giro di test ha intercettato una mia svista nella regex «sembra una data» (mancava l'anno opzionale) — corretta; è il caso in cui una cella di testo piegata su un alias («Testo») avrebbe attivato la nuova regola su una riga di dati vera.
+- File: lib/post-import/table.ts, __tests__/post-import-parse.test.ts.
+- Test: nuovo caso per la regola intestazioni (errore chiaro + riga di dati invariata); aggiornate le attese del seriale Excel al formato italiano (1900 e 1904).
+- Verifiche: tsc 0, eslint 0, vitest 995/995.
