@@ -222,3 +222,10 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/mcp/protocol.ts, __tests__/mcp-protocol.test.ts, __tests__/mcp-tools.test.ts.
 - Test: mcp-protocol (testo «Troppo grande», niente «Too big/Invalid input/Invalid option»); mcp-tools nuovo caso «reports invalid arguments in Italian» (enum, campo mancante, limite).
 - Verifiche: tsc 0, eslint 0, vitest 989/989.
+
+### QA-20 — FATTA
+- Fix: nella scheda «Collega la tua AI (MCP)» il testo non cita più un percorso del repository («Il titolare può attivarlo: guida in docs/COLLEGARE-AI-MCP.md» → «Per attivare l'accesso con account, chiedi al titolare.») e «(vedi sotto)» è diventato esplicito («nella sezione «Codex e Claude Code» qui sotto»). La chiave appena creata ha ora il pulsante «Copia chiave» (CopyButton condiviso, stile btn).
+- Nota: il riferimento «qui sopra» già presente a «Importa con Codex o Claude» era già esplicito: invariato.
+- File: components/settings/mcp-settings.tsx, components/settings/automation-settings.tsx, e2e/mcp.spec.mjs.
+- Test: e2e — la scheda non contiene «docs/»; dopo «Crea chiave» è visibile «Copia chiave» (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 989/989.

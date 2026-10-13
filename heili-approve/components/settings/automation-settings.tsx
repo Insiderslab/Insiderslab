@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createAutomationToken, revokeAutomationToken } from "@/app/(dashboard)/settings/automation-actions";
+import CopyButton from "@/components/clients/copy-button";
 import BottomSheet from "@/components/portal/bottom-sheet";
 
 export default function AutomationSettings({ tokens }: {
@@ -53,6 +54,7 @@ export default function AutomationSettings({ tokens }: {
     {secret && <div className="inset space-y-2 p-3" role="status">
       <p className="text-sm font-semibold">Copia la chiave: viene mostrata solo ora.</p>
       <textarea aria-label="Chiave automazione appena creata" readOnly value={secret} rows={3} className="field w-full break-all" style={{ fontSize: 16 }} onFocus={e => e.currentTarget.select()} />
+      <div><CopyButton value={secret} label="Copia chiave" className="btn btn-sm min-h-11" /></div>
       <p className="text-sm text-muted">Salvala nella configurazione locale dell&apos;assistente. Non inserirla nel foglio Excel o nei post.</p>
     </div>}
     {tokens.length > 0 ? <ul className="divide-y divide-border">

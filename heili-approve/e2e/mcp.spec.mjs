@@ -226,8 +226,9 @@ test("Impostazioni: la scheda «Collega la tua AI (MCP)» a 1366 e 390 px", asyn
   await expect(card).toContainText("/mcp");
   await expect(card.getByTestId("mcp-oauth-status")).toContainText(/configurato|non configurato/);
   await expect(card.getByRole("button", { name: "Copia indirizzo" })).toBeVisible();
-  // The card never shows configuration values or keys.
+  // The card never shows configuration values or keys, and never a repo path.
   expect(await card.innerText()).not.toMatch(/approve_auto_|MCP_JWT|auth0/i);
+  expect(await card.innerText()).not.toContain("docs/");
   await card.scrollIntoViewIfNeeded();
   await card.screenshot({ path: path.join(SHOTS_DIR, "settings-mcp-1366.png") });
   await openAll(card);
@@ -260,6 +261,8 @@ test("Impostazioni: scadenza a giorni di calendario e revoca solo dopo conferma"
   await page.getByRole("button", { name: "Crea chiave" }).click();
   const row = page.locator("li", { hasText: "E2E revoca" });
   await expect(row).toBeVisible();
+  // The key is shown once, with a «Copia chiave» button.
+  await expect(page.getByRole("button", { name: "Copia chiave" })).toBeVisible();
   const romeToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
   const [y, m, d] = romeToday.split("-").map(Number);
   const expected = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome" })
