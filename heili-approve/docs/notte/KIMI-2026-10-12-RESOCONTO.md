@@ -187,3 +187,9 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: components/share/post-share-panel.tsx, __tests__/share-link.test.ts.
 - Test: nuovo caso che renderizza il pannello per i tre tipi e verifica la forma giusta (e l'assenza di «a il/a l'/a le»).
 - Verifiche: tsc 0, eslint 0, vitest 983/983.
+
+### QA-16 — FATTA
+- Fix: tolta la classe CSS `capitalize` (maiuscola ogni parola: «Lunedì 12 Ottobre») dai due titoli del calendario; nuovo helper `ucFirst` in components/posts/helpers.ts che maiuscola solo la prima lettera: «Ottobre 2026», «Lunedì 12 ottobre».
+- File: components/posts/helpers.ts, app/(dashboard)/calendar/page.tsx, __tests__/posts-ui.test.ts.
+- Test: 3 asserzioni su `ucFirst`.
+- Verifiche: tsc 0, eslint 0, vitest 984/984.

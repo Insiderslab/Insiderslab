@@ -28,8 +28,17 @@ import {
   startOfWeek,
   statusesForFilter,
   toLocalParts,
+  ucFirst,
   type CommentLike,
 } from "../components/posts/helpers";
+
+describe("ucFirst", () => {
+  it("upper-cases only the first letter (Italian months stay lower case)", () => {
+    expect(ucFirst("ottobre 2026")).toBe("Ottobre 2026");
+    expect(ucFirst("lunedì 12 ottobre")).toBe("Lunedì 12 ottobre");
+    expect(ucFirst("")).toBe("");
+  });
+});
 
 describe("status filters and commands", () => {
   it("parses ?status=", () => {
