@@ -88,3 +88,38 @@
 ### H-05 — Documento «Guida a voce» (fatta, `docs/HEILI-GUIDA-VOCALE.md`)
 
 - Proposta completa e volutamente **non implementata**: sessione live di portale senza media, strumento `navigate` con soli id validati dal server, consegna della direttiva via polling sulla rotta voce, limiti/costi, rischi di iniezione e contromisure, test necessari. Da rivedere con Claude e Stefano.
+
+## Verifica finale (ultima notte)
+
+- `npx tsc --noEmit`: **pulito**.
+- `npx vitest run --maxWorkers=4`: **67 file, 1003 test, tutti verdi**.
+- `npm run build` **tentato**: si ferma con `FATAL ERROR: Zone Allocation failed - process out of memory` (Turbopack, esaurimento risorse della macchina — probabilmente anche per il processo esterno QA-17 attivo). Non è un errore di codice emerso dai test; **va rilanciato in CI** o su una macchina libera.
+- E2e e schermate: **non eseguibili stanotte** (niente Postgres, Redis, worker, Playwright né `sh` su questa macchina). La cartella `docs/notte/shots-13-10/` non è stata creata; le spec e2e sono aggiornate dove serviva e vanno eseguite in ambiente completo.
+
+## Commit sul branch (da `f81d10b`)
+
+```
+742e830 H-01  dock di Heili nel portale
+1e85947 H-02  il pannello di Heili vive nel dock
+9dafeee U-01  un solo messaggio del cliente in chat
+b84e4ee H-03  la Guida di Heili
+e03c783 H-04  la voce in primo piano
+0f59db4 U-03  indicatore dei passi
+2966548 U-02  riepilogo per l'agenzia, prima persona
+cc7c464 U-06  intestazione e chiusura del pannello
+ecb2b60 U-07  attesa con i puntini, errore con «Riprova»
+0bd3f25 U-05  home più diretta
+01f7415 U-04  barra delle decisioni su una riga
+ae24629 U-08  Sfoglia su telefono (K-10)
+436fc94 H-05  documento Guida a voce
+```
+
+## Cosa deve controllare Claude domattina
+
+1. **e2e**: eseguire `assistant-after-changes`, `approval-flow`, `blog-flow`, `ads-flow`, `month-review`, `monthly-plan` (aggiornate: assistant-after-changes per il pulsante galleggiante e il punto sull'immagine; approval-flow per la Guida senza chiave AI). Verificare in particolare: focus/Esc del dock, `?heili=1`, «Indica un punto sull'immagine», nessun overflow a 390 px (barre decisionali U-04 e Sfoglia U-08).
+2. **Schermate prima/dopo**: da fare in ambiente con database (`docs/notte/shots-13-10/` non esiste).
+3. **QA-17 esterno**: il working tree contiene ancora le modifiche dell'altro processo (wording «annunci», test aggiornati, `glossary.test.ts`), preservate in `stash@{0}` «qa17-wip». Non sono mie e non le ho committate: decidere se committarle, scartarle o riapplicarle. Nota: senza di esse, 6 test sul wording sono rossi anche sulla base (vedi sopra).
+4. **Build di produzione**: lanciarla in CI (stanotte fallisce per OOM della macchina, non per errori di codice).
+5. **Revisione di `docs/HEILI-GUIDA-VOCALE.md`** (H-05): decisioni su tool Live vs backend, polling vs SSE, salvataggio o no delle sessioni di guida.
+6. **Dettaglio di prodotto da confermare**: in Sfoglia il pulsante galleggiante sopra la barra e lo spazio riservato sotto la card vanno visti a 390×844 reali; in H-04 i testi «Silenzia»/«Termina» sostituiscono le vecchie etichette.
+
