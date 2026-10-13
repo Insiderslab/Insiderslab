@@ -195,6 +195,13 @@ export function liveStatus(
 /** Quanto resta acceso «Heili sta parlando» dopo l'ultimo frammento ricevuto. */
 const SPEAKING_MS = 1600;
 
+/** Il passo del flusso 1 Parla · 2 Controlla · 3 Invia (U-03). */
+export function assistantStep(state: { completed: boolean; submitting: boolean; done: boolean }): 1 | 2 | 3 {
+  if (state.done || state.submitting) return 3;
+  if (state.completed) return 2;
+  return 1;
+}
+
 /** Polls a reader while mounted; re-renders only when its key changes. */
 function usePolled<T>(read: (() => T | null) | undefined, key: (value: T) => string): T | null {
   const [state, setState] = useState<{ key: string; value: T } | null>(null);
@@ -810,6 +817,31 @@ export function AssistantPanel({
             </p>
           )}
         </div>
+      )}
+
+      {!loading && done === null && (
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" aria-label="Passi: parla, controlla, invia" data-testid="assistant-steps">
+          {(
+            [
+              [1, "Parla"],
+              [2, "Controlla"],
+              [3, "Invia"],
+            ] as const
+          ).map(([step, label], index) => {
+            const current = assistantStep({ completed, submitting: busy === "submit", done: done !== null }) === step;
+            return (
+              <li key={step} className="flex items-center gap-2">
+                {index > 0 && <span aria-hidden="true" className="text-border">·</span>}
+                <span
+                  aria-current={current ? "step" : undefined}
+                  className={current ? "font-semibold text-accent" : "text-muted"}
+                >
+                  {step} {label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
       )}
 
       <div
