@@ -43,8 +43,15 @@ export function PlanProgressBar({
       >
         <span className="block h-full bg-node" style={{ width: `${percent}%` }} />
       </div>
-      {progress.changes !== undefined && progress.total > 0 && (
-        <p className="text-xs text-muted">{plural(progress.approved, "approvato", "approvati")}{changes > 0 ? ` · ${changes} con modifiche richieste` : ""}</p>
+      {progress.changes !== undefined && progress.total > 0 && (progress.approved > 0 || changes > 0) && (
+        <p className="text-xs text-muted">
+          {[
+            progress.approved > 0 ? plural(progress.approved, "approvato", "approvati") : null,
+            changes > 0 ? `${changes} con modifiche richieste` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
       )}
     </div>
   );
