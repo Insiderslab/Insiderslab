@@ -275,7 +275,10 @@ test("cliente (390px): dopo le modifiche Heili resta disponibile e il riepilogo 
 
   await panel.getByLabel("Messaggio per l'assistente").fill(CHAT);
   await panel.getByRole("button", { name: "Invia", exact: true }).click();
-  await expect(panel.getByText("Capito: un secondo logo in alto a destra.")).toBeVisible();
+  // U-01: il messaggio del cliente compare una volta sola e la risposta
+  // (identica nel mock) non si duplica con l'invio o con la bolla ottimistica.
+  await expect(panel.getByText(CHAT)).toHaveCount(1);
+  await expect(panel.getByText("Capito: un secondo logo in alto a destra.")).toHaveCount(1);
   // The mock says "ready_approve": the panel must not turn it into an approval.
   await expect(panel.getByRole("button", { name: /Approva/ })).toHaveCount(0);
 

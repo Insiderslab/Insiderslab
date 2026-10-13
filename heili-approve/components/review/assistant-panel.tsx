@@ -147,6 +147,36 @@ export function composerBlockingMessage(
 /** How often the chips re-read the player / selection / variant on screen. */
 const POLL_MS = 500;
 
+/**
+ * A send is refused while another one is running (a ref guard, not just the
+ * `busy` state: Enter and a click in the same instant both see the old state),
+ * and when the message is empty unless it is a retry.
+ */
+export function sendBlocked(state: {
+  sending: boolean;
+  busy: boolean;
+  voiceBusy: boolean;
+  retry: boolean;
+  message: string;
+}): boolean {
+  if (state.sending || state.busy || state.voiceBusy) return true;
+  return !state.retry && !state.message;
+}
+
+/**
+ * The optimistic bubble to show for a message just sent: hidden as soon as the
+ * server's own copy is the last message (no duplicated bubble), so
+ * "message in sending" and "message saved" never show together.
+ */
+export function visiblePendingMessage(
+  pending: string | null,
+  messages: ReadonlyArray<{ role: string; content: string }>
+): string | null {
+  if (pending === null) return null;
+  const last = messages.at(-1);
+  return last?.role === "CLIENT" && last.content === pending ? null : pending;
+}
+
 /** Polls a reader while mounted; re-renders only when its key changes. */
 function usePolled<T>(read: (() => T | null) | undefined, key: (value: T) => string): T | null {
   const [state, setState] = useState<{ key: string; value: T } | null>(null);
@@ -265,6 +295,8 @@ export function AssistantPanel({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  /** Synchronous guard: one in-flight send, whatever the button/key timing. */
+  const sendingRef = useRef(false);
   const draftRef = useRef(draft);
   const contextRef = useRef({ videoTime, selection, adsContext, pointContext });
   const speechInput = useSpeechInput({
@@ -355,6 +387,7 @@ export function AssistantPanel({
   const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reloadAfterVoice });
   const voiceBusy = live.phase !== "idle";
   const messages = session?.messages ?? [];
+  const pendingVisible = visiblePendingMessage(pendingMessage, messages);
   const lastMessage = messages.at(-1);
   const hasClientMessages = messages.some((m) => m.role === "CLIENT");
   const completed = session?.status === "COMPLETED" && Boolean(session.summary);
@@ -463,7 +496,8 @@ export function AssistantPanel({
     retry = false,
   ) {
     const message = draft.trim();
-    if (busy || voiceBusy || (!retry && !message)) return;
+    if (sendBlocked({ sending: sendingRef.current, busy: busy !== null, voiceBusy, retry, message })) return;
+    sendingRef.current = true;
     speechInput.cancel();
     const inputMode: ReviewInputModeValue = dictated ? "VOICE" : "TEXT";
 
@@ -481,6 +515,8 @@ export function AssistantPanel({
           retry ? { postId, versionNumber, inputMode: "TEXT", retry: true } : { postId, versionNumber, message, inputMode }
         ),
       });
+      // The server's copy replaces the optimistic bubble in the same update.
+      setPendingMessage(null);
       setSession(turn.session);
       setSessionsLeft(turn.sessionsLeft);
       setReadiness(turn.readiness);
@@ -492,15 +528,20 @@ export function AssistantPanel({
       try {
         const state = await reload();
         const last = state.session?.messages.at(-1);
-        if (!retry && !(last?.role === "CLIENT" && last.content === message)) {
+        if (last?.role === "CLIENT" && last.content === message) {
+          setPendingMessage(null);
+        } else if (!retry) {
+          setPendingMessage(null);
           setDraft(message);
           setDictated(inputMode === "VOICE");
         }
       } catch {
+        setPendingMessage(null);
         if (!retry) setDraft(message);
       }
     } finally {
       setPendingMessage(null);
+      sendingRef.current = false;
       setBusy(null);
     }
   }
@@ -666,7 +707,7 @@ export function AssistantPanel({
             {messages.map((m) => (
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
             ))}
-            {pendingMessage !== null && <Bubble role="CLIENT" content={pendingMessage} pending />}
+            {pendingVisible !== null && <Bubble role="CLIENT" content={pendingVisible} pending />}
             {busy === "send" && <p className="text-xs text-muted">L&apos;assistente sta scrivendo…</p>}
             {busy === "finalize" && <p className="text-xs text-muted">Preparo il riepilogo per l&apos;agenzia…</p>}
           </>
