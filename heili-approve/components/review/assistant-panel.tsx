@@ -1189,7 +1189,7 @@ function SummaryCard({
     <div className="space-y-3 rounded border border-border bg-background p-3">
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
-          Riepilogo{showVerdict && session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
+          Riepilogo per l&apos;agenzia{showVerdict && session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
         </p>
         <p className="whitespace-pre-wrap text-sm">{session.summary}</p>
       </div>

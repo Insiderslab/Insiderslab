@@ -317,6 +317,9 @@ describe("blog prompts", () => {
     expect(prompt).toContain("anchorQuote");
     expect(prompt).toContain("EXACTLY");
     expect(prompt).toContain("always null for an article");
+    // U-02: il riepilogo parla con la voce del cliente.
+    expect(prompt).toContain("first person");
+    expect(prompt).not.toContain("use the reviewer's name");
   });
 
   it("escapes the article body", () => {
@@ -347,6 +350,9 @@ describe("ads prompts", () => {
     expect(prompt).toContain("variantId: the variantId of the variant");
     expect(prompt).toContain("inside that variant's media list");
     expect(prompt).toContain("anchorQuote: always null for ads");
+    // U-02: il riepilogo parla con la voce del cliente.
+    expect(prompt).toContain("first person");
+    expect(prompt).not.toContain("use the reviewer's name");
   });
 
   it("attaches the variants' images labelled with their variant", () => {

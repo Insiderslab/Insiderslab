@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildTurnSystemPrompt, type AssistantPostContext } from "../lib/review-assistant/prompt";
+import { buildFinalizeSystemPrompt, buildTurnSystemPrompt, type AssistantPostContext } from "../lib/review-assistant/prompt";
 import { liveConversationInstructions } from "../lib/review-assistant/live-config";
 import { ASSISTANT_BUTTONS, type AssistantMode } from "../lib/review-assistant/shared";
 
@@ -58,6 +58,13 @@ describe("assistant button labels in the prompts", () => {
       expect(feedback).toContain(ASSISTANT_BUTTONS.addToFeedback);
       expect(feedback).not.toContain(ASSISTANT_BUTTONS.submitChanges);
     }
+  });
+
+  it("the summary speaks in the client's voice: first person, never the name", () => {
+    const prompt = buildFinalizeSystemPrompt(ctx());
+    expect(prompt).toContain("first person");
+    expect(prompt).toContain("as the client would say it");
+    expect(prompt).not.toContain("use the reviewer's name");
   });
 
   it("the panel renders the same constants (single source of truth)", () => {
