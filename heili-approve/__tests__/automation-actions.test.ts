@@ -18,7 +18,7 @@ import {
   createAutomationToken,
   revokeAutomationToken,
 } from "@/app/(dashboard)/settings/automation-actions";
-import { hashAutomationToken } from "@/lib/automation/auth";
+import { automationTokenExpiry, hashAutomationToken } from "@/lib/automation/auth";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -83,5 +83,32 @@ describe("automation key actions", () => {
       },
       data: { revokedAt: expect.any(Date) },
     });
+  });
+});
+
+describe("automationTokenExpiry", () => {
+  const romeDay = (date: Date) =>
+    new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome" }).format(date);
+
+  it("counts calendar days in Rome: 30 days from 12/10 ends on 11/11, not 10/11", () => {
+    // 12 October 2026, 00:30 in Rome (CEST, UTC+2): the DST change is in between.
+    const expiry = automationTokenExpiry(new Date("2026-10-11T22:30:00Z"), 30);
+    expect(romeDay(expiry)).toBe("11/11/2026");
+    // End of that day in Rome (CET, UTC+1).
+    expect(expiry.toISOString()).toBe("2026-11-11T22:59:59.000Z");
+  });
+
+  it("stays right across the DST change itself", () => {
+    // 25 October 2026, 01:30 in Rome, still summer time: +2 days ends on 27/10.
+    const expiry = automationTokenExpiry(new Date("2026-10-24T23:30:00Z"), 2);
+    expect(romeDay(expiry)).toBe("27/10/2026");
+    expect(expiry.toISOString()).toBe("2026-10-27T22:59:59.000Z");
+  });
+
+  it("never expires before the promised local day and always after now", () => {
+    const now = new Date("2026-10-14T10:00:00Z");
+    const expiry = automationTokenExpiry(now, 1);
+    expect(romeDay(expiry)).toBe("15/10/2026");
+    expect(expiry.getTime()).toBeGreaterThan(now.getTime());
   });
 });

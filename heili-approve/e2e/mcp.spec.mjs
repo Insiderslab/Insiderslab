@@ -29,7 +29,7 @@ test.describe.configure({ mode: "serial" });
 
 async function cleanup() {
   await db.query(`delete from "Post" where title like 'E2E mcp %' or id = $1`, [FOREIGN.post]);
-  await db.query(`delete from "AutomationToken" where name = 'E2E MCP'`);
+  await db.query(`delete from "AutomationToken" where name in ('E2E MCP', 'E2E revoca')`);
   await db.query(`delete from "Client" where id = $1`, [FOREIGN.client]);
   await db.query(`delete from "Workspace" where id = $1`, [FOREIGN.workspace]);
 }
@@ -248,4 +248,37 @@ test("Impostazioni: la scheda «Collega la tua AI (MCP)» a 1366 e 390 px", asyn
   await phone.getByTestId("mcp-settings").screenshot({ path: path.join(SHOTS_DIR, "settings-mcp-390-open.png") });
   await phone.screenshot({ path: path.join(SHOTS_DIR, "settings-mcp-390-page.png"), fullPage: true });
   await mobile.close();
+});
+
+test("Impostazioni: scadenza a giorni di calendario e revoca solo dopo conferma", async ({ browser }) => {
+  const context = await agencyContext(browser, data);
+  const page = await context.newPage();
+  await page.goto("/settings");
+
+  // Create a key: the shown expiry is Rome-today + 30 calendar days.
+  await page.getByLabel("Nome della chiave").fill("E2E revoca");
+  await page.getByRole("button", { name: "Crea chiave" }).click();
+  const row = page.locator("li", { hasText: "E2E revoca" });
+  await expect(row).toBeVisible();
+  const romeToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+  const [y, m, d] = romeToday.split("-").map(Number);
+  const expected = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome" })
+    .format(new Date(Date.UTC(y, m - 1, d + 30, 22, 59, 59)));
+  await expect(row).toContainText(`Scade il ${expected}`);
+
+  // «Revoca» asks first; «Annulla» keeps the key.
+  await row.getByRole("button", { name: "Revoca" }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toContainText("Revocare la chiave «E2E revoca»?");
+  await expect(sheet).toContainText("smetteranno di funzionare subito");
+  await sheet.getByRole("button", { name: "Annulla" }).click();
+  await expect(row).toBeVisible();
+
+  // Confirming revokes it, in the list and in the database.
+  await row.getByRole("button", { name: "Revoca" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sì, revoca" }).click();
+  await expect(page.locator("li", { hasText: "E2E revoca" })).toHaveCount(0);
+  const { rows } = await db.query(`select "revokedAt" from "AutomationToken" where name = 'E2E revoca'`);
+  expect(rows[0].revokedAt).not.toBeNull();
+  await context.close();
 });

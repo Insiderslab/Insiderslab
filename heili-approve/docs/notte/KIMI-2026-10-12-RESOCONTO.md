@@ -16,6 +16,17 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
   - `month-review.test.ts` e `plans.test.ts` fallivano solo sotto carico parallelo nel primo run; in isolamento e nel run completo successivo sono verdi.
 - **Base finale verificata verde: 965/965 test, 59 file; tsc 0 errori.**
 
+## ⚠️ INCIDENTE DA GESTIRE (priorità per Claude/Stefano)
+
+Nel commit `05f424a` (K-05) ho committato per errore, con un `git add -A` troppo ampio, la cartella `qc-contenuti/`
+(che era untracked alla radice del repo): file `__pycache__` **e `qc-contenuti/.env` con dentro una vera chiave
+`TYPESAFE_API_KEY`**. Rimossa subito con il commit `98b6266`, ma la chiave **resta nella history del branch**
+(`05f424a`) che è pubblico su GitHub. Da fare:
+1. **Ruotare/revocare subito la chiave TypeSafe** (è compromessa).
+2. Ripulire la history del branch (BFG o rebase + force-push): serve una decisione di Stefano, io non faccio
+   rewrite della history.
+Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec espliciti sui file dell'attività.
+
 ## Decisioni prese in autonomia
 
 - Shim Python non aggiunto al repo: risolto solo a livello di ambiente della shell (PATH), senza toccare test o codice.
@@ -152,3 +163,11 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: components/portal/month/month-frame.tsx, components/portal/month/view-switch.tsx, app/globals.css, e2e/month-review.spec.mjs.
 - Test: e2e — a 390 px e a 1366 px la x del selettore è identica tra Panoramica e Griglia, più `expectNoHorizontalScroll` (da rilanciare domattina).
 - Verifiche: tsc 0, eslint 0, vitest 978/978 (--maxWorkers=4).
+
+### K-06 — FATTA
+- Problema: chiave creata il 12/10 «per 30 giorni» mostrava «Scade il 10/11/2026» (atteso 11/11) — 30×24 h assolute con il cambio dell'ora legale in mezzo; «Revoca» agiva subito.
+- Fix scadenza: nuova `automationTokenExpiry(now, days)` in `lib/automation/auth.ts`: fine del giorno (23:59:59) del giorno di calendario di Roma «oggi + N giorni», calcolata con gli helper esistenti `toZonedDateTimeString`/`zonedDateTimeToUtc` di `lib/metricool/payload.ts`. La pagina mostrava già la data in fuso Roma, quindi ora data promessa = data mostrata.
+- Fix revoca: conferma con il `BottomSheet` condiviso (quello delle decisioni del portale): titolo «Revocare la chiave «nome»?», testo «Le AI che la usano smetteranno di funzionare subito.», pulsanti «Sì, revoca» (bg-error, stile già usato in ad-variant-review) e «Annulla». La revoca avviene solo dal foglio.
+- File: lib/automation/auth.ts, app/(dashboard)/settings/automation-actions.ts, components/settings/automation-settings.tsx, __tests__/automation-actions.test.ts, e2e/mcp.spec.mjs.
+- Test: 3 unit test sulla scadenza (30 giorni dal 12/10 → 11/11; a cavallo del cambio d'ora 25/10; mai prima di adesso). e2e nuovo in mcp.spec.mjs: crea chiave «E2E revoca», verifica la data mostrata, Revoca → foglio → Annulla (resta), Revoca → Sì, revoca (sparisce e `revokedAt` nel DB). Da rilanciare domattina.
+- Verifiche: tsc 0, eslint 0, vitest 981/981 (primo run: 2 test noti flaky — month-review/plans — in timeout sotto carico, verdi al rerun e in isolamento).
