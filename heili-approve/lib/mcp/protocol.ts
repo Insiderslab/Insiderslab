@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { it as zodItalian } from "zod/locales";
 import { InvalidTransitionError } from "@/lib/domain";
 import { isDomainError, publicErrorMessage } from "@/lib/errors";
 import { AutomationError } from "@/lib/automation/auth";
@@ -17,6 +18,11 @@ import { MCP_SERVER_NAME, MCP_SERVER_VERSION, type McpScope } from "./config";
 import { hasScope, type McpPrincipal } from "./access";
 
 export const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18"] as const;
+
+// Validation messages in Italian, like every other MCP text ("Argomenti non
+// validi: …"). zod's config is process-wide — after the first MCP call the
+// whole server speaks Italian: welcome, since the app's own messages are.
+z.config(zodItalian());
 
 export interface JsonRpcRequest {
   jsonrpc: "2.0";

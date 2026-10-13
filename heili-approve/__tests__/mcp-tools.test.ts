@@ -257,6 +257,21 @@ describe("read tools", () => {
     expect(feedback.text).toContain("1 commento aperto su 1 post");
     expect(feedback.text).toContain("(Aurora, v1, id solo): 1 commento");
   });
+
+  it("reports invalid arguments in Italian", async () => {
+    const badStatus = await run("list_posts", { status: "APPROVATO" });
+    expect(badStatus.text).toContain("Argomenti non validi");
+    expect(badStatus.text).toContain("Opzione non valida");
+    expect(badStatus.text).not.toMatch(/Invalid option|Invalid input/);
+
+    const missing = await run("create_draft_posts", { posts: [{}] });
+    expect(missing.text).toContain("Argomenti non validi");
+    expect(missing.text).toContain("Input non valido");
+    expect(missing.text).not.toMatch(/received undefined/);
+
+    const tooBig = await run("list_posts", { limit: 999 });
+    expect(tooBig.text).toContain("Troppo grande");
+  });
 });
 
 // ─── create_draft_posts ──────────────────────────────────────────────────────

@@ -88,6 +88,10 @@ describe("MCP JSON-RPC adapter", () => {
     expect(response?.error).toBeUndefined();
     expect(response?.result).toMatchObject({ isError: true });
     expect(JSON.stringify(response?.result)).toMatch(/Argomenti non validi/);
+    // And the validation detail is in Italian too, not zod's default English.
+    const text = (response?.result as { content: Array<{ text: string }> }).content[0].text;
+    expect(text).toContain("Troppo grande");
+    expect(text).not.toMatch(/Too big|Invalid input|Invalid option/);
     expect(audit).toMatchObject({ outcome: "error", errorCode: "invalid_input" });
   });
 

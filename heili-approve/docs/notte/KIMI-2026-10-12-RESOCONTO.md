@@ -215,3 +215,10 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: app/(dashboard)/posts/page.tsx.
 - Test: nessun test asseriva quella classe; verifica visiva rimandata agli screenshot e2e (SHOTS/E1-posts-m.png) domattina.
 - Verifiche: tsc 0, eslint 0, vitest 988/988.
+
+### QA-19 — FATTA
+- Fix: `lib/mcp/protocol.ts` imposta la lingua italiana di zod (`z.config(zodItalian())`, zod 4.3.6 include la locale `it`): «Opzione non valida: atteso uno tra "DRAFT"|…», «Input non valido: atteso stringa, ricevuto undefined», «Troppo grande: number deve avere <=50 elementi».
+- Decisione (documentata nel codice): la config di zod è process-wide — dopo la prima chiamata MCP tutto il server parla italiano. Accettabile e anzi coerente: tutta l'app è in italiano e nessun test (verificato con grep su __tests__ ed e2e) asseriva messaggi zod in inglese. Suite completa verde dopo il cambio.
+- File: lib/mcp/protocol.ts, __tests__/mcp-protocol.test.ts, __tests__/mcp-tools.test.ts.
+- Test: mcp-protocol (testo «Troppo grande», niente «Too big/Invalid input/Invalid option»); mcp-tools nuovo caso «reports invalid arguments in Italian» (enum, campo mancante, limite).
+- Verifiche: tsc 0, eslint 0, vitest 989/989.
