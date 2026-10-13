@@ -2,9 +2,9 @@
 
 ## Riepilogo in cima
 
-- **Fatte:** H-01, H-02
+- **Fatte:** H-01, H-02, U-01, H-03
 - **Saltate:** niente finora
-- **Resta da fare:** U-01 → H-03 → H-04 → U-03 → U-02 → U-06 → U-07 → U-05 → U-04 → U-08 → H-05 (ordine del piano)
+- **Resta da fare:** H-04 → U-03 → U-02 → U-06 → U-07 → U-05 → U-04 → U-08 → H-05 (ordine del piano)
 - **Da controllare da Claude domattina:**
   1. **e2e non eseguibili stanotte** (mancano Postgres, Redis, worker e Playwright su questa macchina; `sh` non c'è). Le spec e2e sono state aggiornate solo dove il percorso cambia; vanno eseguite in CI/ambiente completo.
   2. **Schermate prima/dopo non fatte** per lo stesso motivo: l'app non parte senza database. La cartella `docs/notte/shots-13-10/` non è stata creata.
@@ -38,3 +38,13 @@
 - Rimossi `AssistantToggle` e «Torna al commento manuale». Aggiornate le spec `e2e/assistant-after-changes.spec.mjs` (pulsante `heili-dock-button`, punto sull'immagine → `[punto media=0…`, intro di modalità feedback al posto dell'intestazione nascosta) e `e2e/approval-flow.spec.mjs` (senza chiave AI: dock = Guida, nessuna chat).
 - **Incidente tecnico (risolto)**: per rinominare una funzione ho usato `Get-Content | Set-Content` di PowerShell, che ha doppiocodificato gli accenti di `post-review.tsx`. Ho riparato con una conversione inversa cp1252→UTF-8, rimosso il BOM e verificato la `diff` (nessun altro danno). Verificato anche il testo «sarà» nel markup.
 - tsc/eslint/vitest verdi (990 test).
+
+### U-01 — Messaggi del cliente duplicati (fatta, commit `9dafeee`)
+
+- Guardia sincrona sull'invio (ref `sendingRef`, non solo lo stato `busy`: Invio + clic nello stesso istante non fanno partire due POST), bolla ottimistica nascosta appena la copia del server è l'ultimo messaggio, nuovo tentativo senza duplicare.
+- Test unit `assistant-message-dedup.test.ts` su `visiblePendingMessage` e `sendBlocked`; e2e aggiornato: con il mock che risponde sempre la stessa frase, messaggio del cliente e risposta compaiono **una volta sola**.
+
+### H-03 — Guida su tutte le pagine (fatta, commit `b84e4ee`)
+
+- La Guida deterministica era stata costruita con H-01 (frase di stato dal contesto, prossimo passo, scorciatoie, domande frequenti dal catalogo, scheda accanto a Feedback nelle pagine contenuto).
+- Test unit sulla scelta del prossimo passo (la `next` vince, quelle fuori dal portale vengono scartate) e sulle schede; e2e `approval-flow`: dalla home la Guida offre il primo post da rivedere (`href` esatto).
