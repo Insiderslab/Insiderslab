@@ -2,9 +2,9 @@
 
 ## Riepilogo in cima
 
-- **Fatte:** H-01, H-02, U-01, H-03
+- **Fatte:** H-01, H-02, U-01, H-03, H-04, U-03, U-02, U-06, U-07
 - **Saltate:** niente finora
-- **Resta da fare:** H-04 → U-03 → U-02 → U-06 → U-07 → U-05 → U-04 → U-08 → H-05 (ordine del piano)
+- **Resta da fare:** U-05 → U-04 → U-08 → H-05 (ordine del piano)
 - **Da controllare da Claude domattina:**
   1. **e2e non eseguibili stanotte** (mancano Postgres, Redis, worker e Playwright su questa macchina; `sh` non c'è). Le spec e2e sono state aggiornate solo dove il percorso cambia; vanno eseguite in CI/ambiente completo.
   2. **Schermate prima/dopo non fatte** per lo stesso motivo: l'app non parte senza database. La cartella `docs/notte/shots-13-10/` non è stata creata.
@@ -48,3 +48,25 @@
 
 - La Guida deterministica era stata costruita con H-01 (frase di stato dal contesto, prossimo passo, scorciatoie, domande frequenti dal catalogo, scheda accanto a Feedback nelle pagine contenuto).
 - Test unit sulla scelta del prossimo passo (la `next` vince, quelle fuori dal portale vengono scartate) e sulle schede; e2e `approval-flow`: dalla home la Guida offre il primo post da rivedere (`href` esatto).
+
+### H-04 — La voce in primo piano (fatta, commit `e03c783`)
+
+- «Parla a voce» è il pulsante grande in cima al pannello, con «oppure scrivi» sotto; la logica di `useLiveConversation` non è cambiata.
+- Durante la chiamata: stato con parola e punto colorato (Preparo il contesto… / Collegamento… / In ascolto / Heili sta parlando / In pausa / Salvo la conversazione…), tempo residuo, «Silenzia», «Termina», sottotitoli dal vivo in una fascia leggibile.
+- Voce non disponibile: il pulsante resta e una riga spiega il motivo proponendo la chat. Test unit su `liveStatus` (7 casi).
+
+### U-03 — Passi del riepilogo (fatta, commit `0f59db4`)
+
+- Indicatore compatto «1 Parla · 2 Controlla · 3 Invia» in cima al pannello con `aria-current="step"`. Il riepilogo **era già modificabile** nella casella prima dell'invio (`changesDraft`): nessun cambio lato server necessario. Test unit su `assistantStep`.
+
+### U-02 — Chi parla nel riepilogo (fatta, commit `2966548`)
+
+- Il blocco nel pannello ora è «Riepilogo per l'agenzia»; i tre prompt di riepilogo (social, articolo, annunci) chiedono la prima persona («Vorrei che…»), senza report sul cliente e senza il suo nome. Test prompt aggiornati sui tre tipi.
+
+### U-06 — Intestazione e chiusura del pannello (fatta, commit `cc7c464`)
+
+- «Torna al commento manuale» rimosso con H-02; il dock ha X «Chiudi Heili» in alto a destra e titolo «Heili» + contesto. Nel campo commento «Annulla» compare solo quando c'è qualcosa da scartare (a vuoto niente pulsante a tutta larghezza). Test unit sul composer vuoto.
+
+### U-07 — Attesa ed errori della chat (fatta, commit `ecb2b60`)
+
+- «Heili sta scrivendo» con tre puntini, animazione solo con `prefers-reduced-motion: no-preference` (`.typing-dots` in `globals.css`). Errore su una riga con «Riprova»; il testo scritto non si perde (torna nella casella quando il server non l'ha salvato). Test unit su sorgente e gate reduced-motion.
