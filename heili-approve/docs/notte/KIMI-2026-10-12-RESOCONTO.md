@@ -171,3 +171,13 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/automation/auth.ts, app/(dashboard)/settings/automation-actions.ts, components/settings/automation-settings.tsx, __tests__/automation-actions.test.ts, e2e/mcp.spec.mjs.
 - Test: 3 unit test sulla scadenza (30 giorni dal 12/10 → 11/11; a cavallo del cambio d'ora 25/10; mai prima di adesso). e2e nuovo in mcp.spec.mjs: crea chiave «E2E revoca», verifica la data mostrata, Revoca → foglio → Annulla (resta), Revoca → Sì, revoca (sparisce e `revokedAt` nel DB). Da rilanciare domattina.
 - Verifiche: tsc 0, eslint 0, vitest 981/981 (primo run: 2 test noti flaky — month-review/plans — in timeout sotto carico, verdi al rerun e in isolamento).
+
+### K-07 — FATTA
+- Verificati tutti i template `${n} …` di lib/, components/ e app/: la gran parte era già a posto («media» e «post» sono invarianti in italiano; molti punti avevano già il ternario o la guardia `> 1`; i testi del portale erano stati sistemati con QA-15/K-04).
+- Fix reali, tutti con l'helper `plural` di QA-15:
+  - `lib/mcp/tools/read.ts` — list_clients («1 cliente:»), list_posts («1 commento aperto» per post), get_post («1 media, 1 commento (1 aperto del cliente)»), list_open_feedback (totale «1 commento aperto su 1 post» e riga «…: 1 commento»);
+  - `lib/mcp/tools/write.ts` — riepilogo di create_draft_posts: «Bozze: 1 creata, 0 già esistenti, 0 non riuscite» (prima «1 create»).
+- Non toccati (già corretti): blog.ts (alt immagini), helpers.ts (varianti decise), notifications.ts, posts.ts (media aggiunti/rimossi, guardati), ads.ts e zod con costanti > 1, import-wizard, plan-editor, dashboard, post-list, plan-review, ads-review.
+- File: lib/mcp/tools/read.ts, lib/mcp/tools/write.ts, __tests__/mcp-tools.test.ts.
+- Test: nuovo caso «uses the singular in the Italian summaries when there is exactly one» (1 cliente, 1 commento: i tre strumenti + list_open_feedback al singolare); il plurale resta coperto dal caso K-01 («4 commenti aperti»).
+- Verifiche: tsc 0, eslint 0, vitest 982/982.

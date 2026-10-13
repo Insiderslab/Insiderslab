@@ -22,6 +22,7 @@ import { validateForNetworks, zonedDateTimeToUtc } from "@/lib/metricool/payload
 import { MAX_MEDIA_PER_POST, networkOptionsSchema } from "@/lib/posts";
 import { addPostsToPlan, createPlan, updatePlan } from "@/lib/plans";
 import { planStatusLabel } from "@/lib/plan-rules";
+import { plural } from "@/lib/plural";
 import { MAX_UPLOAD_BYTES, mediaItemForAsset, parseDurationSec, saveMediaStream } from "@/lib/storage";
 import { assertKindEnabled } from "@/lib/variant";
 import { requireClient, resolveWorkspaceId } from "../access";
@@ -196,7 +197,7 @@ export const createDraftPostsTool = defineTool({
     const lines = [
       input.validate_only
         ? `Controllo senza creare nulla: ${valid} validi, ${failed} da correggere.`
-        : `Bozze: ${created} create, ${existing} già esistenti, ${failed} non riuscite. Restano in Bozza: l'agenzia le rivede e le invia dal pannello.`,
+        : `Bozze: ${plural(created, "creata", "create")}, ${plural(existing, "già esistente", "già esistenti")}, ${plural(failed, "non riuscita", "non riuscite")}. Restano in Bozza: l'agenzia le rivede e le invia dal pannello.`,
       ...outcomes.map((outcome) =>
         outcome.status === "failed"
           ? `- ${outcome.source_id}: NON riuscito, ${outcome.error}`
