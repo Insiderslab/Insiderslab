@@ -2,9 +2,9 @@
 
 ## Riepilogo in cima
 
-- **Fatte:** H-01
+- **Fatte:** H-01, H-02
 - **Saltate:** niente finora
-- **Resta da fare:** H-02 → U-01 → H-03 → H-04 → U-03 → U-02 → U-06 → U-07 → U-05 → U-04 → U-08 → H-05 (ordine del piano)
+- **Resta da fare:** U-01 → H-03 → H-04 → U-03 → U-02 → U-06 → U-07 → U-05 → U-04 → U-08 → H-05 (ordine del piano)
 - **Da controllare da Claude domattina:**
   1. **e2e non eseguibili stanotte** (mancano Postgres, Redis, worker e Playwright su questa macchina; `sh` non c'è). Le spec e2e sono state aggiornate solo dove il percorso cambia; vanno eseguite in CI/ambiente completo.
   2. **Schermate prima/dopo non fatte** per lo stesso motivo: l'app non parte senza database. La cartella `docs/notte/shots-13-10/` non è stata creata.
@@ -30,3 +30,11 @@
 - Test: `__tests__/heili-dock.test.ts` (8). tsc/eslint/vitest verdi.
 - Aggiornati al nuovo albero i test strutturali `month-review.test.ts` e `plans.test.ts` (stesse verifiche, il frame non è più l'unico figlio di `<main>`).
 - **Non eseguiti**: e2e «pulsante visibile su home/piano/Sfoglia/post, non copre Approva a 390 px, Esc chiude» — ambiente assente (vedi sopra).
+
+### H-02 — Il pannello di oggi dentro il dock (fatta, commit `1e85947`)
+
+- `PostReview`, `BlogReview`, `AdsReview` registrano il contesto di revisione (post, versione, modalità decisione/feedback, marcatori video/passaggio/variante/punto, azioni) e non montano più `AssistantPanel` inline: il dock lo monta con le stesse prop e la stessa chiave di sessione. Il pulsante «Parla con Heili» accanto al commento apre il dock; `?heili=1` lo apre all'arrivo.
+- Nuovo flusso dal pannello: «Indica un punto sull'immagine» / «Indica il momento sul video» chiude il dock, il tocco su anteprima/«Commenta a 0:07» diventa un marcatore nel messaggio (`insertMarker`) e il dock si riapre. Su desktop il dock è non modale, quindi i marcatori restano cliccabili.
+- Rimossi `AssistantToggle` e «Torna al commento manuale». Aggiornate le spec `e2e/assistant-after-changes.spec.mjs` (pulsante `heili-dock-button`, punto sull'immagine → `[punto media=0…`, intro di modalità feedback al posto dell'intestazione nascosta) e `e2e/approval-flow.spec.mjs` (senza chiave AI: dock = Guida, nessuna chat).
+- **Incidente tecnico (risolto)**: per rinominare una funzione ho usato `Get-Content | Set-Content` di PowerShell, che ha doppiocodificato gli accenti di `post-review.tsx`. Ho riparato con una conversione inversa cp1252→UTF-8, rimosso il BOM e verificato la `diff` (nessun altro danno). Verificato anche il testo «sarà» nel markup.
+- tsc/eslint/vitest verdi (990 test).
