@@ -14,9 +14,24 @@ export function requireEnv(name: string): string {
   return readEnv(name);
 }
 
-/** Public origin of the app, used for magic links, review links and media URLs. */
+/**
+ * Public origin of the app, used for magic links, review links and media URLs.
+ * The first non-empty of PUBLIC_BASE_URL / NEXTAUTH_URL wins — a variable set
+ * but EMPTY (a common docker-compose slip) no longer produces relative URLs.
+ * There is no APP_URL variable; use PUBLIC_BASE_URL.
+ */
+export function resolveBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const raw =
+    (env.PUBLIC_BASE_URL ?? "").trim() || (env.NEXTAUTH_URL ?? "").trim() || "http://localhost:3000";
+  const base = raw.replace(/\/$/, "");
+  if (!/^https?:\/\/.+/.test(base)) {
+    throw new Error(`PUBLIC_BASE_URL/NEXTAUTH_URL must be an absolute http(s) URL, got "${raw}"`);
+  }
+  return base;
+}
+
 export function getBaseUrl(): string {
-  return (process.env.PUBLIC_BASE_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return resolveBaseUrl();
 }
 
 export function getEncryptionKeyHex(): string {

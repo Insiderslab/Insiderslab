@@ -244,3 +244,10 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: lib/post-import/template.ts, __tests__/post-import-parse.test.ts.
 - Test: il caso del modello ora verifica anche che la prima riga contenga «;»; roundtrip invariato e verde. Verifica con Excel reale rimandata (la scheda diceva «da verificare»): la logica è quella standard dei CSV italiani.
 - Verifiche: tsc 0, eslint 0, vitest 989/989.
+
+### QA-24 — FATTA
+- Fix: nuova `resolveBaseUrl(env)` in lib/env.ts — una variabile definita ma vuota o di soli spazi conta come non impostata (`PUBLIC_BASE_URL` → `NEXTAUTH_URL` → `http://localhost:3000`), barra finale tolta, e se il valore non è un URL assoluto http(s) errore chiaro di configurazione. Usata sia da `getBaseUrl()` sia da `getMcpConfig` (prima la logica era duplicata e vulnerabile in entrambe). `.env.example` documenta che `APP_URL` non esiste e che vuota = non impostata.
+- Decisione: errore (throw) su valore relativo invece di fallback silenzioso — un URL di base sbagliato produce link rotti nelle email ai clienti e nei media consegnati a Metricool: meglio un errore evidente subito (stesso stile di ENCRYPTION_KEY). Nessun codice esistente passa valori relativi (suite verde).
+- File: lib/env.ts, lib/mcp/config.ts, .env.example, __tests__/env.test.ts (nuovo).
+- Test: 4 casi — vuota/spazi → fallback; preferenza e barra finale; valore relativo → errore; getMcpConfig con vuota → URL assoluti.
+- Verifiche: tsc 0, eslint 0, vitest 993/993.
