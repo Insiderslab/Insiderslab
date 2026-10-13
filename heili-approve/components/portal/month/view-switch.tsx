@@ -18,7 +18,9 @@ export default function ViewSwitch({
   views: readonly MonthView[];
 }) {
   return (
-    <nav className="studio-view-tabs" aria-label="Vista del mese" data-testid="month-view-switch">
+    // `month-view-tabs`: on phones the switch takes the full row, so it lands
+    // in the same spot in every view (see month-frame).
+    <nav className="studio-view-tabs month-view-tabs" aria-label="Vista del mese" data-testid="month-view-switch">
       {views.map((item) => (
         <Link
           key={item}

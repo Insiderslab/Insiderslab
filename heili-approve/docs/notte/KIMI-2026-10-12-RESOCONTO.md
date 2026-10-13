@@ -137,3 +137,18 @@ Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 - File: components/voice/use-speech-input.ts, dictation-button.tsx, components/portal/comment-composer.tsx, components/ads/asset-comment-composer.tsx, components/portal/plan-review.tsx, __tests__/voice-input.test.ts.
 - Test: asserzioni sui nuovi testi in voice-input.test.ts. e2e con SpeechRecognition simulato non aggiunto (opzionale).
 - Verifiche: tsc 0, eslint 0, vitest 977/977.
+
+### K-04 + QA-15 — FATTE (commit 9240572, voce scritta a posteriori: la sessione precedente si era interrotta prima)
+- K-04: un'unica metrica di avanzamento in Panoramica, Griglia e Sfoglia — «N di M revisionati» (approvati + con modifiche) con sotto il dettaglio, via `PlanProgressBar` condivisa (month-frame commenta «Same metric as the Panoramica»).
+- QA-15: plurali corretti con il nuovo helper `lib/plural.ts` (`plural(n, "commento", "commenti")`), applicato ai testi del portale (browse, plan-bits).
+- File: lib/plural.ts (nuovo), components/plans/plan-bits.tsx, components/portal/month/browse.tsx, components/portal/month/month-frame.tsx, __tests__/plan-rules.test.ts, e2e/month-review.spec.mjs.
+- Test: 14 nuove asserzioni in plan-rules.test.ts; e2e aggiornato ai nuovi testi («0 di 5 revisionati»).
+- Verifiche (della sessione precedente): tsc 0, eslint 0, vitest 977/977.
+
+### K-05 — FATTA
+- Problema: in Panoramica le schede «Panoramica · Griglia · Sfoglia» erano a sinistra, in Griglia/Sfoglia a destra (flex `justify-between` con il link «← indietro»): cambiando vista si spostavano.
+- Fix: in `MonthFrame` il selettore va su una riga sua, sotto il link «← indietro», allineato a sinistra — la stessa posizione che ha in Panoramica (`PlanReview`). Su telefono il selettore prende tutta la riga (nuova classe `month-view-tabs` + regola `@media (max-width: 640px)` con i tab `flex: 1`), così la posizione è identica nelle tre viste. In Sfoglia (compact) su telefono il link «← indietro» resta nascosto come prima, ma ora è nascosto tutto il nav, non solo il link.
+- Decisione: la regola full-width è limitata al selettore del portale (`month-view-tabs`), non a `.studio-view-tabs` generico, per non cambiare il tablist dell'area agenzia in plan-bits.
+- File: components/portal/month/month-frame.tsx, components/portal/month/view-switch.tsx, app/globals.css, e2e/month-review.spec.mjs.
+- Test: e2e — a 390 px e a 1366 px la x del selettore è identica tra Panoramica e Griglia, più `expectNoHorizontalScroll` (da rilanciare domattina).
+- Verifiche: tsc 0, eslint 0, vitest 978/978 (--maxWorkers=4).
