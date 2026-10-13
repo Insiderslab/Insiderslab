@@ -229,6 +229,10 @@ test("a 390 px niente scorrimento laterale", async ({ browser }) => {
   const height = (await pasteBox.boundingBox()).height;
   expect(height).toBeGreaterThanOrEqual(44);
 
+  // Fields use the strong line, not the hairline: the border stays visible (QA-22).
+  const borderColor = await pasteBox.evaluate((el) => getComputedStyle(el).borderTopColor);
+  expect(borderColor).toBe("rgb(123, 143, 149)");
+
   // The closed drawer stays out of keyboard reach; Escape closes it and the
   // focus returns to its button (QA-12).
   const drawer = page.locator("aside");

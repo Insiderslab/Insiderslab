@@ -229,3 +229,11 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - File: components/settings/mcp-settings.tsx, components/settings/automation-settings.tsx, e2e/mcp.spec.mjs.
 - Test: e2e — la scheda non contiene «docs/»; dopo «Crea chiave» è visibile «Copia chiave» (da rilanciare).
 - Verifiche: tsc 0, eslint 0, vitest 989/989.
+
+### QA-22 — FATTA
+- Fix: `.field` ora borda con `--color-line-strong` invece del filetto chiaro (1,28:1); `--color-line-strong` scurito da #8ca0a6 (2,73:1) a **#7b8f95 (3,38:1 su bianco, WCAG 1.4.11 ≥ 3:1)**; `--color-muted` scurito da #5b7179 (4,46:1 su surface-sunken) a **#57707a (4,55:1 su sunken, 5,24:1 su bianco)**. Rapporti calcolati con la formula WCAG (script node, nel log della sessione).
+- Decisione: scuriti i token globali (non solo `.field`): migliora anche i bordi dei `.btn` e delle chip, che usano gli stessi token; nessun test asseriva i valori esadecimali. Gli screenshot e2e andranno rigenerati/verificati a occhio domattina.
+- Non trattato: il pulsante «Invia» disabilitato (3,2:1) — la scheda stessa lo dichiara accettabile (stato disabilitato).
+- File: app/globals.css, e2e/post-import.spec.mjs.
+- Test: e2e — il bordo calcolato di un campo è rgb(123,143,149) (da rilanciare).
+- Verifiche: tsc 0, eslint 0 (css ignorato), vitest 989/989.

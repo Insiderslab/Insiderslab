@@ -13,11 +13,13 @@
   --color-surface-sunken: #eaf0f0;
   --color-border: #dbe5e7; /* line */
   --color-border-hover: #8ca0a6; /* line-strong */
-  --color-line-strong: #8ca0a6;
+  /* 3.4:1 on white: fields and controls stay visible (WCAG 1.4.11). */
+  --color-line-strong: #7b8f95;
 
   /* Text */
   --color-foreground: #002936; /* ink */
-  --color-muted: #5b7179; /* ink-muted */
+  /* 4.55:1 on surface-sunken, 5.2:1 on white (WCAG 1.4.3). */
+  --color-muted: #57707a; /* ink-muted */
 
   /* Brand (ink) and node (AI) */
   --color-accent: #003141; /* brand navy */
@@ -229,7 +231,8 @@ select:focus-visible {
   min-height: 40px;
   padding: 8px 12px;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
+  /* line-strong (3.4:1), not the hairline: the control must stay visible. */
+  border: 1px solid var(--color-line-strong);
   background: var(--color-surface);
   color: var(--color-foreground);
   font-size: 15px;
