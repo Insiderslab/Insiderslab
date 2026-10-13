@@ -574,12 +574,12 @@ export default function BlogReview({
                 {decisionError}
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg bg-accent px-3 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -587,7 +587,7 @@ export default function BlogReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg border border-border bg-background px-3 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50"
+                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
               >
                 Approva
               </button>
