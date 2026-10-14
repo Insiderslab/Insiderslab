@@ -1,12 +1,32 @@
-# Resoconto notturno Kimi — 12/10/2026
+# Resoconto notturno Kimi — 12/10/2026 (completato nella notte 13→14/10)
 
 Branch: `kimi/notte-2026-10-12` (da `origin/claude/bold-lovelace-xdiiw9`).
 
-## Riepilogo (aggiornato alla fine)
+## Riepilogo
 
-- Attività fatte: 0
-- Saltate / non riuscite: 0
-- Cosa deve controllare Claude domattina: in corso.
+- **Attività fatte: 39** (18 nella notte 12→13/10 + 21 nella notte 13→14/10). Elenco di questa seconda
+  sessione: K-05, K-06, K-07, QA-14, QA-16, QA-17, QA-18, QA-19, QA-20, QA-22, QA-23, QA-24, QA-25, QA-26,
+  QA-27, QA-28, K-12, K-11, K-13, K-10, K-09.
+- **Saltate / non riuscite: 0.** Per scelta (come da istruzioni) NON toccate: QA-09, QA-21, QA-29 e tutte
+  le voci in «Non stanotte» del piano.
+- **Verifica finale: `npx tsc --noEmit` 0 errori; `npx vitest run --maxWorkers=4` → 1000/1000 test, 64 file,
+  tutti verdi; `npx eslint .` 0 errori 0 warning.**
+- **Cosa deve controllare Claude:**
+  1. **⚠️ Chiave TYPESAFE compromessa**: vedi sezione «INCIDENTE» qui sotto — da ruotare subito, history
+     del branch da ripulire (commit `05f424a`).
+  2. **Convivenza con deepseek/notte-2026-10-13**: vedi «NOTA DI SESSIONE» sotto QA-17 — il merge finale
+     deve includere i miei commit di entrambe le notti e risolvere i file toccati da entrambi
+     (components/portal/*, app/review/*, e2e/month-review.spec.mjs, app/globals.css dove deepseek ha
+     rivisto il mio QA-11). Le copie delle mie modifiche QA-17 rimaste nella tree principale vanno tolte
+     (sono il commit QA-17 qui).
+  3. **e2e da rilanciare** (stanotte non eseguiti: richiedono build+DB+Redis): month-review (K-05, K-10),
+     mcp (K-06, QA-20), share-link (QA-27), post-import (QA-22), client-services (QA-17), login (K-13),
+     metricool-import con `next dev` (K-11). Con K-12 gli screenshot ora vanno in test-results/.
+  4. **Verifiche visive rimandate**: QA-22 (contrasti, controllare che i bordi più scuri piacciano),
+     K-10 (immagine 4:5 su iPhone 13: se non ci sta ancora, max-h sul media in Sfoglia), K-09 (se il
+     primo-clic-a-vuoto si ripresenta altrove, applicare lo stesso schema `<form action>`).
+  5. QA-23 (CSV con «;»): da aprire una volta in Excel reale italiano.
+- **Cosa resta**: solo le voci «Non stanotte» del piano (decisioni di Stefano, migrazioni, email nuove).
 
 ## Verifica della base (prima delle modifiche)
 
