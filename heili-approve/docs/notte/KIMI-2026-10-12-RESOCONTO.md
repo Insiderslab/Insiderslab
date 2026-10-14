@@ -279,6 +279,13 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Test: il comportamento è nella variabile d'ambiente; nessun test unitario sensato (gli e2e non girano stanotte). Da verificare domattina con un giro e2e: docs/screenshots immutata, test-results/screenshots popolata.
 - Verifiche: eslint 0, vitest 995/995.
 
+### K-11 — FATTA
+- Causa: in dev, a ogni hot reload / `prisma generate` il controllo «stale PrismaClient» chiamava `$disconnect()` sul vecchio client — che chiudeva il pool pg sotto query ancora in volo («Cannot use a pool after calling end on the pool»).
+- Fix: in sviluppo il pool (`PrismaPg`) è uno solo per processo, su `globalThis` come il client; al cambio di classe generata si sostituisce solo il client (quello vecchio resta valido sullo stesso pool finché non viene raccolto dal GC) e **non si chiude mai il pool**. In produzione comportamento invariato (un client per chunk, pool proprio).
+- File: lib/db/client.ts, __tests__/db-client.test.ts (nuovo).
+- Test: 3 casi — stesso client e stesso pool tra letture; dopo «hot reload» (classe rigenerata) nuovo client, stesso adapter, nessun $disconnect; DATABASE_URL mancante → errore chiaro. e2e metricool-import con next dev non rieseguito stanotte (richiede dev server + DB): da verificare domattina.
+- Verifiche: tsc 0, eslint 0, vitest 998/998.
+
 ### QA-27 — FATTA
 - Fix: il modulo «Aggiungi referente» in `ReviewerList` compare solo se il cliente ha già almeno un referente; il primo si crea dal modulo rapido «Chi approva per …?» in «Link per il cliente» (stessa pagina, subito sopra). Un solo percorso per il primo referente, il modulo completo (con «Invia il link via email») per i successivi — come già suggeriva il testo «Altre persone, email e nuovi link: Referenti».
 - File: components/clients/reviewer-list.tsx, e2e/share-link.spec.mjs.
