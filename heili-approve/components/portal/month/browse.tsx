@@ -114,6 +114,10 @@ export default function Browse({
   const current = Math.min(index, total);
   const atSummary = current >= total;
   const progress = browseProgress(items);
+  // Same formula as PlanProgressBar: approved + with-changes count as reviewed.
+  const progressCompleted = Math.min(progress.total, progress.approved + (progress.changes ?? 0));
+  const progressText = `${progressCompleted} di ${progress.total} revisionati`;
+  const progressPercent = progress.total > 0 ? Math.round((progressCompleted / progress.total) * 100) : 0;
   const summary = browseSummary(items);
   const selection = selectApproveAll(
     items.map((item, i) => ({
@@ -268,8 +272,27 @@ export default function Browse({
       onTouchEnd={onTouchEnd}
     >
       <div className="space-y-3">
+        {/* Phones: one slim row (same metric as the Panoramica, "N di M
+            revisionati"), so the card's image gets the screen. */}
+        <div className="flex items-center gap-3 sm:hidden">
+          <p className="shrink-0 text-xs font-semibold tabular" data-testid="browse-progress">
+            {progressText}
+          </p>
+          <div
+            className="h-1 flex-1 overflow-hidden rounded-full bg-surface-sunken"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={Math.max(progress.total, 1)}
+            aria-valuenow={progressCompleted}
+            aria-label={progressText}
+          >
+            <span className="block h-full bg-node" style={{ width: `${progressPercent}%` }} />
+          </div>
+        </div>
         {/* Same metric as the Panoramica: "N di M revisionati" + the detail. */}
-        <PlanProgressBar progress={progress} size="sm" />
+        <div className="hidden sm:block">
+          <PlanProgressBar progress={progress} size="sm" />
+        </div>
         <p className="hidden text-center text-xs text-muted lg:block">Scorri con le frecce ← → della tastiera.</p>
       </div>
 

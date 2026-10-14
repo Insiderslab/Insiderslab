@@ -292,6 +292,14 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Test: 2 casi — le route Auth.js reali passano, i percorsi dei bot no. e2e di login non rieseguito (da rilanciare domattina).
 - Verifiche: tsc 0, eslint 0, vitest 1000/1000.
 
+### K-10 — FATTA (parzialmente, con riserva visiva)
+- Fix: in Sfoglia su telefono l'avanzamento è una riga sola («N di M revisionati» + barra sottile h-1 inline); su sm+ resta la PlanProgressBar completa con il dettaglio. In MonthFrame compact la spaziatura verticale è ridotta (space-y-3). Il selettore viste resta dov'è (serve a cambiare vista; K-05 lo ha reso coerente). Il testo «N di M revisionati» resta visibile e accessibile (role=progressbar).
+- Decisione: NON ho aggiunto il nome del mese nell'intestazione compatta (la scheda lo proponeva con «Post 3 di 12» e selettore ridotto): aggiungere una riga va contro l'obiettivo (più spazio all'immagine) e «Post N di M» è già nella scheda.
+- RISERVA: la scheda chiede screenshot prima/dopo e la misura dell'immagine 4:5 su iPhone 13: non riproducibile stanotte senza stack completo (DB/Redis/build); da verificare domattina con l'e2e month-review e a occhio. Se ancora non ci sta, il passo successivo è ridurre l'altezza massima del media in Sfoglia via CSS (max-h-[52dvh]).
+- File: components/portal/month/browse.tsx, components/portal/month/month-frame.tsx, e2e/month-review.spec.mjs.
+- Test: e2e — riga progressi compatta visibile a 390 px e dettaglio nascosto (da rilanciare).
+- Verifiche: tsc 0, eslint 0, vitest 1000/1000.
+
 ### QA-27 — FATTA
 - Fix: il modulo «Aggiungi referente» in `ReviewerList` compare solo se il cliente ha già almeno un referente; il primo si crea dal modulo rapido «Chi approva per …?» in «Link per il cliente» (stessa pagina, subito sopra). Un solo percorso per il primo referente, il modulo completo (con «Invia il link via email») per i successivi — come già suggeriva il testo «Altre persone, email e nuovi link: Referenti».
 - File: components/clients/reviewer-list.tsx, e2e/share-link.spec.mjs.

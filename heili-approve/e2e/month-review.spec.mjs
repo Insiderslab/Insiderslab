@@ -140,6 +140,9 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await expect(card.getByRole("img").first()).toBeVisible();
   await expect(page.getByTestId("browse-position")).toHaveText("Post 1 di 5");
   await expect(page.getByText("0 di 5 revisionati").first()).toBeVisible();
+  // On the phone the progress is one slim row: the image gets the screen (K-10).
+  await expect(page.getByTestId("browse-progress")).toBeVisible();
+  await expect(page.getByText("0 approvati", { exact: true })).toBeHidden();
   for (const id of ["browse-comment", "browse-approve"]) {
     const box = await page.getByTestId(id).boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);

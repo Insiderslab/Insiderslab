@@ -34,7 +34,7 @@ export default function MonthFrame({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-5">
+    <div className={compact ? "space-y-3" : "space-y-5"}>
       <nav className={`text-sm ${compact ? "max-sm:hidden" : ""}`}>
         <Link href={backHref} className="inline-flex min-h-11 items-center text-muted hover:text-foreground">
           ← {backLabel}
