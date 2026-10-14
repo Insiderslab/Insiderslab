@@ -265,7 +265,7 @@ export const KIND_CONFIG: Record<
   },
   BLOG_ARTICLE: {
     label: "Articolo",
-    plural: "Articoli di blog",
+    plural: "Articoli",
     dateLabel: "Pubblicazione prevista",
     internal: true,
     deliverLabel: "Segna come pubblicato",

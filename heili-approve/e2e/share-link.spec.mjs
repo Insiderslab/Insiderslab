@@ -61,6 +61,9 @@ test("cliente senza referenti: «Crea link» con il solo nome, poi WhatsApp e po
   const form = panel.getByTestId("quick-reviewer-form");
   await expect(form.getByText(`Chi approva per ${clientName}?`)).toBeVisible();
   await expect(form.getByText("Facoltativa: serve solo per le notifiche via email.")).toBeVisible();
+  // One path for the first reviewer: the second Nome/Email form appears only
+  // once the client already has someone (QA-27).
+  await expect(page.getByTestId("add-reviewer-form")).toHaveCount(0);
   await expectNoHorizontalScroll(page);
   await shot(page, "share-crea-link-mobile.png");
 
@@ -68,6 +71,8 @@ test("cliente senza referenti: «Crea link» con il solo nome, poi WhatsApp e po
   await form.getByTestId("quick-reviewer-name").fill("Sara Neri");
   await form.getByRole("button", { name: "Crea link" }).click();
   await expect(panel.getByText("Link creato per Sara Neri: copialo o mandalo su WhatsApp.")).toBeVisible();
+  // …and from now on the full «Aggiungi referente» form is the way to add more.
+  await expect(page.getByTestId("add-reviewer-form")).toBeVisible();
 
   const row = panel.getByTestId("client-link-row").filter({ hasText: "Sara Neri" });
   await expect(row.getByText("Nessuna email")).toBeVisible();

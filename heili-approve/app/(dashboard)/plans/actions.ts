@@ -40,6 +40,15 @@ export async function makePlanAvailableAction(planId: string): Promise<ActionRes
   });
 }
 
+/**
+ * Void twin of makePlanAvailableAction for <form action={…}>: it lets the
+ * button work before hydration (K-09). Once hydrated, the click handler runs
+ * makePlanAvailableAction and shows the error inline instead.
+ */
+export async function makePlanAvailableFormAction(planId: string): Promise<void> {
+  await makePlanAvailableAction(planId);
+}
+
 async function withWorkspace<T>(fn: (context: WorkspaceContext) => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
   const context = await getCurrentWorkspaceContext();
   if (!context) return { ok: false, error: SESSION_EXPIRED };

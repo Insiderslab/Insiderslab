@@ -78,7 +78,15 @@ export function tableToRows(table: Table): ParsedSheet {
 
   const first = used[0].cells.map(foldHeader);
   const known = first.filter((header) => header in HEADER_ALIASES);
-  const hasHeader = known.length >= 2 || (known.length === 1 && first.length <= 2);
+  // A first row holding at least one known header is a header row even under
+  // the usual threshold (a model with custom names, "Giorno | Quando | Post"):
+  // treated as data it would just fail with a bogus date error on row 1. The
+  // exception: its first cell already looks like a date/serial — then it is
+  // data in the standard order, as before.
+  const firstCellLooksLikeData = /^(\d{4}-\d{2}-\d{2}|\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?|\d+(\.\d+)?)$/.test(
+    used[0].cells[0]?.trim() ?? ""
+  );
+  const hasHeader = known.length >= 2 || (known.length === 1 && (first.length <= 2 || !firstCellLooksLikeData));
 
   let columns: Array<Column | null>;
   let body = used;
@@ -239,7 +247,11 @@ function dateStyleIndexes(stylesXml: string | null): Set<number> {
   return result;
 }
 
-/** A numeric cell with a date format → "2026-10-15", "10:30" or "2026-10-15T10:30" (1900 or 1904 system). */
+/**
+ * A numeric cell with a date format → "15/10/2026", "10:30" or "15/10/2026
+ * 10:30" (1900 or 1904 system). The Italian day-first form, the same the
+ * person sees in Excel and the placeholder suggests ("15/10/2026").
+ */
 function serialToText(value: string, date1904: boolean): string {
   const serial = Number(value);
   if (!Number.isFinite(serial)) return value;
@@ -248,10 +260,10 @@ function serialToText(value: string, date1904: boolean): string {
   const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
   const date = new Date(epoch + whole * 86_400_000 + minutes * 60_000);
   const pad = (n: number) => String(n).padStart(2, "0");
-  const day = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+  const day = `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()}`;
   const clock = `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
   if (whole === 0) return clock;
-  return minutes === 0 ? day : `${day}T${clock}`;
+  return minutes === 0 ? day : `${day} ${clock}`;
 }
 
 function columnIndex(reference: string): number {

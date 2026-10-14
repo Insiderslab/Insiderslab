@@ -99,7 +99,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
             className="btn btn-sm"
             data-testid="plans-import-link"
           >
-            Importa da Excel
+            Importa post
           </Link>
         </p>
       </section>

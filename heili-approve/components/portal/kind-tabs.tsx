@@ -1,6 +1,6 @@
 /**
  * Segmented control of the unified client portal: "Tutti · Post social ·
- * Articoli · Creatività" (only what the client gets), each with the number
+ * Articoli · Annunci" (only what the client gets), each with the number
  * of items waiting for the client's action. Plain links (works without
  * JavaScript, back button friendly). On phones the count sits under the
  * label so four tabs fit at 390 px; anything wider scrolls sideways instead

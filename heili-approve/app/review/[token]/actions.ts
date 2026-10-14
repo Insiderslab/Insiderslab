@@ -271,7 +271,7 @@ export async function addAssistantFeedbackAction(
 const ALREADY_APPROVED: Record<ContentKind, string> = {
   SOCIAL_POST: "Questo post è già stato approvato",
   BLOG_ARTICLE: "Questo articolo è già stato approvato",
-  AD_CREATIVE: "Questo set di creatività è già stato approvato",
+  AD_CREATIVE: "Questo set di annunci è già stato approvato",
 };
 
 export async function addCommentAction(token: string, input: PortalCommentInput): Promise<PortalActionResult> {

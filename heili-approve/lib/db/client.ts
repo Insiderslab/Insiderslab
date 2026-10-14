@@ -5,6 +5,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
   /** The generated class the cached instance was built from. */
   prismaClass?: typeof PrismaClient;
+  /** Development only: the one adapter (pool) shared by every client generation. */
+  prismaAdapter?: PrismaPg;
 };
 
 function createPrismaClient() {
@@ -12,28 +14,32 @@ function createPrismaClient() {
   if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is required");
   }
-
-  return new PrismaClient({
-    adapter: new PrismaPg(databaseUrl),
-  });
+  // Development: one pool per process, on globalThis like the client. A hot
+  // reload (or `prisma generate`) re-evaluates the generated module and
+  // PrismaClient becomes a new class: we swap the client but never end the
+  // pool — ending it under queries in flight was "Cannot use a pool after
+  // calling end on the pool".
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prismaAdapter ??= new PrismaPg(databaseUrl);
+    return new PrismaClient({ adapter: globalForPrisma.prismaAdapter });
+  }
+  // Production: unchanged. A build can evaluate the generated module once
+  // per server chunk, so several identical PrismaClient classes coexist,
+  // each with its own pool; the schema cannot change under a running build.
+  return new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
 }
 
 export function getPrisma(): PrismaClient {
   // In `next dev` the instance survives hot reloads on globalThis. After
   // `prisma generate` (schema change) the generated module is re-evaluated
-  // and PrismaClient is a new class: drop the stale instance, which would
-  // still validate queries against the old schema.
-  // Development only: a production build can evaluate the generated module
-  // once per server chunk (route handlers, RSC, SSR), so several identical
-  // PrismaClient classes coexist there; swapping on each would end the
-  // shared pool under queries in flight ("Cannot use a pool after calling
-  // end on the pool"). The schema cannot change under a running build.
+  // and PrismaClient is a new class: drop the stale client, which would
+  // still validate queries against the old schema. The old client is NOT
+  // disconnected: it shares the process pool and is garbage-collected.
   if (
     process.env.NODE_ENV !== "production" &&
     globalForPrisma.prisma &&
     globalForPrisma.prismaClass !== PrismaClient
   ) {
-    void globalForPrisma.prisma.$disconnect().catch(() => {});
     globalForPrisma.prisma = undefined;
   }
   if (!globalForPrisma.prisma) {

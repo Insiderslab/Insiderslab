@@ -1,12 +1,12 @@
 /**
  * What kind of content a portal item is — "Post social", "Articolo",
- * "Creatività ads" — as a small line icon and the kind's name, so a client
+ * "Annuncio" — as a small line icon and the kind's name, so a client
  * with mixed content always knows what they are looking at. Plain markup:
  * safe in server and client components.
  */
 
 import type { ContentKind } from "@/app/generated/prisma/client";
-import { KIND_CONFIG } from "@/lib/domain";
+import { PORTAL_KIND_LABELS } from "./helpers";
 
 const ICON_PATHS: Record<ContentKind, string[]> = {
   // A square post with an image line: the social feed.
@@ -37,12 +37,12 @@ export function KindIcon({ kind, className = "h-4 w-4" }: { kind: ContentKind; c
   );
 }
 
-/** Icon + "Post social" / "Articolo" / "Creatività ads". */
+/** Icon + "Post social" / "Articolo" / "Annuncio". */
 export default function KindLabel({ kind, className = "" }: { kind: ContentKind; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium text-muted ${className}`}>
       <KindIcon kind={kind} className="h-3.5 w-3.5" />
-      {KIND_CONFIG[kind].label}
+      {PORTAL_KIND_LABELS[kind].one}
     </span>
   );
 }

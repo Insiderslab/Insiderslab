@@ -11,7 +11,8 @@
 //    the agency sees the marker and the timed note, picks the cover frame,
 //    and the Metricool payload carries videoCoverMilliseconds.
 //
-// Screenshots of the key screens go to docs/screenshots/.
+ // Screenshots of the key screens go to test-results/screenshots/
+ // (docs/screenshots/ only with UPDATE_SCREENSHOTS=1, see e2e/helpers.mjs).
 // Blog and ads have their own specs (blog-flow, ads-flow, variant-gating).
 
 import { existsSync, readFileSync } from "node:fs";

@@ -36,6 +36,7 @@ import {
   statusTone,
   statusesForKinds,
   timeZoneAbbr,
+  ucFirst,
   weekDays,
 } from "@/components/posts/helpers";
 import { KindBadge, KindIcon } from "@/components/posts/kind-badge";
@@ -180,7 +181,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       {/* ── Month (desktop) ── */}
       <section className="hidden space-y-3 md:block">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold capitalize">{monthLabel(month)}</h2>
+          <h2 className="text-lg font-semibold">{ucFirst(monthLabel(month))}</h2>
           <div className="flex items-center gap-2 text-sm">
             <Link href={keep({ mese: monthKey(addMonths(month, -1)), settimana: "" })} className="rounded border border-border px-3 py-1.5 text-muted hover:text-foreground">
               ← Mese prima
@@ -296,8 +297,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
             return (
               <li key={day} className="panel rounded p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className={`text-sm font-medium capitalize ${day === today ? "text-accent" : ""}`}>
-                    {dayLabel(day, true)}
+                  <h3 className={`text-sm font-medium ${day === today ? "text-accent" : ""}`}>
+                    {ucFirst(dayLabel(day, true))}
                     {day === today ? " · oggi" : ""}
                   </h3>
                   <Link href={newPostHref(day)} className="touch-target -my-3 -mr-2 rounded px-2 text-xs text-muted hover:text-foreground">

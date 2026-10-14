@@ -2,7 +2,7 @@
 
 /**
  * One item in the portal home list: its kind ("Post social", "Articolo",
- * "Creatività ads"), thumbnail, title, networks or variants, the planned date
+ * "Annuncio"), thumbnail, title, networks or variants, the planned date
  * in the client's time zone (labelled per kind), version number and what the
  * client has to do. The whole card is the link (big tap target on phones).
  */

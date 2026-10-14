@@ -7,6 +7,7 @@
  * automation keys still work. Nothing here ever returns a secret.
  */
 
+import { resolveBaseUrl } from "@/lib/env";
 import { MAX_UPLOAD_BYTES } from "@/lib/storage";
 
 export const MCP_SCOPE_READ = "approve:read";
@@ -60,7 +61,8 @@ function positiveInt(value: string | undefined, fallback: number, max: number): 
 }
 
 export function getMcpConfig(env: NodeJS.ProcessEnv = process.env): McpConfig {
-  const baseUrl = (env.PUBLIC_BASE_URL ?? env.NEXTAUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  // Same rule as the rest of the app: empty counts as unset (lib/env).
+  const baseUrl = resolveBaseUrl(env);
   const resource = `${baseUrl}/mcp`;
   const enabled = !["0", "false", "off", "no"].includes((env.MCP_ENABLED ?? "").trim().toLowerCase());
 

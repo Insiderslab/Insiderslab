@@ -120,6 +120,15 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await expectNoHorizontalScroll(page);
   await viewportShot(page, "mese-piano-interruttore-mobile.png");
 
+  // The view switch sits in the same spot in every view.
+  const switchBox = await modes.boundingBox();
+  await page.goto(`${state.planUrl}?vista=griglia`);
+  const gridModes = page.getByTestId("month-view-switch");
+  await expect(gridModes.getByRole("link", { name: "Griglia" })).toHaveAttribute("aria-current", "page");
+  expect((await gridModes.boundingBox()).x).toBe(switchBox.x);
+  await expectNoHorizontalScroll(page);
+  await page.goto(state.planUrl);
+
   await page.getByTestId("quick-review").click();
   await page.waitForURL(/vista=sfoglia/);
 
@@ -131,6 +140,9 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await expect(card.getByRole("img").first()).toBeVisible();
   await expect(page.getByTestId("browse-position")).toHaveText("Post 1 di 5");
   await expect(page.getByText("0 di 5 revisionati").first()).toBeVisible();
+  // On the phone the progress is one slim row: the image gets the screen (K-10).
+  await expect(page.getByTestId("browse-progress")).toBeVisible();
+  await expect(page.getByText("0 approvati", { exact: true })).toBeHidden();
   for (const id of ["browse-comment", "browse-approve"]) {
     const box = await page.getByTestId(id).boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -268,7 +280,11 @@ test("desktop: frecce della tastiera, movimento ridotto e URL che segue la sched
   const animation = await page.getByTestId("browse-card").evaluate((el) => getComputedStyle(el).animationName);
   expect(animation).toBe("none");
   await viewportShot(page, "mese-sfoglia-desktop.png");
+  // Desktop too: the switch does not move between views.
+  await page.goto(state.planUrl);
+  const switchBox = await page.getByTestId("month-view-switch").boundingBox();
   await page.goto(`${state.planUrl}?vista=griglia`);
+  expect((await page.getByTestId("month-view-switch").boundingBox()).x).toBe(switchBox.x);
   await viewportShot(page, "mese-griglia-desktop.png");
   await context.close();
 });

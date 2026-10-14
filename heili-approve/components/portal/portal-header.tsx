@@ -3,7 +3,7 @@
 /**
  * Header of the client portal: the client's logo and name first (it is their
  * space) with a short line on what they find here ("I tuoi contenuti da
- * approvare: post social, articoli e creatività"), the product name small on
+ * approvare: post social, articoli e annunci"), the product name small on
  * the side. No agency navigation.
  */
 

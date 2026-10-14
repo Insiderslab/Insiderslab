@@ -27,11 +27,11 @@ interface PostSharePanelProps {
 
 const SHARE_STATUSES: readonly PostStatus[] = ["IN_REVIEW", "CHANGES_REQUESTED"];
 
-/** "il post", "l'articolo", "le creatività" (subject of the hints). */
-const THE: Record<ContentKind, string> = {
-  SOCIAL_POST: "il post",
-  BLOG_ARTICLE: "l'articolo",
-  AD_CREATIVE: "le creatività",
+/** "al post", "all'articolo", "alle creatività" (with the articulated preposition). */
+const TO_THE: Record<ContentKind, string> = {
+  SOCIAL_POST: "al post",
+  BLOG_ARTICLE: "all'articolo",
+  AD_CREATIVE: "alle creatività",
 };
 
 function safePostUrl(reviewer: { tokenEncrypted: string }, postId: string): string | null {
@@ -87,7 +87,7 @@ export default async function PostSharePanel({ workspaceId, post, client }: Post
         </h3>
         {shareable && reviewers.length > 0 && (
           <p className="text-sm text-muted">
-            Copia o apri il link che porta direttamente a {THE[post.kind]} nella revisione di {client.name}.
+            Copia o apri il link che porta direttamente {TO_THE[post.kind]} nella revisione di {client.name}.
           </p>
         )}
       </div>

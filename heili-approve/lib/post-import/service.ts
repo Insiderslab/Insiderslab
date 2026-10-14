@@ -140,8 +140,17 @@ export async function checkImportRows(
   const byKey = new Map(existing.map((post) => [post.importKey, post]));
 
   const checks: RowCheck[] = [];
+  // Same fingerprint twice in one sheet: the second row would create an
+  // identical draft, so it is flagged (first row wins, as across imports).
+  const firstSeen = new Map<string, number>();
   for (const [index, evaluation] of evaluations.entries()) {
     const issues = [...evaluation.issues];
+    if (evaluation.draft) {
+      const fingerprint = draftFingerprint(client.id, evaluation.draft);
+      const first = firstSeen.get(fingerprint);
+      if (first === undefined) firstSeen.set(fingerprint, index);
+      else issues.push({ field: "row", message: `Uguale alla riga ${request.rows[first].sourceRow}: creerebbe una bozza identica` });
+    }
     const key = keys[index];
     const found = key ? byKey.get(key) : undefined;
     // A row that is already a post needs no checks: it will not be created again.

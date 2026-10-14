@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Reviewers without email: the services run against a fake Prisma, and no
@@ -64,7 +65,7 @@ describe("share messages", () => {
       `Ciao Chiara, c'è un nuovo articolo da approvare: «Weekend d'autunno». Lo trovi qui: ${URL}`
     );
     expect(postLinkMessage({ ...base, kind: "AD_CREATIVE" })).toBe(
-      `Ciao Chiara, ci sono nuove creatività da approvare: «Weekend d'autunno». Le trovi qui: ${URL}`
+      `Ciao Chiara, ci sono nuovi annunci da approvare: «Weekend d'autunno». Li trovi qui: ${URL}`
     );
     expect(postLinkMessage({ ...base, kind: "BLOG_ARTICLE", status: "CHANGES_REQUESTED" })).toBe(
       `Ciao Chiara, ecco il link per rivedere l'articolo «Weekend d'autunno»: ${URL}`
@@ -122,6 +123,28 @@ describe("post share panel scope", () => {
     expect(mockPrisma.clientReviewer.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { clientId: "c1", active: true, client: { workspaceId: "w1" } } })
     );
+  });
+
+  it("points «direttamente al post / all'articolo / alle creatività»", async () => {
+    mockPrisma.clientReviewer.findMany.mockResolvedValue([
+      { id: "r1", name: "Chiara", email: "chiara@example.com", ...issueReviewerToken() },
+    ]);
+    const expected = {
+      SOCIAL_POST: "porta direttamente al post",
+      BLOG_ARTICLE: "porta direttamente all'articolo",
+      AD_CREATIVE: "porta direttamente alle creatività",
+    } as const;
+    for (const [kind, phrase] of Object.entries(expected)) {
+      const html = renderToStaticMarkup(
+        await PostSharePanel({
+          workspaceId: "w1",
+          post: { id: "p1", title: "Post", kind: kind as "SOCIAL_POST", status: "IN_REVIEW" },
+          client: { id: "c1", name: "Le Querce", archivedAt: null },
+        })
+      ).replaceAll("&#x27;", "'");
+      expect(html).toContain(phrase);
+      expect(html).not.toMatch(/direttamente a (il|l'|le) /);
+    }
   });
 });
 

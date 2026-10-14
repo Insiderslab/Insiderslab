@@ -62,7 +62,7 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
   if (!context) return errorResponse("Non autorizzato", 401);
 
   const parsedId = postIdSchema.safeParse((await params).postId);
-  if (!parsedId.success) return errorResponse("Creatività non trovate", 404);
+  if (!parsedId.success) return errorResponse("Creatività ads non trovate", 404);
 
   const post = await prisma.post.findFirst({
     where: { id: parsedId.data, workspaceId: context.workspaceId },
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest, { params }: ExportParams) {
     },
   });
   // A kind this instance does not enable (APP_VARIANT) does not exist for it.
-  if (!post || !isKindEnabled(post.kind)) return errorResponse("Creatività non trovate", 404);
+  if (!post || !isKindEnabled(post.kind)) return errorResponse("Creatività ads non trovate", 404);
   if (post.kind !== "AD_CREATIVE") return errorResponse("Questo contenuto non è un set di creatività ads", 400);
   if (!APPROVED_STATUSES.has(post.status)) {
     return errorResponse("Il cliente non ha ancora approvato questo set: il pacchetto si scarica dopo l'approvazione", 409);

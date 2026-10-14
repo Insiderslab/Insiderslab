@@ -41,7 +41,8 @@ export function clientLinkMessage({
 const POST_WORDS: Record<ContentKind, { fresh: string; here: string; the: string }> = {
   SOCIAL_POST: { fresh: "c'è un nuovo post da approvare", here: "Lo trovi qui", the: "il post" },
   BLOG_ARTICLE: { fresh: "c'è un nuovo articolo da approvare", here: "Lo trovi qui", the: "l'articolo" },
-  AD_CREATIVE: { fresh: "ci sono nuove creatività da approvare", here: "Le trovi qui", the: "le creatività" },
+  // Client side (glossary): "annunci", never "ads".
+  AD_CREATIVE: { fresh: "ci sono nuovi annunci da approvare", here: "Li trovi qui", the: "gli annunci" },
 };
 
 /**

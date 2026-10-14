@@ -131,7 +131,7 @@ async function loadAdSetForDecision(db: DbClient, postId: string, reviewer: Revi
     !isKindEnabled("AD_CREATIVE") ||
     !CLIENT_VISIBLE_STATUSES.includes(post.status)
   ) {
-    throw new NotFoundError("Creatività non trovate");
+    throw new NotFoundError("Creatività ads non trovate");
   }
   if (post.currentVersionNumber !== versionNumber) throw new ConflictError(STALE_VERSION_MESSAGE);
   if (post.status !== "IN_REVIEW") throw new InvalidTransitionError(post.status, "approve");

@@ -548,7 +548,7 @@ export default function AdsReview({
     <div className="space-y-6">
       <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato queste creatività nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="L'agenzia ha aggiornato questi annunci nel frattempo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
@@ -896,7 +896,7 @@ export default function AdsReview({
             : `Le varianti approvate saranno usate per la campagna (${post.dateLabel.toLowerCase()}: ${post.publishLabel}). L'agenzia vedrà anche le note sulle varianti scartate.`}
         </p>
         <p className="text-sm text-muted">
-          Stai decidendo sulla versione {post.versionNumber}: verranno usate esattamente le creatività che vedi.
+          Stai decidendo sulla versione {post.versionNumber}: verranno usati esattamente gli annunci che vedi.
         </p>
         {canAct && <OpenFeedbackNotice comments={post.comments} ads />}
         <SheetError error={sheetError} stale={stale} onReload={reload} />
@@ -1093,14 +1093,14 @@ function AdsStatusNotice({ post, hasEmail }: { post: PortalAdsPost; hasEmail: bo
   let text: string;
   if (post.status === "CHANGES_REQUESTED") {
     text = hasEmail
-      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando le nuove creatività saranno pronte."
-      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando le nuove creatività saranno pronte.";
+      ? "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: riceverai un'email quando i nuovi annunci saranno pronti."
+      : "Modifiche inviate all'agenzia. I tuoi commenti sono stati registrati: l'agenzia ti avviserà quando i nuovi annunci saranno pronti.";
   } else if (post.status === "DELIVERED") {
-    text = "Le creatività approvate sono state consegnate per la campagna. Per cambiare qualcosa, contatta l'agenzia.";
+    text = "Gli annunci approvati sono stati consegnati per la campagna. Per cambiare qualcosa, contatta l'agenzia.";
   } else if (post.status === "IN_REVIEW") {
-    text = "Queste creatività sono in aggiornamento: ricarica la pagina tra poco.";
+    text = "Questi annunci sono in aggiornamento: ricarica la pagina tra poco.";
   } else {
-    text = `${post.approvedLabel ? `Hai inviato le tue decisioni ${post.approvedLabel}. ` : "Le creatività sono approvate. "}L'agenzia preparerà la campagna (inizio ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
+    text = `${post.approvedLabel ? `Hai inviato le tue decisioni ${post.approvedLabel}. ` : "Gli annunci sono approvati. "}L'agenzia preparerà la campagna (inizio ${post.publishLabel}). Per cambiare qualcosa, contatta l'agenzia.`;
   }
   return <p className="rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed" role="status">{text}</p>;
 }

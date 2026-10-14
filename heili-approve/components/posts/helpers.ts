@@ -422,6 +422,15 @@ export function dayLabel(dayKey: string, long = false): string {
   ).format(new Date(keyToUtc(dayKey)));
 }
 
+/**
+ * First letter upper case, the rest untouched ("ottobre 2026" → "Ottobre 2026").
+ * Headings use this, never CSS `capitalize`, which upper-cases every word
+ * ("Lunedì 12 Ottobre" — months are lower case in Italian).
+ */
+export function ucFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export const WEEKDAY_SHORT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"] as const;
 
 /**

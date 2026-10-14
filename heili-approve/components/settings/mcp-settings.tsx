@@ -59,7 +59,7 @@ export default function McpSettings({
             <span className="text-muted">
               {oauthConfigured
                 ? " — Claude e ChatGPT ti fanno accedere con lo stesso account di Heili."
-                : " — per ora collega con una chiave personale (vedi sotto). Il titolare può attivarlo: guida in docs/COLLEGARE-AI-MCP.md."}
+                : " — per ora collega con una chiave personale (nella sezione «Codex e Claude Code» qui sotto). Per attivare l'accesso con account, chiedi al titolare."}
             </span>
           </p>
 

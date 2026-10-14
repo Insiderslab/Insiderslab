@@ -189,6 +189,18 @@ describe("columns", () => {
     expect(rows[0]).toMatchObject({ sourceRow: 1, date: "15/10/2026", images: "a.jpg" });
   });
 
+  it("treats a first row with one known header as headers, even under the threshold", () => {
+    // "Giorno" is a known header, "Quando" and "Post" are not: with the old
+    // threshold this row would have been imported as a post.
+    expect(() => tableToRows([["Giorno", "Quando", "Post"], ["15/10/2026", "10:30", "Ciao"]])).toThrow(
+      /mancano le colonne: Reti, Testo/
+    );
+    // …but a first cell that already is a date stays data (standard order).
+    const { rows, assumedOrder } = tableToRows([["15/10/2026", "10:30", "Instagram", "Testo", "", "", "", ""]]);
+    expect(assumedOrder).toBe(true);
+    expect(rows[0].date).toBe("15/10/2026");
+  });
+
   it("says which required columns are missing, and refuses empty or huge sheets", () => {
     expect(() => tableToRows([["Data", "Testo"], ["15/10", "x"]])).toThrow(/mancano le colonne: Reti/);
     expect(() => tableToRows([])).toThrow(ImportParseError);
@@ -247,9 +259,9 @@ describe("xlsx", () => {
   it("turns date-formatted numbers into dates and times, in the 1900 and the 1904 system", async () => {
     const styles = `<styleSheet><cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="20"/></cellXfs></styleSheet>`;
     const cells = `<row r="1"><c r="A1" s="1"><v>46310</v></c><c r="B1" s="2"><v>0.4375</v></c><c r="C1"><v>46310</v></c></row>`;
-    expect(await readXlsx(await workbook(cells, { styles }))).toEqual([["2026-10-15", "10:30", "46310"]]);
+    expect(await readXlsx(await workbook(cells, { styles }))).toEqual([["15/10/2026", "10:30", "46310"]]);
     // The same serial in the 1904 system is four years and a day later.
-    expect(await readXlsx(await workbook(cells, { styles, workbookPr: 'date1904="1"' }))).toEqual([["2030-10-16", "10:30", "46310"]]);
+    expect(await readXlsx(await workbook(cells, { styles, workbookPr: 'date1904="1"' }))).toEqual([["16/10/2030", "10:30", "46310"]]);
   });
 
   it("explains files that are not workbooks", async () => {
@@ -273,9 +285,11 @@ describe("template", () => {
     expect(await zip.file("xl/workbook.xml")!.async("string")).toContain('name="Istruzioni"');
   });
 
-  it("csv version has a BOM and reads back the same", async () => {
+  it("csv version has a BOM, the Italian «;» separator, and reads back the same", async () => {
     const csv = buildTemplateCsv({ exampleDate: "15/10/2026" });
     expect(csv.startsWith("\uFEFF")).toBe(true);
+    // Italian Excel opens it in columns: ";" is its list separator.
+    expect(csv.split("\r\n", 1)[0]).toContain(";");
     const { rows } = parsePastedRows(csv);
     expect(rows[0]).toMatchObject({ date: "15/10/2026", networks: "Instagram, Facebook" });
   });

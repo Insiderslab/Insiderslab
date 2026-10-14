@@ -2,7 +2,7 @@
 // against the running app. Run with: sh e2e/run.sh (see README).
 //
 // - the seeded client with all three services ("Agriturismo Le Querce") has
-//   a portal with the tabs "Tutti · Post social · Articoli · Creatività" and
+//   a portal with the tabs "Tutti · Post social · Articoli · Annunci" and
 //   the number of items waiting in each; a tab filters the list; a client
 //   with one service has no tabs;
 // - the agency's client page has one overview per service with "Nuovo …";
@@ -47,7 +47,7 @@ test("portale unificato: schede per tipo con i conteggi, filtro, mobile", async 
   // Header: the client's name and what they find here.
   const header = page.getByRole("banner");
   await expect(header.getByText(data.multi.client.name)).toBeVisible();
-  await expect(header.getByText("I tuoi contenuti da approvare: post social, articoli e creatività ads")).toBeVisible();
+  await expect(header.getByText("I tuoi contenuti da approvare: post social, articoli e annunci")).toBeVisible();
 
   // Tabs, only the client's services, with the items waiting for them.
   const tabs = page.getByRole("navigation", { name: "Tipo di contenuto" });
@@ -55,10 +55,10 @@ test("portale unificato: schede per tipo con i conteggi, filtro, mobile", async 
   await expect(tabs.getByRole("link", { name: "Tutti: 3 da approvare" })).toHaveAttribute("aria-current", "page");
   await expect(tabs.getByRole("link", { name: "Post social: 1 da approvare" })).toBeVisible();
   await expect(tabs.getByRole("link", { name: "Articoli: 1 da approvare" })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "Creatività ads: 1 da approvare" })).toBeVisible();
+  await expect(tabs.getByRole("link", { name: "Annunci: 1 da approvare" })).toBeVisible();
 
   // "Da approvare" first, every kind together.
-  await expect(page.getByText("Ci sono 3 contenuti che aspettano la tua approvazione: 1 post social, 1 articolo e 1 set di creatività.")).toBeVisible();
+  await expect(page.getByText("Ci sono 3 contenuti che aspettano la tua approvazione: 1 post social, 1 articolo e 1 set di annunci.")).toBeVisible();
   const toReview = page.locator("section").filter({ has: page.getByRole("heading", { name: /^Da approvare/ }) });
   for (const kind of ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"]) {
     await expect(toReview.getByText(titleOf(kind))).toBeVisible();
@@ -76,7 +76,7 @@ test("portale unificato: schede per tipo con i conteggi, filtro, mobile", async 
   await expectNoHorizontalScroll(page);
 
   // Ads: the per-kind item page is the usual one.
-  await tabs.getByRole("link", { name: "Creatività ads: 1 da approvare" }).click();
+  await tabs.getByRole("link", { name: "Annunci: 1 da approvare" }).click();
   await page.waitForURL(/\?tipo=ads$/);
   await expect(page.getByText(titleOf("SOCIAL_POST"))).toHaveCount(0);
   await page.getByText(titleOf("AD_CREATIVE")).click();

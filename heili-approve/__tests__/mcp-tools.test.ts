@@ -244,6 +244,34 @@ describe("read tools", () => {
     expect(feedback.data.posts[0].comments[1].version).toBe(2);
     expect(feedback.text).toContain("4 commenti aperti su 1 post");
   });
+
+  it("uses the singular in the Italian summaries when there is exactly one", async () => {
+    // One client, one post with exactly one open client comment.
+    db.current.post.reset([
+      postRow("solo", "ws-1", client1, { comments: [comment("only", { versionId: "solo-v1" })] }),
+    ]);
+    expect((await run("list_clients", {})).text).toContain("1 cliente:");
+    expect((await run("list_posts", {})).text).toContain("1 commento aperto");
+    expect((await run("get_post", { post_id: "solo" })).text).toContain("1 media, 1 commento (1 aperto del cliente)");
+    const feedback = await run("list_open_feedback", {});
+    expect(feedback.text).toContain("1 commento aperto su 1 post");
+    expect(feedback.text).toContain("(Aurora, v1, id solo): 1 commento");
+  });
+
+  it("reports invalid arguments in Italian", async () => {
+    const badStatus = await run("list_posts", { status: "APPROVATO" });
+    expect(badStatus.text).toContain("Argomenti non validi");
+    expect(badStatus.text).toContain("Opzione non valida");
+    expect(badStatus.text).not.toMatch(/Invalid option|Invalid input/);
+
+    const missing = await run("create_draft_posts", { posts: [{}] });
+    expect(missing.text).toContain("Argomenti non validi");
+    expect(missing.text).toContain("Input non valido");
+    expect(missing.text).not.toMatch(/received undefined/);
+
+    const tooBig = await run("list_posts", { limit: 999 });
+    expect(tooBig.text).toContain("Troppo grande");
+  });
 });
 
 // ─── create_draft_posts ──────────────────────────────────────────────────────

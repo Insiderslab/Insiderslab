@@ -199,9 +199,21 @@ export function joinItalian(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} e ${items[items.length - 1]}`;
 }
 
-/** "post social, articoli e creatività" (lower case, menu order). */
+/** "post social, articoli e creatività ads" (agency side, menu order). */
 export function servicesSentence(kinds: readonly ContentKind[]): string {
   return joinItalian(sortKinds(kinds).map((kind) => KIND_UI[kind].serviceLabel.toLowerCase()));
+}
+
+/** Client-facing service words (glossary): the portal never says "ads". */
+const CLIENT_SERVICE_WORDS: Record<ContentKind, string> = {
+  SOCIAL_POST: "post social",
+  BLOG_ARTICLE: "articoli",
+  AD_CREATIVE: "annunci",
+};
+
+/** "post social, articoli e annunci" (client side, menu order). */
+export function clientServicesSentence(kinds: readonly ContentKind[]): string {
+  return joinItalian(sortKinds(kinds).map((kind) => CLIENT_SERVICE_WORDS[kind]));
 }
 
 /** Value of the `?kind=` query parameter for a kind ("social" | "blog" | "ads"). */
@@ -275,13 +287,14 @@ export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
 const COUNT_WORDS: Record<ContentKind, [one: string, many: string]> = {
   SOCIAL_POST: ["post social", "post social"],
   BLOG_ARTICLE: ["articolo", "articoli"],
-  AD_CREATIVE: ["creatività", "creatività"],
+  // Client side (glossary): "annunci", never "ads".
+  AD_CREATIVE: ["annuncio", "annunci"],
 };
 
 /**
- * "2 post social e 1 articolo", "1 articolo e 3 creatività" (menu order,
- * zero counts skipped). Ads count variants ("3 creatività") unless
- * `adSets` is set: then they count sets ("1 set di creatività").
+ * "2 post social e 1 articolo", "1 articolo e 3 annunci" (menu order,
+ * zero counts skipped). Ads count variants ("3 annunci") unless
+ * `adSets` is set: then they count sets ("1 set di annunci").
  */
 export function kindCountPhrase(
   counts: Partial<Record<ContentKind, number>>,
@@ -290,7 +303,7 @@ export function kindCountPhrase(
   return joinItalian(
     KIND_ORDER.filter((kind) => (counts[kind] ?? 0) > 0).map((kind) => {
       const n = counts[kind]!;
-      if (kind === "AD_CREATIVE" && adSets) return `${n} set di creatività`;
+      if (kind === "AD_CREATIVE" && adSets) return `${n} set di annunci`;
       return `${n} ${COUNT_WORDS[kind][n === 1 ? 0 : 1]}`;
     })
   );
