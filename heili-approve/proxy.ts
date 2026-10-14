@@ -15,8 +15,23 @@ function hasSessionCookie(request: NextRequest): boolean {
   );
 }
 
+/**
+ * The Auth.js routes this app actually uses (email sign-in). Bots probe
+ * /api/auth/login, /api/auth/wp-admin and the like: answering 404 here keeps
+ * Auth.js from logging UnknownAction / InvalidProvider errors for them.
+ */
+const AUTH_ACTIONS = ["signin", "signout", "session", "csrf", "providers", "verify-request", "error"];
+
+export function isAllowedAuthPath(pathname: string): boolean {
+  const rest = pathname.replace(/\/$/, "");
+  return AUTH_ACTIONS.some((action) => rest === `/api/auth/${action}`) || rest.startsWith("/api/auth/callback/");
+}
+
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith("/api/auth/") && !isAllowedAuthPath(pathname)) {
+    return new NextResponse(null, { status: 404 });
+  }
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
@@ -41,5 +56,6 @@ export const config = {
     "/plans/:path*",
     "/clients/:path*",
     "/settings/:path*",
+    "/api/auth/:path*",
   ],
 };

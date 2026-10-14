@@ -286,6 +286,12 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Test: 3 casi — stesso client e stesso pool tra letture; dopo «hot reload» (classe rigenerata) nuovo client, stesso adapter, nessun $disconnect; DATABASE_URL mancante → errore chiaro. e2e metricool-import con next dev non rieseguito stanotte (richiede dev server + DB): da verificare domattina.
 - Verifiche: tsc 0, eslint 0, vitest 998/998.
 
+### K-13 — FATTA
+- Fix: in proxy.ts, per i percorsi `/api/auth/*` non usati dall'app (qualsiasi cosa diversa da signin, signout, session, csrf, providers, verify-request, error, callback/<provider>) risposta 404 secca, senza passare ad Auth.js: niente più `UnknownAction`/`InvalidProvider` nei log per le richieste dei bot (`/api/auth/login`, `/api/auth/callback` senza provider, …). Il flusso di login è invariato (matcher esteso a `/api/auth/:path*`).
+- File: proxy.ts, __tests__/proxy.test.ts (nuovo).
+- Test: 2 casi — le route Auth.js reali passano, i percorsi dei bot no. e2e di login non rieseguito (da rilanciare domattina).
+- Verifiche: tsc 0, eslint 0, vitest 1000/1000.
+
 ### QA-27 — FATTA
 - Fix: il modulo «Aggiungi referente» in `ReviewerList` compare solo se il cliente ha già almeno un referente; il primo si crea dal modulo rapido «Chi approva per …?» in «Link per il cliente» (stessa pagina, subito sopra). Un solo percorso per il primo referente, il modulo completo (con «Invia il link via email») per i successivi — come già suggeriva il testo «Altre persone, email e nuovi link: Referenti».
 - File: components/clients/reviewer-list.tsx, e2e/share-link.spec.mjs.
