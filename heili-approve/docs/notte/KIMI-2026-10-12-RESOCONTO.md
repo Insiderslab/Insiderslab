@@ -273,6 +273,12 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Test: `npx eslint .` ora esce 0 **senza warning** (era l'unico rimasto dei 21 iniziali). Rieseguita la suite: 995/995.
 - Verifiche: tsc 0, eslint . 0 errori 0 warning, vitest 995/995.
 
+### K-12 — FATTA
+- Fix: `SHOTS` in e2e/helpers.mjs scrive in `test-results/screenshots/` (già ignorata da git); solo con `UPDATE_SCREENSHOTS=1` aggiorna `docs/screenshots/`. README sezione e2e aggiornato con la variabile e la raccomandazione di rivedere il diff. Commento di approval-flow.spec.mjs allineato. `E2E_MCP_SHOTS` di mcp.spec.mjs usava già test-results come default.
+- File: e2e/helpers.mjs, e2e/approval-flow.spec.mjs, README.md.
+- Test: il comportamento è nella variabile d'ambiente; nessun test unitario sensato (gli e2e non girano stanotte). Da verificare domattina con un giro e2e: docs/screenshots immutata, test-results/screenshots popolata.
+- Verifiche: eslint 0, vitest 995/995.
+
 ### QA-27 — FATTA
 - Fix: il modulo «Aggiungi referente» in `ReviewerList` compare solo se il cliente ha già almeno un referente; il primo si crea dal modulo rapido «Chi approva per …?» in «Link per il cliente» (stessa pagina, subito sopra). Un solo percorso per il primo referente, il modulo completo (con «Invia il link via email») per i successivi — come già suggeriva il testo «Altre persone, email e nuovi link: Referenti».
 - File: components/clients/reviewer-list.tsx, e2e/share-link.spec.mjs.

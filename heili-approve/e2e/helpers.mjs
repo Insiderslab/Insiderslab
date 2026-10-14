@@ -19,7 +19,12 @@ const playwrightTest = require(process.env.PLAYWRIGHT_TEST_MODULE ?? "playwright
 export const test = playwrightTest.test;
 export const expect = playwrightTest.expect;
 
-export const SHOTS = path.join(root, "docs", "screenshots");
+// Screenshots update docs/screenshots/ only when asked (UPDATE_SCREENSHOTS=1);
+// a normal run writes the ignored test-results/ folder and git stays clean.
+export const SHOTS =
+  process.env.UPDATE_SCREENSHOTS === "1"
+    ? path.join(root, "docs", "screenshots")
+    : path.join(root, "test-results", "screenshots");
 export const FIXTURES = path.join(here, "fixtures");
 export const MOBILE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 export const DESKTOP = { viewport: { width: 1366, height: 900 } };

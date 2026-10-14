@@ -442,8 +442,10 @@ E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e -- blog-flow # uno solo
 
 - Playwright non è una dipendenza del progetto. `e2e/run.sh` usa l'installazione
   globale (`npm i -g playwright && npx playwright install chromium`).
-- Gli screenshot finiscono in `docs/screenshots/` (`blog-*.png`, `ads-*.png`,
-  `portale-unificato-mobile.png` e `agenzia-cliente-servizi.png`).
+- Gli screenshot finiscono in `test-results/screenshots/` (cartella ignorata da git);
+  per aggiornare quelli di riferimento in `docs/screenshots/` (`blog-*.png`, `ads-*.png`,
+  `portale-unificato-mobile.png` e `agenzia-cliente-servizi.png`) lancia gli e2e con
+  `UPDATE_SCREENSHOTS=1` e poi rivedi il diff prima di committare.
 - Le immagini di prova `ad-square.png` (1:1) e `blog-featured.png` (16:9) sono
   generate con `ffmpeg -f lavfi -i testsrc2=s=1080x1080 -frames:v 1 ad-square.png`
   e `ffmpeg -f lavfi -i smptebars=s=1600x900 -frames:v 1 blog-featured.png`.
