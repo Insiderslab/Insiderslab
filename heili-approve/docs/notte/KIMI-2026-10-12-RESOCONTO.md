@@ -292,6 +292,16 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Test: 2 casi — le route Auth.js reali passano, i percorsi dei bot no. e2e di login non rieseguito (da rilanciare domattina).
 - Verifiche: tsc 0, eslint 0, vitest 1000/1000.
 
+### K-09 — FATTA (analisi statica + un fix; non riprodotto il race)
+- Approccio: invece di riprodurre il race con rete/CPU rallentate (poco deterministico), ho verificato i tre casi della scheda nel codice:
+  - **Caselle della Griglia (portale)**: sono veri `<Link href>` (InstagramGrid): funzionano prima dell'idratazione. Nessuna modifica.
+  - **«Apri» nell'elenco post**: vero `<Link href="/posts/<id>">`. Nessuna modifica.
+  - **«Rendi disponibile il piano»**: era un `onClick` nudo → prima dell'idratazione non faceva nulla. Ora è dentro un `<form action={makePlanAvailableFormAction.bind(null, planId)}>` (nuova action server `void` in plans/actions.ts): il primo clic funziona anche prima dell'idratazione; dopo l'idratazione l'`onClick` (preventDefault) mantiene il percorso ricco con errore inline.
+- Altri pulsanti con server action dell'area agenzia non toccati (la scheda elencava quei tre casi; lo schema è documentato qui se si vuole estenderlo).
+- File: components/plans/plan-availability-button.tsx, app/(dashboard)/plans/actions.ts.
+- Test: nessun test esistente sul componente; la forma `<form action>` + bound action è il pattern documentato Next.js. Verifica e2e con CPU/rete rallentate rimandata (la scheda la dichiarava «da verificare»: se domattina il problema persiste altrove, si applica lo stesso schema).
+- Verifiche: tsc 0, eslint 0, vitest 1000/1000.
+
 ### K-10 — FATTA (parzialmente, con riserva visiva)
 - Fix: in Sfoglia su telefono l'avanzamento è una riga sola («N di M revisionati» + barra sottile h-1 inline); su sm+ resta la PlanProgressBar completa con il dettaglio. In MonthFrame compact la spaziatura verticale è ridotta (space-y-3). Il selettore viste resta dov'è (serve a cambiare vista; K-05 lo ha reso coerente). Il testo «N di M revisionati» resta visibile e accessibile (role=progressbar).
 - Decisione: NON ho aggiunto il nome del mese nell'intestazione compatta (la scheda lo proponeva con «Post 3 di 12» e selettore ridotto): aggiungere una riga va contro l'obiettivo (più spazio all'immagine) e «Post N di M» è già nella scheda.
