@@ -267,6 +267,12 @@ Regola autoimposta dopo l'incidente: mai più `git add -A`; solo pathspec esplic
 - Test: nuovo caso per la regola intestazioni (errore chiaro + riga di dati invariata); aggiornate le attese del seriale Excel al formato italiano (1900 e 1904).
 - Verifiche: tsc 0, eslint 0, vitest 995/995.
 
+### QA-28 — FATTA
+- Fix: `window.location.assign("/dashboard")` → `router.push("/dashboard")` (useRouter). Verificato che il ricaricamento completo non serve: la membership è letta dal DB a ogni richiesta (lib/active-workspace.ts, getCurrentWorkspaceContext); l'API di accettazione non tocca cookie.
+- File: components/invitation-accept-card.tsx.
+- Test: `npx eslint .` ora esce 0 **senza warning** (era l'unico rimasto dei 21 iniziali). Rieseguita la suite: 995/995.
+- Verifiche: tsc 0, eslint . 0 errori 0 warning, vitest 995/995.
+
 ### QA-27 — FATTA
 - Fix: il modulo «Aggiungi referente» in `ReviewerList` compare solo se il cliente ha già almeno un referente; il primo si crea dal modulo rapido «Chi approva per …?» in «Link per il cliente» (stessa pagina, subito sopra). Un solo percorso per il primo referente, il modulo completo (con «Invia il link via email») per i successivi — come già suggeriva il testo «Altre persone, email e nuovi link: Referenti».
 - File: components/clients/reviewer-list.tsx, e2e/share-link.spec.mjs.
