@@ -42,7 +42,7 @@ export default function AutomationSettings({ tokens }: {
     <div>
       <h2 className="text-base font-semibold">Importa con Codex o Claude</h2>
       <p className="mt-2 text-sm text-muted">Prepara i post da Excel o CSV e carica i media con una chiave personale. I post vengono creati in bozza e restano da inviare al cliente.</p>
-      <p className="mt-2 text-sm text-muted">La chiave consente di leggere i contenuti di questo workspace. Scade dopo 30 giorni e puoi revocarla in qualsiasi momento.</p>
+      <p className="mt-2 text-sm text-muted">La chiave consente di leggere i contenuti di questo workspace, preparare bozze e caricare media; non approva, non invia al cliente e non pubblica. Scade dopo 30 giorni e puoi revocarla in qualsiasi momento.</p>
     </div>
     <form className="flex flex-col gap-2 sm:flex-row" onSubmit={e => { e.preventDefault(); void create(); }}>
       <label className="flex-1 text-sm">Nome della chiave

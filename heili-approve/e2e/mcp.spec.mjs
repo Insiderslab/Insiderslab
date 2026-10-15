@@ -226,6 +226,11 @@ test("Impostazioni: la scheda «Collega la tua AI (MCP)» a 1366 e 390 px", asyn
   await expect(card).toContainText("/mcp");
   await expect(card.getByTestId("mcp-oauth-status")).toContainText(/configurato|non configurato/);
   await expect(card.getByRole("button", { name: "Copia indirizzo" })).toBeVisible();
+  // OAuth is off here (QA-08): no step sends the reader to an account login that does not work.
+  if ((await card.getByTestId("mcp-oauth-status").innerText()).includes("non configurato")) {
+    expect(await card.innerText()).not.toMatch(/Accedi con il tuo account quando richiesto|OAuth e accedi/);
+    await expect(card.locator("summary", { hasText: /^(Claude|ChatGPT)$/ })).toHaveCount(0);
+  }
   // The card never shows configuration values or keys, and never a repo path.
   expect(await card.innerText()).not.toMatch(/approve_auto_|MCP_JWT|auth0/i);
   expect(await card.innerText()).not.toContain("docs/");

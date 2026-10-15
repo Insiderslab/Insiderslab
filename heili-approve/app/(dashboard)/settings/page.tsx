@@ -55,7 +55,7 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       <AutomationSettings tokens={tokens.map(token => ({ ...token, expiresAt: token.expiresAt.toISOString() }))} />
-      <McpSettings url={mcp.resource} enabled={mcp.enabled} oauthConfigured={mcp.oauth !== null} />
+      <McpSettings url={mcp.resource} enabled={mcp.enabled} oauthConfigured={mcp.oauth !== null} canManage={canManage} />
       {metricool && (
         <section className="panel rounded p-4 sm:p-6">
           <h2 className="mb-1 text-base font-semibold">Metricool</h2>

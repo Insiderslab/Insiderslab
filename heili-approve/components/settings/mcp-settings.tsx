@@ -22,10 +22,13 @@ export default function McpSettings({
   url,
   enabled,
   oauthConfigured,
+  canManage = false,
 }: {
   url: string;
   enabled: boolean;
   oauthConfigured: boolean;
+  /** Owner or admin: the line about switching on the account login points to the server settings, not to «ask the owner». */
+  canManage?: boolean;
 }) {
   return (
     <section className="panel space-y-4 rounded p-4 sm:p-6" data-testid="mcp-settings">
@@ -59,36 +62,52 @@ export default function McpSettings({
             <span className="text-muted">
               {oauthConfigured
                 ? " — Claude e ChatGPT ti fanno accedere con lo stesso account di Heili."
-                : " — per ora collega con una chiave personale (nella sezione «Codex e Claude Code» qui sotto). Per attivare l'accesso con account, chiedi al titolare."}
+                : canManage
+                  ? " — per ora collega con una chiave personale (sezione «Importa con Codex o Claude» qui sopra). Per attivare l'accesso con account aggiungi la configurazione OAuth tra le variabili d'ambiente del server: i passi sono nella guida «Collegare l'AI via MCP» del progetto."
+                  : " — per ora collega con una chiave personale (sezione «Importa con Codex o Claude» qui sopra). Per attivare l'accesso con account chiedi a chi gestisce l'installazione."}
             </span>
           </p>
 
           <div className="divide-y divide-border">
-            <details className="py-3" open>
-              <summary className="cursor-pointer text-sm font-semibold">Claude</summary>
-              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
-                <li>Apri Claude → Impostazioni → <strong>Connettori</strong>.</li>
-                <li>Scegli <strong>Aggiungi connettore personalizzato</strong>.</li>
-                <li>Incolla l&apos;indirizzo qui sopra e conferma.</li>
-                <li>Accedi con il tuo account quando richiesto.</li>
-              </ol>
-            </details>
+            {oauthConfigured && (
+              <>
+              <details className="py-3" open>
+                <summary className="cursor-pointer text-sm font-semibold">Claude</summary>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
+                  <li>Apri Claude → Impostazioni → <strong>Connettori</strong>.</li>
+                  <li>Scegli <strong>Aggiungi connettore personalizzato</strong>.</li>
+                  <li>Incolla l&apos;indirizzo qui sopra e conferma.</li>
+                  <li>Accedi con il tuo account quando richiesto.</li>
+                </ol>
+              </details>
 
-            <details className="py-3">
-              <summary className="cursor-pointer text-sm font-semibold">ChatGPT</summary>
-              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
-                <li>Impostazioni → Connettori → <strong>Impostazioni avanzate</strong> → attiva la <strong>modalità sviluppatore</strong>.</li>
-                <li>Crea un nuovo connettore (app personalizzata) e incolla l&apos;indirizzo.</li>
-                <li>Scegli l&apos;accesso con <strong>OAuth</strong> e accedi con il tuo account.</li>
-              </ol>
-            </details>
+              <details className="py-3">
+                <summary className="cursor-pointer text-sm font-semibold">ChatGPT</summary>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
+                  <li>Impostazioni → Connettori → <strong>Impostazioni avanzate</strong> → attiva la <strong>modalità sviluppatore</strong>.</li>
+                  <li>Crea un nuovo connettore (app personalizzata) e incolla l&apos;indirizzo.</li>
+                  <li>Scegli l&apos;accesso con <strong>OAuth</strong> e accedi con il tuo account.</li>
+                </ol>
+              </details>
 
-            <details className="py-3">
+              </>
+            )}
+
+            <details className="py-3" open={!oauthConfigured}>
               <summary className="cursor-pointer text-sm font-semibold">Codex e Claude Code</summary>
               <div className="mt-2 space-y-2">
-                <p className="text-sm text-muted">Dal terminale, con accesso tramite account:</p>
-                <Command value={`codex mcp add approve --url ${url}`} label="Copia comando" />
-                <Command value={`claude mcp add --transport http approve ${url}`} label="Copia comando" />
+                {oauthConfigured ? (
+                  <>
+                    <p className="text-sm text-muted">Dal terminale, con accesso tramite account:</p>
+                    <Command value={`codex mcp add approve --url ${url}`} label="Copia comando" />
+                    <Command value={`claude mcp add --transport http approve ${url}`} label="Copia comando" />
+                  </>
+                ) : (
+                  <p className="text-sm text-muted">
+                    Claude e ChatGPT sul web chiedono l&apos;accesso con account, non ancora attivo qui. Dal terminale
+                    funziona la chiave personale.
+                  </p>
+                )}
                 <p className="text-sm text-muted">
                   Con la <strong>chiave personale</strong> (sezione «Importa con Codex o Claude» qui sopra) non serve
                   l&apos;accesso con account: Claude Code la invia come <code>Authorization: Bearer</code>.
