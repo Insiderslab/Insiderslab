@@ -215,6 +215,7 @@ export default function HeiliDock() {
                 <AssistantPanel
                   key={`${review.postId}-${review.versionNumber}-${review.sessionKey}`}
                   controlRef={heili.control}
+                  onPendingFeedbackChange={heili.setPendingFeedback}
                   token={token}
                   postId={review.postId}
                   versionNumber={review.versionNumber}

@@ -28,6 +28,7 @@ import type { HeiliDestination } from "@/components/portal/heili/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
+import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
@@ -139,6 +140,14 @@ export default function PostReview({
     : baseWording;
   const mixedList = new Set(listKinds).size > 1;
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved).length;
+  // «Approva» is the primary button until there is feedback; then «Chiedi modifiche».
+  const primary = primaryDecision({
+    hasFeedback: hasDecisionFeedback({
+      savedComments: myOpenComments,
+      hasDraft: commentDirty,
+      heiliPending: heili.pendingFeedback,
+    }),
+  });
 
   // ─── Pins and markers (numbers match the comment list) ─────────────────────
 
@@ -347,6 +356,7 @@ export default function PostReview({
     fromAssistant?.resolve();
     finish("approved");
   }
+
 
   async function requestSavedChanges() {
     if (sheetBusy) return;
@@ -680,7 +690,9 @@ export default function PostReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "changes")}
+                data-testid="decision-changes"
+                data-primary={primary === "changes"}
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -688,7 +700,9 @@ export default function PostReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "approve")}
+                data-testid="decision-approve"
+                data-primary={primary === "approve"}
               >
                 Approva
               </button>

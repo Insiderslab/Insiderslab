@@ -157,6 +157,10 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
 
   const variant = (id) => page.locator(`[data-variant-id="${id}"]`);
 
+  // No feedback yet: «Invia le mie decisioni» is the primary button of the bar.
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "false");
+
   await variant("A").getByRole("button", { name: "Approva variante" }).click();
   await expect(page.getByRole("heading", { name: "1 di 3 varianti decise" })).toBeVisible();
 
@@ -171,6 +175,9 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
   await b.getByRole("button", { name: "Invia commento" }).click();
   await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await expect(b.getByText(B_MOMENT)).toBeVisible();
+  // A saved comment: «Chiedi modifiche» takes over as the primary button.
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "false");
 
   // Safe zones on the 9:16 preview (Stories/Reels).
   await b.getByRole("tab", { name: /Storie e Reels/ }).click();

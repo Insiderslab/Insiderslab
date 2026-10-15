@@ -110,6 +110,12 @@ export interface AssistantPanelProps {
   onPickPoint?: () => void;
   /** Come sopra, per il momento del video. */
   onPickMoment?: () => void;
+  /**
+   * Heili holds feedback that «Chiedi modifiche» would send (a message in the
+   * field, a conversation, dictation). The portal reads it to decide which
+   * button of the decision bar is the primary one.
+   */
+  onPendingFeedbackChange?: (pending: boolean) => void;
 }
 
 export interface AssistantPanelHandle {
@@ -284,6 +290,7 @@ export function AssistantPanel({
   showHeader = true,
   onPickPoint,
   onPickMoment,
+  onPendingFeedbackChange,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const feedbackMode = mode === "feedback";
@@ -707,6 +714,24 @@ export function AssistantPanel({
         live.clientText.trim()
     );
   }
+
+  // Same condition as hasPendingFeedback, as state the page can react to.
+  const pendingFeedback =
+    done === null &&
+    Boolean(
+      draft.trim() ||
+        pendingMessage !== null ||
+        busy !== null ||
+        voiceBusy ||
+        speechInput.listening ||
+        hasClientMessages ||
+        completed ||
+        live.clientText.trim()
+    );
+  useEffect(() => {
+    onPendingFeedbackChange?.(pendingFeedback);
+  }, [onPendingFeedbackChange, pendingFeedback]);
+  useEffect(() => () => onPendingFeedbackChange?.(false), [onPendingFeedbackChange]);
 
   useImperativeHandle(controlRef, () => ({
     isLoadingFeedback: () => loading,

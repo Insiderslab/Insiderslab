@@ -28,6 +28,7 @@ import { buildAnchor } from "@/lib/content/blog-text";
 import type { BlogAnchor } from "@/lib/content/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
+import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
@@ -148,6 +149,14 @@ export default function BlogReview({
   const wording = portalWording(listKinds);
   // On this version (open notes carried over from earlier ones are not counted).
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved && c.fromVersion === null).length;
+  // «Approva» is the primary button until there is feedback; then «Chiedi modifiche».
+  const primary = primaryDecision({
+    hasFeedback: hasDecisionFeedback({
+      savedComments: myOpenComments,
+      hasDraft: commentDirty,
+      heiliPending: heili.pendingFeedback,
+    }),
+  });
 
   const passageComments = post.comments
     .filter((c): c is PortalPassageComment & { anchor: BlogAnchor; number: number } => c.anchor !== null && c.number !== null)
@@ -316,6 +325,7 @@ export default function BlogReview({
     fromAssistant?.resolve();
     finish("approved");
   }
+
 
   async function requestSavedChanges() {
     if (sheetBusy) return;
@@ -579,7 +589,9 @@ export default function BlogReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "changes")}
+                data-testid="decision-changes"
+                data-primary={primary === "changes"}
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -587,7 +599,9 @@ export default function BlogReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "approve")}
+                data-testid="decision-approve"
+                data-primary={primary === "approve"}
               >
                 Approva
               </button>

@@ -68,6 +68,15 @@ il post: si corregge e si usa "Riprova") e `Annullato`.
 
 - **Il cliente non vede mai le bozze** né i post annullati. Se apre il post di un
   altro cliente, o un post che non esiste, riceve un 404.
+- **Quale pulsante è principale (pagina del post, dell'articolo, delle creatività).**
+  Nella barra in basso «Approva» (per le creatività «Invia le mie decisioni») è il
+  pulsante principale finché il cliente non ha lasciato feedback sulla versione che
+  vede; appena ce n'è (commenti salvati e non risolti, una bozza di commento con
+  testo non ancora inviata, o un feedback di Heili che «Chiedi modifiche»
+  invierebbe) il principale diventa «Chiedi modifiche». Cambia solo l'evidenza:
+  ordine dei pulsanti, conferme e regole del server restano; la barra sta su una
+  riga a 390 px. Per le creatività contano anche i commenti sulle singole
+  varianti. La regola è `primaryDecision` in `components/portal/decision.ts`.
 - **L'approvazione vale per una versione.** Se l'agenzia cambia qualcosa mentre il
   cliente guarda, l'approvazione viene rifiutata e il cliente vede "ricarica".
 - **Cambiare un post già approvato** (contenuto, data o reti) lo riporta in Bozza:
@@ -389,6 +398,10 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   «Aggiungi al feedback» (stato invariato, nessuna seconda richiesta di modifiche,
   nessuna approvazione), che l'agenzia lo veda e che l'API dell'assistente rifiuti il
   post di un altro cliente e le versioni vecchie;
+- `decision-emphasis.spec.mjs` — pagina del post a 390 px: senza feedback il
+  pulsante principale è «Approva»; una bozza di commento con testo o un commento
+  salvato rendono principale «Chiedi modifiche»; ordine, riga unica e conferma
+  restano (anche `approval-flow`, `blog-flow` e `ads-flow` controllano la regola);
 - `client-services.spec.mjs` — servizi per cliente: il portale di Agriturismo Le
   Querce (tre servizi) a 390 px mostra i pulsanti «Tutti · Post social · Articoli ·
   Creatività» con i conteggi e il filtro funziona; un cliente con un solo servizio

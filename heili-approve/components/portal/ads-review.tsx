@@ -57,6 +57,7 @@ import {
   portalStatusLabel,
   portalWording,
 } from "./helpers";
+import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import KindLabel from "./kind-label";
 import {
   AssistantActionButton,
@@ -181,6 +182,14 @@ export default function AdsReview({
   const variantNames = Object.fromEntries(variants.map((v) => [v.id, variantDisplayName(v)]));
   const setComments = post.comments.filter((c) => c.variantId === null);
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved).length;
+  // «Invia le mie decisioni» is the primary button until there is feedback; then «Chiedi modifiche».
+  const primary = primaryDecision({
+    hasFeedback: hasDecisionFeedback({
+      savedComments: myOpenComments,
+      hasDraft: commentDirty,
+      heiliPending: heili.pendingFeedback,
+    }),
+  });
 
   // ─── Variant on screen ─────────────────────────────────────────────────────
 
@@ -438,6 +447,7 @@ export default function AdsReview({
       rejected: result.data.rejected,
     });
   }
+
 
   async function requestSavedChanges() {
     if (sheetBusy) return;
@@ -890,7 +900,9 @@ export default function AdsReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "changes")}
+                data-testid="decision-changes"
+                data-primary={primary === "changes"}
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -898,7 +910,9 @@ export default function AdsReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy || count.missing.length > 0}
-                className="min-h-12 shrink-0 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "approve", "natural")}
+                data-testid="decision-approve"
+                data-primary={primary === "approve"}
               >
                 Invia le mie decisioni
               </button>
