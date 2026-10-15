@@ -54,6 +54,18 @@ Il pacchetto 009 segue lo stesso percorso delle altre PR: prove, revisione separ
 
 **Rilasci:** quello del mattino resta su `0bc731e` (provato). Il **rilascio 3** porterà #11 e #12 (migrazioni attese **16**): script pronto dopo la prova del rilascio 2.
 
+## 2d. Stato al 15/10/2026
+
+| Cosa | Stato |
+|---|---|
+| Produzione | `65f06f3` dal 13/10: R1 canali, assistente interno, Sintesi, usabilità |
+| [PR #9](https://github.com/Insiderslab/vocero-crm/pull/9) sicurezza webhook | ✅ unita; va in produzione **insieme al nuovo App Secret** (rilascio dedicato) |
+| [PR #14](https://github.com/Insiderslab/vocero-crm/pull/14) R2: WhatsApp sul contratto dei canali | bozza verificata: revisione senza bloccanti, 6 correzioni (copie rigorose di account e identità, ritentativi del runner); rilascio **dal 20/10** |
+| [PR #10](https://github.com/Insiderslab/vocero-crm/pull/10) modulo del sito | bozza: aspetta D1/D2 |
+| [PR #13](https://github.com/Insiderslab/vocero-crm/pull/13) ronda del team | bozza: aspetta l'ok (costituzione VIII), il generatore (n8n?) e il modello Meta |
+| Instagram (M1.6) | dopo R2; prima vanno decise Q3 (contatti senza WhatsApp) e Q4 (media via URL) |
+| +39 347 in coexistence | aspetta il **Configuration ID** da Chrome |
+
 ## 3. Domattina (tu, circa 45 minuti, in quest'ordine)
 
 ### 3.1 Rilascio (10 minuti, quasi tutti di attesa)
