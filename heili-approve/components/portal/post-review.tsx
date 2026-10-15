@@ -21,6 +21,7 @@ import {
   approvePostAction,
   addCommentAction,
   requestChangesAction,
+  undoApprovalAction,
 } from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
 import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
@@ -47,6 +48,7 @@ import {
 } from "./review-pieces";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
+import UndoToast from "./undo-toast";
 
 type Outcome = "approved" | "changes";
 
@@ -95,6 +97,8 @@ export default function PostReview({
   const heili = useHeili();
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One «Approvato · Annulla» toast per approval (the key restarts its clock).
+  const [undoKey, setUndoKey] = useState<number | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
   );
@@ -355,8 +359,21 @@ export default function PostReview({
     }
     fromAssistant?.resolve();
     finish("approved");
+    setUndoKey((key) => (key ?? 0) + 1);
   }
 
+  // «Annulla» of the toast: the post goes back to "Da approvare", as it was.
+  async function undoApprove(): Promise<string | null> {
+    const result = await undoApprovalAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
+    if (!result.ok) return result.error;
+    setOutcome(null);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
+    setNotice(null);
+    setDecisionError(null);
+    setStale(false);
+    return null;
+  }
 
   async function requestSavedChanges() {
     if (sheetBusy) return;
@@ -709,6 +726,10 @@ export default function PostReview({
             </div>
           </div>
         </DecisionBar>
+      )}
+
+      {undoKey !== null && outcome === "approved" && (
+        <UndoToast key={undoKey} onUndo={undoApprove} onClose={() => setUndoKey(null)} />
       )}
 
       <BottomSheet open={sheet === "approve"} title="Approvi questo post?" onClose={closeSheet} busy={sheetBusy}>

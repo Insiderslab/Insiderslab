@@ -77,6 +77,24 @@ il post: si corregge e si usa "Riprova") e `Annullato`.
   ordine dei pulsanti, conferme e regole del server restano; la barra sta su una
   riga a 390 px. Per le creatività contano anche i commenti sulle singole
   varianti. La regola è `primaryDecision` in `components/portal/decision.ts`.
+- **«Approvato · Annulla» (10 secondi).** Dopo un'approvazione singola (Sfoglia,
+  pagina del post, dell'articolo, creatività) compare un avviso con «Annulla»
+  e i secondi rimasti. L'approvazione è registrata subito (stato *Approvato*,
+  legata alla versione), ma la **programmazione su Metricool, l'email
+  all'agenzia e l'aggiornamento del piano partono 15 secondi dopo** da un job
+  ritardato (coda `approval-finalize`, lo esegue il worker). «Annulla»
+  (`undoApprovalAction`) riesce solo se lo stesso referente ha approvato meno di
+  15 secondi fa, la versione è ancora quella e il post è ancora *Approvato*
+  (la programmazione non è partita): il post torna *Da approvare*, la timeline
+  dell'agenzia scrive «Approvazione annullata dal cliente» (evento
+  `APPROVAL_UNDONE`) e il job ritardato non trova più nulla da fare. Se
+  la programmazione è già partita il cliente legge «Troppo tardi per annullare:
+  scrivi all'agenzia» e lo stato non cambia. Il cron di sweep non tocca le
+  approvazioni più giovani di 2 minuti. Vale anche per articoli e creatività
+  (nessuna programmazione: solo l'email è ritardata). Non vale per «Approva
+  tutto il piano» / «Approva i rimanenti», che restano immediati. Senza worker in
+  esecuzione l'email di approvazione non parte (la programmazione la recupera lo
+  sweep). Dettagli in `lib/approval-undo.ts`.
 - **L'approvazione vale per una versione.** Se l'agenzia cambia qualcosa mentre il
   cliente guarda, l'approvazione viene rifiutata e il cliente vede "ricarica".
 - **Cambiare un post già approvato** (contenuto, data o reti) lo riporta in Bozza:
@@ -398,6 +416,13 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   «Aggiungi al feedback» (stato invariato, nessuna seconda richiesta di modifiche,
   nessuna approvazione), che l'agenzia lo veda e che l'API dell'assistente rifiuti il
   post di un altro cliente e le versioni vecchie;
+- `undo-approval.spec.mjs` — «Approvato · Annulla»: in Sfoglia a 390 px approva →
+  Annulla → il post torna *Da approvare*, la timeline dell'agenzia lo scrive e dopo
+  17 secondi nessun payload Metricool nel log del worker; approva e lascia → il
+  toast sparisce dopo 10 secondi e dopo 15 il worker programma; la
+  programmazione che parte sotto il toast dà «Troppo tardi per annullare»; la
+  pagina del post con «Annulla» e un secondo «Approva» (anche `blog-flow` e
+  `ads-flow` provano «Annulla»);
 - `decision-emphasis.spec.mjs` — pagina del post a 390 px: senza feedback il
   pulsante principale è «Approva»; una bozza di commento con testo o un commento
   salvato rendono principale «Chiedi modifiche»; ordine, riga unica e conferma
@@ -441,7 +466,7 @@ Il test social copre tutto il flusso, in quest'ordine:
 2. Il cliente, su uno schermo da 390 px, mette un pin e chiede modifiche.
 3. L'agenzia prepara la versione 2.
 4. Il cliente vede "cosa è cambiato" e approva.
-5. Il worker programma il post su Metricool finto.
+5. Il worker programma il post su Metricool finto (15 secondi dopo l'approvazione: è la finestra di «Annulla»).
 6. Si controllano i casi di accesso negato: link sbagliato, bozza, post di un altro cliente, assistente nascosto senza chiave.
 7. Un Reel: commento a 0:05, copertina e `videoCoverMilliseconds` nel payload.
 
@@ -592,8 +617,8 @@ Un database locale creato con `db push` va segnato una volta con
    Un cliente si può collegare anche a mano: nella scheda, il **brand Metricool**
    si sceglie da un elenco con ricerca (logo, nome, reti); in un cliente nuovo,
    scrivendo il nome compare «Trovato su Metricool» e il brand è già scelto.
-5. Con **"Programma automaticamente dopo l'approvazione"** attivo, un post approvato parte subito verso
-   Metricool. Se è disattivata, resta "Approvato" finché l'agenzia non preme
+5. Con **"Programma automaticamente dopo l'approvazione"** attivo, un post approvato parte verso
+   Metricool dopo 15 secondi (la finestra di «Annulla»). Se è disattivata, resta "Approvato" finché l'agenzia non preme
    **Programma ora**.
 
 Metricool scarica le immagini e i video da `PUBLIC_BASE_URL/media/...`, quindi in

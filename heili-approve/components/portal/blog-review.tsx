@@ -19,6 +19,7 @@ import {
   addCommentAction,
   approvePostAction,
   requestChangesAction,
+  undoApprovalAction,
 } from "@/app/review/[token]/actions";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
@@ -46,6 +47,7 @@ import {
   newVersionNotice,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
+import UndoToast from "./undo-toast";
 
 type Outcome = "approved" | "changes";
 
@@ -115,6 +117,8 @@ export default function BlogReview({
   const heili = useHeili();
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One «Approvato · Annulla» toast per approval (the key restarts its clock).
+  const [undoKey, setUndoKey] = useState<number | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
   );
@@ -324,8 +328,21 @@ export default function BlogReview({
     }
     fromAssistant?.resolve();
     finish("approved");
+    setUndoKey((key) => (key ?? 0) + 1);
   }
 
+  // «Annulla» of the toast: the article goes back to "Da approvare", as it was.
+  async function undoApprove(): Promise<string | null> {
+    const result = await undoApprovalAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
+    if (!result.ok) return result.error;
+    setOutcome(null);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
+    setNotice(null);
+    setDecisionError(null);
+    setStale(false);
+    return null;
+  }
 
   async function requestSavedChanges() {
     if (sheetBusy) return;
@@ -654,6 +671,10 @@ export default function BlogReview({
           </>
         )}
       </BottomSheet>
+
+      {undoKey !== null && outcome === "approved" && (
+        <UndoToast key={undoKey} onUndo={undoApprove} onClose={() => setUndoKey(null)} />
+      )}
 
       <BottomSheet open={sheet === "approve"} title="Approvi questo articolo?" onClose={closeSheet} busy={sheetBusy}>
         <p className="text-base">L&apos;agenzia lo pubblicherà sul sito così com&apos;è. {publishSentence}</p>

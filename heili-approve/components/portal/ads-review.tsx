@@ -29,6 +29,7 @@ import {
   decideVariantAction,
   finalizeDecisionsAction,
   requestChangesAction,
+  undoApprovalAction,
 } from "@/app/review/[token]/actions";
 import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdVariantReview, { type AdCommentRequest } from "@/components/ads/ad-variant-review";
@@ -73,6 +74,7 @@ import {
   newVersionNotice,
 } from "./review-pieces";
 import type { PortalAdsPost, PortalQueue, PortalVariantDecision } from "./types";
+import UndoToast from "./undo-toast";
 
 type Outcome =
   | { kind: "decisions"; result: "APPROVED" | "CHANGES_REQUESTED"; approved: string[]; rejected: string[] }
@@ -134,6 +136,8 @@ export default function AdsReview({
 
   const [decided, setDecided] = useState<Record<string, PortalVariantDecision>>({});
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One «Approvate · Annulla» toast per approval (the key restarts its clock).
+  const [undoKey, setUndoKey] = useState<number | null>(null);
   const [draft, setDraft] = useState<VariantDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { variantId: "", draft: { kind: "general" } } : null
   );
@@ -446,8 +450,21 @@ export default function AdsReview({
       approved: result.data.approved,
       rejected: result.data.rejected,
     });
+    if (result.data.result === "APPROVED") setUndoKey((key) => (key ?? 0) + 1);
   }
 
+  // «Annulla» of the toast: the set goes back to "Da approvare" with the decisions as they were.
+  async function undoApprove(): Promise<string | null> {
+    const result = await undoApprovalAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
+    if (!result.ok) return result.error;
+    setOutcome(null);
+    setDraft({ variantId: "", draft: { kind: "general" } });
+    setDraftKey((key) => key + 1);
+    setNotice(null);
+    setDecisionError(null);
+    setStale(false);
+    return null;
+  }
 
   async function requestSavedChanges() {
     if (sheetBusy) return;
@@ -919,6 +936,10 @@ export default function AdsReview({
             </div>
           </div>
         </DecisionBar>
+      )}
+
+      {undoKey !== null && approved && (
+        <UndoToast key={undoKey} label="Approvate" onUndo={undoApprove} onClose={() => setUndoKey(null)} />
       )}
 
       <BottomSheet open={sheet === "send"} title="Invii le tue decisioni?" onClose={closeSheet} busy={sheetBusy}>

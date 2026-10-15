@@ -36,6 +36,7 @@ import {
   formatMoment,
   isEditable,
   personName,
+  standingApprovals,
   timeZoneAbbr,
   toLocalParts,
 } from "@/components/posts/helpers";
@@ -167,7 +168,7 @@ export default async function PostDetailPage({
     post.submittedAt,
     post.currentVersionNumber
   );
-  const approvedEvents = post.events.filter((e) => e.type === "APPROVED" && e.versionNumber !== null);
+  const approvedEvents = standingApprovals(post.events);
   const approvedNumbers = new Set(approvedEvents.map((e) => e.versionNumber as number));
   const lastApprovedVersion = approvedEvents.length > 0 ? (approvedEvents[approvedEvents.length - 1].versionNumber as number) : null;
   const hasBeenSubmitted = lastSubmitted !== null;

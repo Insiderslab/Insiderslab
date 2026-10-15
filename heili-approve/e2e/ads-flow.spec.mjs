@@ -206,6 +206,19 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
   await expect(page.getByText("Decisioni inviate all'agenzia.")).toBeVisible();
   await waitForStatus(db, state.postId, "APPROVED", 10_000);
 
+  // «Approvate · Annulla»: the set goes back to "Da approvare" with its decisions as they were.
+  const toast = page.getByTestId("undo-toast");
+  await expect(toast).toBeVisible();
+  await expect(toast.getByTestId("undo-label")).toContainText("Approvate");
+  await toast.getByTestId("undo-button").click();
+  await expect(toast).toHaveCount(0);
+  await waitForStatus(db, state.postId, "IN_REVIEW", 10_000);
+  await expect(page.getByRole("heading", { name: "3 di 3 varianti decise" })).toBeVisible();
+  await page.getByRole("button", { name: "Invia le mie decisioni" }).click();
+  await page.getByRole("button", { name: "Sì, invia" }).click();
+  await expect(page.getByText("Decisioni inviate all'agenzia.")).toBeVisible();
+  await waitForStatus(db, state.postId, "APPROVED", 10_000);
+
   const { rows } = await db.query(
     'select "variantId", verdict, note from "CreativeDecision" where "postId" = $1 order by "variantId"',
     [state.postId]

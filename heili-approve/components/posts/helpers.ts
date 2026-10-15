@@ -693,6 +693,24 @@ function statusLabel(value: unknown): string | null {
   return isPostStatus(value) ? STATUS_LABELS[value].toLowerCase() : null;
 }
 
+/**
+ * The approvals still standing, oldest first: an APPROVED event is cancelled by
+ * the APPROVAL_UNDONE that follows it for the same version (the client took it
+ * back right away), so a version approved and undone does not count as approved.
+ */
+export function standingApprovals<T extends { type: string; versionNumber: number | null }>(events: readonly T[]): T[] {
+  const standing: T[] = [];
+  for (const event of events) {
+    if (event.versionNumber === null) continue;
+    if (event.type === "APPROVED") standing.push(event);
+    else if (event.type === "APPROVAL_UNDONE") {
+      const index = standing.findLastIndex((e) => e.versionNumber === event.versionNumber);
+      if (index !== -1) standing.splice(index, 1);
+    }
+  }
+  return standing;
+}
+
 /** One line of the activity timeline, in Italian. */
 export function describeEvent(
   event: EventLike,
@@ -739,6 +757,10 @@ export function describeEvent(
       return { title: `${client} ha chiesto modifiche${v}`, details, tone: "warning" };
     case "APPROVED":
       return { title: `${client} ha approvato ${noun}${v}`, details, tone: "success" };
+    case "APPROVAL_UNDONE":
+      // The client took the approval back within seconds; nothing had been scheduled or sent.
+      if (event.reviewer) details.push(`Annullata da ${client}`);
+      return { title: `Approvazione annullata dal cliente${v}`, details, tone: "warning" };
     case "SCHEDULE_REQUESTED":
       return {
         title: m.retry === true ? `${personName(event.user, "Il sistema")} ha riprovato la programmazione` : `Programmazione su Metricool richiesta${event.user ? ` da ${agency}` : ""}`,

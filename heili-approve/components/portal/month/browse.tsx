@@ -22,12 +22,13 @@ import Link from "next/link";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
-import { approveMonthAction, approvePlanAction, approvePostAction } from "@/app/review/[token]/actions";
+import { approveMonthAction, approvePlanAction, approvePostAction, undoApprovalAction } from "@/app/review/[token]/actions";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { NetworkPreviewTabs } from "@/components/post-preview";
 import BottomSheet from "@/components/portal/bottom-sheet";
 import { portalStatusLabel } from "@/components/portal/helpers";
 import { DecisionBar, SheetButtons, SheetError } from "@/components/portal/review-pieces";
+import UndoToast from "@/components/portal/undo-toast";
 import {
   browseProgress,
   browseState,
@@ -108,6 +109,8 @@ export default function Browse({
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The last single approval, for «Approvato · Annulla» (one at a time; the key restarts the clock).
+  const [undo, setUndo] = useState<{ postId: string; key: number } | null>(null);
 
   const items = useMemo(() => withApproved(posts.map(toItem), approvedIds), [posts, approvedIds]);
   const total = posts.length;
@@ -224,12 +227,32 @@ export default function Browse({
       const nextApproved = new Set(approvedIds).add(post.id);
       setApprovedIds(nextApproved);
       setAnnounce(`Approvato: ${post.title}`);
+      setUndo((previous) => ({ postId: post.id, key: (previous?.key ?? 0) + 1 }));
       goTo(nextBrowseIndex(withApproved(posts.map(toItem), nextApproved), current), "next");
     } catch {
       setError("La connessione si è interrotta. Controlla lo stato del post e riprova.");
     } finally {
       setBusy(false);
     }
+  }
+
+  // «Annulla»: the post goes back to "Da approvare" and its card comes back.
+  async function undoApproval(): Promise<string | null> {
+    const target = undo ? posts.findIndex((p) => p.id === undo.postId) : -1;
+    if (target === -1) return "Non trovo più questo post: ricarica la pagina.";
+    const result = await undoApprovalAction(token, { postId: posts[target].id, versionNumber: posts[target].versionNumber });
+    if (!result.ok) {
+      if (result.stale) setStale(true);
+      return result.error;
+    }
+    setApprovedIds((previous) => {
+      const next = new Set(previous);
+      next.delete(posts[target].id);
+      return next;
+    });
+    setAnnounce(`Approvazione annullata: ${posts[target].title}`);
+    goTo(target, target < current ? "prev" : "next");
+    return null;
   }
 
   async function approveRemaining() {
@@ -464,6 +487,8 @@ export default function Browse({
           </div>
         </DecisionBar>
       )}
+
+      {undo && <UndoToast key={undo.key} onUndo={undoApproval} onClose={() => setUndo(null)} />}
 
       <BottomSheet
         open={sheetOpen}

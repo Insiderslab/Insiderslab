@@ -7,7 +7,9 @@
  * - CREATED: { kind }
  * - VERSION_CREATED: { previousVersionNumber, changeNote, changes: string[], fromStatus?, toStatus? }
  * - SUBMITTED_FOR_REVIEW: { fromStatus, reviewDueAt? }
- * - APPROVED (ads): { approvedVariants: string[], rejectedVariants: string[] }
+ * - APPROVED: { undoable?: true } (single approvals by the client, see lib/approval-undo);
+ *   ads add { approvedVariants: string[], rejectedVariants: string[] }
+ * - APPROVAL_UNDONE: { approvedAt, elapsedMs }
  * - CHANGES_REQUESTED: { commentId, actionCommentIds?, reviewSessionId? }
  * - COMMENTED: { commentId, mediaIndex?, timeSec?, timeEndSec?, variantId?, quote? }
  * - VARIANT_DECIDED (ads): { variantId, variantName, verdict: "APPROVED" | "REJECTED", note? }
