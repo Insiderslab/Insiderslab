@@ -1,3 +1,32 @@
+# Cosa serve da Stefano: rilascio del 15/10/2026 (circa 20 minuti)
+
+## A. Rilascio (10 minuti, quasi tutti di attesa)
+Sul VPS, come root:
+```bash
+cd /root/heili-diag && curl -fsSLO https://raw.githubusercontent.com/Insiderslab/Insiderslab/claude/exciting-rubin-mow1yu/crm-whatsapp/rilascio-crm.sh && bash rilascio-crm.sh
+```
+Porta in produzione due cose:
+- la **sicurezza dei webhook** (PR #9): firma obbligatoria, limite di dimensione, stato della firma visibile;
+- il **collegamento WhatsApp guidato** (PR #15): il Configuration ID si incolla in `/admin`, la pagina WhatsApp diventa una guida in 3 passi, ed è chiusa la falla che permetteva di creare account con l'email superadmin.
+
+Il codice passa a `db6f426` e le migrazioni da 16 a 17. Se la prima riga esce come `^[[200~cd: command not found`, incolla di nuovo. Se scrive **STOP**, non ha toccato niente: incollami l'output.
+
+## B. App Secret nuovo (2 minuti, subito dopo A)
+1. Su Meta: app `609974691965875` → **Impostazioni → Di base** → Chiave segreta → **Reimposta**.
+2. **Subito dopo**, sul VPS:
+   ```bash
+   cd /root/heili-diag && curl -fsSLO https://raw.githubusercontent.com/Insiderslab/Insiderslab/claude/exciting-rubin-mow1yu/crm-whatsapp/correggi-app-secret.sh && bash correggi-app-secret.sh
+   ```
+   Lo script chiede la chiave nuova senza mostrarla.
+3. Scrivi al +1 555 779 6249. In CRM → **Impostazioni → WhatsApp**, «Firma del webhook» deve risultare **Verificata**. Se compare «N eventi rifiutati: il segreto non coincide», rilancia `correggi-app-secret.sh`.
+
+## C. Configuration ID (quando ce l'hai)
+Ricavalo con Codex in modalità Agente o con Chrome (il prompt è nella chat), poi incollalo in **crm.heili.cloud/admin → Piattaforma → Meta** → Salva. Niente più comandi sul VPS. Dopo, in Impostazioni → WhatsApp dell'azienda InsidersLab, il pulsante «Collega con Meta» è attivo: segui i 3 passi della pagina per il +39 347.
+
+---
+
+# Archivio: istruzioni del rilascio del 13/10
+
 # Cosa serve da Stefano: rilascio del 13/10/2026 (circa 45 minuti)
 
 Il piano completo e le 8 prove sono in `PIANO-FINE-PIATTAFORMA.md`. Qui ci sono solo i passi, in ordine. I blocchi **A** e **B** si possono fare **in parallelo**.

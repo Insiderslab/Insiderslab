@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Rilascio del CRM (Heili CRM / vocero-crm) sul VPS — 2° rilascio, 13/10/2026.
+# Rilascio del CRM (Heili CRM / vocero-crm) sul VPS — 3° rilascio, 15/10/2026.
 #
-#   bash rilascio-crm.sh                      → rilascio di main @ TARGET (PR #7 canali R1, #8 assistente interno, #11 Sintesi, #12 usabilità)
+#   bash rilascio-crm.sh                      → rilascio di main @ TARGET (PR #9 sicurezza webhook, #15 collegamento WhatsApp guidato)
 #   bash rilascio-crm.sh attiva-pulsante ID   → aggiunge META_APP_ID e META_ES_CONFIG_ID (=ID) e riavvia
 #
 # Si ferma al primo controllo che non torna e spiega cosa fare. Non stampa
@@ -9,9 +9,9 @@
 set -euo pipefail
 
 APP_DIR=${RILASCIO_APP_DIR:-/opt/vocero}
-TARGET=${RILASCIO_TARGET:-65f06f37c6ccbdd54400379f7f7d7853eec7aa9b}   # main dopo le PR #7, #8, #11, #12
-PREV=e23332ed0bc3a087f0ec915d97488aecc42b6304        # rilascio del 10/10 (per tornare indietro)
-MIG_EXPECTED=16                                      # 0000–0015
+TARGET=${RILASCIO_TARGET:-db6f4268ce0b7b1a5553f9aa684b93a29fcccc41}   # main dopo le PR #9 e #15
+PREV=65f06f37c6ccbdd54400379f7f7d7853eec7aa9b        # rilascio del 13/10 (per tornare indietro)
+MIG_EXPECTED=17                                      # 0000–0016
 APP_ID=609974691965875                               # app Meta del CRM (non segreto)
 PG=vocero-postgres
 APP=vocero-app
@@ -66,6 +66,7 @@ for v in BOT_API_KEY EXPORT_API_KEY; do
     stop "$v è impostata nel .env. Con 2 organizzazioni smetterà di funzionare dopo il rilascio (è voluto): prima servono le chiavi per organizzazione (docs/ops/rilascio-c1.md)."
   fi
 done
+grep -qE '^META_APP_SECRET=.+' .env || stop "META_APP_SECRET manca nel .env: con questo rilascio il webhook rifiuterebbe TUTTI i messaggi (503). Prima: bash correggi-app-secret.sh"
 if grep -qE '^WAPI_BASE_URL=.+' .env; then stop "WAPI_BASE_URL è impostata: Wapi è congelato, toglila o chiedi prima di procedere"; fi
 ok "nessuna chiave d'istanza in uso, Wapi spento"
 NMSG=$(psqlq "select count(*) from message;")
@@ -110,6 +111,9 @@ MIG_AFTER=$(psqlq "select count(*) from drizzle.__drizzle_migrations;")
 [ "$MIG_AFTER" = "$MIG_EXPECTED" ] || stop "migrazioni applicate: $MIG_AFTER (attese $MIG_EXPECTED)"
 psqlq "select restrict_to_allowlist, error_reply from agent_profile limit 1;" > /dev/null || stop "colonne nuove di agent_profile mancanti"
 psqlq "select agent_retry_at from conversation limit 1;" > /dev/null || stop "colonna agent_retry_at mancante"
+psqlq "select count(*) from instance_setting;" > /dev/null || stop "tabella instance_setting mancante"
+SA=$(grep -E '^SUPERADMIN_EMAILS=' .env | cut -d= -f2- | tr 'A-Z' 'a-z' | tr -d ' "' | sed "s/,/','/g")
+if [ -n "$SA" ]; then info "account con email superadmin (controllo, sola lettura): $(psqlq "select coalesce(string_agg(email || ' creato ' || to_char(created_at,'YYYY-MM-DD'), ' | '), 'nessuno') from \"user\" where lower(email) in ('$SA');")"; fi
 ok "CRM acceso (200), migrazioni $MIG_BEFORE → $MIG_AFTER"
 
 echo "== 3b. Livello canali =="
@@ -133,5 +137,8 @@ fi
 
 printf '\n\033[32m== RILASCIO FATTO ==\033[0m\n'
 echo "  1. Manda \"prova rilascio\" al +1 555 779 6249: deve arrivare nella Posta e l'assistente deve rispondere."
-echo "  2. Copia il backup sul tuo PC: scp root@186.241.16.46:$DUMP ."
-echo "  3. Quando hai il Configuration ID da Meta: bash rilascio-crm.sh attiva-pulsante <ID>"
+echo "  2. Ora l'App Secret: su Meta (app 609974691965875 → Impostazioni → Di base → Chiave segreta) premi Reimposta, e SUBITO dopo qui:"
+echo "       cd /root/heili-diag && curl -fsSLO https://raw.githubusercontent.com/Insiderslab/Insiderslab/claude/exciting-rubin-mow1yu/crm-whatsapp/correggi-app-secret.sh && bash correggi-app-secret.sh"
+echo "     Poi Impostazioni → WhatsApp: «Firma del webhook» deve diventare «Verificata» al prossimo messaggio."
+echo "  3. Configuration ID: incollalo in crm.heili.cloud/admin → Piattaforma → Meta (niente più comandi)."
+echo "  4. Copia il backup sul tuo PC: scp root@186.241.16.46:$DUMP ."
