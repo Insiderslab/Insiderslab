@@ -1,0 +1,14 @@
+# Root of the Insiderslab repository: only heili-approve/ is tracked work.
+# Never commit secrets or local tool output from sibling projects.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.DS_Store
+Thumbs.db
