@@ -414,6 +414,32 @@ select:focus-visible {
   }
 }
 
+/* Heili is answering: three dots, still when the person asked for less motion. */
+.typing-dots span {
+  opacity: 0.35;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .typing-dots span {
+    animation: typing-dot 1.2s ease-in-out infinite;
+  }
+  .typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

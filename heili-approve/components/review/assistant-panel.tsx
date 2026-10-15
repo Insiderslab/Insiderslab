@@ -101,6 +101,15 @@ export interface AssistantPanelProps {
   controlRef?: Ref<AssistantPanelHandle>;
   /** Existing saved-comment flow, used when this assistant has no feedback yet. */
   onRequestSavedChanges?: () => Promise<void>;
+  /** False when the dock around the panel shows title and help itself. */
+  showHeader?: boolean;
+  /**
+   * «Indica un punto sull'immagine»: chiude il dock e trasforma il prossimo
+   * tocco sull'immagine nel marcatore di un punto, dentro il messaggio.
+   */
+  onPickPoint?: () => void;
+  /** Come sopra, per il momento del video. */
+  onPickMoment?: () => void;
 }
 
 export interface AssistantPanelHandle {
@@ -109,6 +118,8 @@ export interface AssistantPanelHandle {
   requestChanges(): Promise<void>;
   approve(): Promise<void>;
   close(): Promise<boolean>;
+  /** Aggiunge un marcatore al messaggio in bozza (flusso «Indica un punto»). */
+  insertMarker(marker: string): void;
 }
 
 type ComposerAction = "prepare" | "send" | "approve" | "add";
@@ -135,6 +146,61 @@ export function composerBlockingMessage(
 
 /** How often the chips re-read the player / selection / variant on screen. */
 const POLL_MS = 500;
+
+/**
+ * A send is refused while another one is running (a ref guard, not just the
+ * `busy` state: Enter and a click in the same instant both see the old state),
+ * and when the message is empty unless it is a retry.
+ */
+export function sendBlocked(state: {
+  sending: boolean;
+  busy: boolean;
+  voiceBusy: boolean;
+  retry: boolean;
+  message: string;
+}): boolean {
+  if (state.sending || state.busy || state.voiceBusy) return true;
+  return !state.retry && !state.message;
+}
+
+/**
+ * The optimistic bubble to show for a message just sent: hidden as soon as the
+ * server's own copy is the last message (no duplicated bubble), so
+ * "message in sending" and "message saved" never show together.
+ */
+export function visiblePendingMessage(
+  pending: string | null,
+  messages: ReadonlyArray<{ role: string; content: string }>
+): string | null {
+  if (pending === null) return null;
+  const last = messages.at(-1);
+  return last?.role === "CLIENT" && last.content === pending ? null : pending;
+}
+
+/** Parola di stato della chiamata vocale (H-04), con la sua tinta. */
+export type LiveTone = "waiting" | "listening" | "speaking" | "paused";
+
+export function liveStatus(
+  phase: "preparing" | "connecting" | "active" | "closing",
+  state: { muted: boolean; speaking: boolean }
+): { label: string; tone: LiveTone } {
+  if (phase === "preparing") return { label: "Preparo il contesto di immagini e video…", tone: "waiting" };
+  if (phase === "connecting") return { label: "Collegamento al microfono…", tone: "waiting" };
+  if (phase === "closing") return { label: "Salvo la conversazione…", tone: "waiting" };
+  if (state.muted) return { label: "In pausa", tone: "paused" };
+  if (state.speaking) return { label: "Heili sta parlando", tone: "speaking" };
+  return { label: "In ascolto", tone: "listening" };
+}
+
+/** Quanto resta acceso «Heili sta parlando» dopo l'ultimo frammento ricevuto. */
+const SPEAKING_MS = 1600;
+
+/** Il passo del flusso 1 Parla · 2 Controlla · 3 Invia (U-03). */
+export function assistantStep(state: { completed: boolean; submitting: boolean; done: boolean }): 1 | 2 | 3 {
+  if (state.done || state.submitting) return 3;
+  if (state.completed) return 2;
+  return 1;
+}
 
 /** Polls a reader while mounted; re-renders only when its key changes. */
 function usePolled<T>(read: (() => T | null) | undefined, key: (value: T) => string): T | null {
@@ -215,6 +281,9 @@ export function AssistantPanel({
   getPointContext,
   controlRef,
   onRequestSavedChanges,
+  showHeader = true,
+  onPickPoint,
+  onPickMoment,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const feedbackMode = mode === "feedback";
@@ -251,6 +320,8 @@ export function AssistantPanel({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  /** Synchronous guard: one in-flight send, whatever the button/key timing. */
+  const sendingRef = useRef(false);
   const draftRef = useRef(draft);
   const contextRef = useRef({ videoTime, selection, adsContext, pointContext });
   const speechInput = useSpeechInput({
@@ -340,7 +411,29 @@ export function AssistantPanel({
 
   const live = useLiveConversation({ url: `${baseUrl}/voice`, postId, versionNumber, onClosed: reloadAfterVoice });
   const voiceBusy = live.phase !== "idle";
+
+  // «Heili sta parlando»: si accende quando arrivano frammenti della risposta
+  // e si spegne da solo dopo l'ultimo (nessun cambio dentro useLiveConversation).
+  const assistantTextRef = useRef(live.assistantText);
+  const lastAssistantDeltaRef = useRef(0);
+  const [assistantSpeaking, setAssistantSpeaking] = useState(false);
+  useEffect(() => {
+    if (!live.assistantText) return;
+    assistantTextRef.current = live.assistantText;
+    lastAssistantDeltaRef.current = Date.now();
+  }, [live.assistantText]);
+  useEffect(() => {
+    if (live.phase !== "active") {
+      const reset = window.setTimeout(() => setAssistantSpeaking(false), 0);
+      return () => window.clearTimeout(reset);
+    }
+    const poll = window.setInterval(() => {
+      setAssistantSpeaking(assistantTextRef.current.length > 0 && Date.now() - lastAssistantDeltaRef.current < SPEAKING_MS);
+    }, 400);
+    return () => window.clearInterval(poll);
+  }, [live.phase]);
   const messages = session?.messages ?? [];
+  const pendingVisible = visiblePendingMessage(pendingMessage, messages);
   const lastMessage = messages.at(-1);
   const hasClientMessages = messages.some((m) => m.role === "CLIENT");
   const completed = session?.status === "COMPLETED" && Boolean(session.summary);
@@ -449,7 +542,8 @@ export function AssistantPanel({
     retry = false,
   ) {
     const message = draft.trim();
-    if (busy || voiceBusy || (!retry && !message)) return;
+    if (sendBlocked({ sending: sendingRef.current, busy: busy !== null, voiceBusy, retry, message })) return;
+    sendingRef.current = true;
     speechInput.cancel();
     const inputMode: ReviewInputModeValue = dictated ? "VOICE" : "TEXT";
 
@@ -467,6 +561,8 @@ export function AssistantPanel({
           retry ? { postId, versionNumber, inputMode: "TEXT", retry: true } : { postId, versionNumber, message, inputMode }
         ),
       });
+      // The server's copy replaces the optimistic bubble in the same update.
+      setPendingMessage(null);
       setSession(turn.session);
       setSessionsLeft(turn.sessionsLeft);
       setReadiness(turn.readiness);
@@ -478,15 +574,20 @@ export function AssistantPanel({
       try {
         const state = await reload();
         const last = state.session?.messages.at(-1);
-        if (!retry && !(last?.role === "CLIENT" && last.content === message)) {
+        if (last?.role === "CLIENT" && last.content === message) {
+          setPendingMessage(null);
+        } else if (!retry) {
+          setPendingMessage(null);
           setDraft(message);
           setDictated(inputMode === "VOICE");
         }
       } catch {
+        setPendingMessage(null);
         if (!retry) setDraft(message);
       }
     } finally {
       setPendingMessage(null);
+      sendingRef.current = false;
       setBusy(null);
     }
   }
@@ -613,26 +714,135 @@ export function AssistantPanel({
     requestChanges,
     approve,
     close,
+    insertMarker,
   }));
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const sendHighlighted = completed ? session?.verdict === "changes" : readiness === "ready_changes";
   const approveHighlighted = completed ? session?.verdict === "approve" : readiness === "ready_approve";
+  const callStatus = liveStatus(voiceBusy && live.phase !== "idle" ? live.phase : "connecting", {
+    muted: live.muted,
+    speaking: assistantSpeaking,
+  });
 
   return (
     <section ref={panelRef} className="space-y-3 rounded-xl border border-border bg-background p-3" aria-label="Assistente di revisione">
-      <header className="flex items-start gap-2">
-        <HeiliAssistantIcon className="h-7 w-7" />
-        <div className="min-w-0 space-y-1">
-          <h2 className="text-sm font-semibold">Heili</h2>
-          <p className="text-xs text-muted">
-            {feedbackMode
-              ? ASSISTANT_FEEDBACK_COPY.header
-              : "Ti aiuta a spiegare all'agenzia cosa cambiare. Non approva e non invia nulla al posto tuo."}
-          </p>
+      {showHeader && (
+        <header className="flex items-start gap-2">
+          <HeiliAssistantIcon className="h-7 w-7" />
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-sm font-semibold">Heili</h2>
+            <p className="text-xs text-muted">
+              {feedbackMode
+                ? ASSISTANT_FEEDBACK_COPY.header
+                : "Ti aiuta a spiegare all'agenzia cosa cambiare. Non approva e non invia nulla al posto tuo."}
+            </p>
+          </div>
+        </header>
+      )}
+
+      {!loading && done === null && canChat && (
+        <div className="space-y-2 rounded-lg border border-border bg-surface p-3" aria-label="Parla a voce">
+          {!live.supported ? (
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Parla a voce</p>
+              <p className="text-xs text-muted">
+                La voce richiede un browser con microfono e una connessione sicura. Puoi scrivere il tuo messaggio qui sotto.
+              </p>
+            </div>
+          ) : !voiceBusy ? (
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={startConversation}
+                disabled={composerDisabled}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                <MicrophoneIcon />
+                Parla a voce
+              </button>
+              <p className="text-xs text-muted">
+                Oppure scrivi: Heili risponde qui sotto. La voce è generata dall&apos;AI e la decisione resta sempre tua.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="flex items-center gap-2 text-sm font-semibold" role="status" aria-live="polite" data-testid="live-status">
+                <LiveToneDot tone={callStatus.tone} />
+                {callStatus.label}
+              </p>
+              {live.phase === "active" && live.remainingSeconds !== null && (
+                <p className="text-xs text-muted" role="timer" aria-live="off">
+                  Tempo rimasto: {formatCountdown(live.remainingSeconds)}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {live.phase === "active" && (
+                  <button
+                    type="button"
+                    onClick={live.toggleMicrophone}
+                    aria-pressed={live.muted}
+                    className="min-h-11 rounded-md border border-border bg-background px-3 text-sm"
+                  >
+                    {live.muted ? "Riattiva microfono" : "Silenzia"}
+                  </button>
+                )}
+                {live.playbackBlocked && (
+                  <button type="button" onClick={() => void live.enablePlayback()} className="min-h-11 rounded-md border border-accent px-3 text-sm text-accent">
+                    Attiva audio
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void live.stop().catch(() => {})}
+                  disabled={live.phase === "closing"}
+                  className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50"
+                >
+                  {live.phase === "preparing" ? "Annulla preparazione" : live.phase === "connecting" ? "Annulla collegamento" : "Termina"}
+                </button>
+              </div>
+              {(live.clientText || live.assistantText) && (
+                <div className="max-h-40 space-y-2 overflow-y-auto rounded border border-border bg-background p-2 text-sm" aria-live="off" aria-label="Sottotitoli">
+                  {live.clientText && <p><strong>Tu: </strong>{live.clientText}</p>}
+                  {live.assistantText && <p><strong>Heili: </strong>{live.assistantText}</p>}
+                </div>
+              )}
+              <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l&apos;agenzia.</p>
+            </div>
+          )}
+          {live.error && (
+            <p className="text-sm text-error" role="alert">
+              {live.error}
+            </p>
+          )}
         </div>
-      </header>
+      )}
+
+      {!loading && done === null && (
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" aria-label="Passi: parla, controlla, invia" data-testid="assistant-steps">
+          {(
+            [
+              [1, "Parla"],
+              [2, "Controlla"],
+              [3, "Invia"],
+            ] as const
+          ).map(([step, label], index) => {
+            const current = assistantStep({ completed, submitting: busy === "submit", done: done !== null }) === step;
+            return (
+              <li key={step} className="flex items-center gap-2">
+                {index > 0 && <span aria-hidden="true" className="text-border">·</span>}
+                <span
+                  aria-current={current ? "step" : undefined}
+                  className={current ? "font-semibold text-accent" : "text-muted"}
+                >
+                  {step} {label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
       <div
         ref={scrollRef}
@@ -649,18 +859,27 @@ export function AssistantPanel({
             {messages.map((m) => (
               <Bubble key={m.id} role={m.role} content={m.content} inputMode={m.inputMode} />
             ))}
-            {pendingMessage !== null && <Bubble role="CLIENT" content={pendingMessage} pending />}
-            {busy === "send" && <p className="text-xs text-muted">L&apos;assistente sta scrivendo…</p>}
+            {pendingVisible !== null && <Bubble role="CLIENT" content={pendingVisible} pending />}
+            {busy === "send" && (
+              <p className="flex items-center gap-1 text-xs text-muted" role="status">
+                Heili sta scrivendo
+                <span className="typing-dots inline-flex gap-0.5" aria-hidden="true">
+                  <span>·</span>
+                  <span>·</span>
+                  <span>·</span>
+                </span>
+              </p>
+            )}
             {busy === "finalize" && <p className="text-xs text-muted">Preparo il riepilogo per l&apos;agenzia…</p>}
           </>
         )}
       </div>
 
       {error && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-error" role="alert">
-          <span>{error}</span>
+        <div className="flex items-center justify-between gap-3 border-l-2 border-error pl-2 text-sm text-error" role="alert">
+          <span className="min-w-0 flex-1">{error}</span>
           {canRetry && (
-            <button type="button" onClick={() => sendMessage(true)} className="underline underline-offset-2">
+            <button type="button" onClick={() => sendMessage(true)} className="min-h-9 shrink-0 font-medium underline underline-offset-2">
               Riprova
             </button>
           )}
@@ -739,6 +958,20 @@ export function AssistantPanel({
                 )}
               </div>
             )}
+            {(onPickPoint || onPickMoment) && (
+              <div className="flex flex-wrap gap-2">
+                {onPickPoint && (
+                  <Chip onClick={onPickPoint} disabled={composerDisabled}>
+                    Indica un punto sull&apos;immagine
+                  </Chip>
+                )}
+                {onPickMoment && (
+                  <Chip onClick={onPickMoment} disabled={composerDisabled}>
+                    Indica il momento sul video
+                  </Chip>
+                )}
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={draft}
@@ -797,63 +1030,6 @@ export function AssistantPanel({
                 <span className="text-xs text-muted">Messaggi rimasti: {messagesLeft}</span>
               )}
             </div>
-
-            <div className="space-y-3 border-t border-border pt-3">
-              <div className="flex items-start gap-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold">Conversazione vocale</p>
-                  <p className="text-xs text-muted">
-                    Una conversazione naturale sul post: puoi interrompere Heili parlando, anche mentre risponde.
-                    La voce è generata dall’AI. Scegli tu quando inviare il feedback.
-                  </p>
-                </div>
-              </div>
-              {live.error && <p className="text-sm text-error" role="alert">{live.error}</p>}
-              {!live.supported ? (
-                <p className="text-xs text-muted">La chiamata richiede un browser con microfono e una connessione sicura. Puoi sempre usare la chat.</p>
-              ) : !voiceBusy ? (
-                <button type="button" onClick={startConversation} disabled={composerDisabled}
-                  className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50">
-                  Inizia conversazione vocale
-                </button>
-              ) : (
-                <>
-                  <p className="text-sm font-medium" role="status">
-                    {live.phase === "preparing" ? "Sto preparando il contesto delle immagini e dei video… Il microfono è ancora spento." : live.phase === "connecting" ? "Collegamento al microfono…" : live.phase === "closing" ? "Salvo la conversazione…" : live.muted ? "Microfono disattivato. Puoi continuare ad ascoltare." : "Ti ascolto. Puoi parlare anche mentre rispondo."}
-                  </p>
-                  {live.phase === "active" && live.remainingSeconds !== null && (
-                    <p className="text-xs text-muted" role="timer" aria-live="off">
-                      Tempo rimasto: {formatCountdown(live.remainingSeconds)}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {live.phase === "active" && (
-                      <button type="button" onClick={live.toggleMicrophone} aria-pressed={live.muted}
-                        className="min-h-11 rounded-md border border-border bg-background px-3 text-sm">
-                        {live.muted ? "Riattiva microfono" : "Disattiva microfono"}
-                      </button>
-                    )}
-                    {live.playbackBlocked && (
-                      <button type="button" onClick={() => void live.enablePlayback()} className="min-h-11 rounded-md border border-accent px-3 text-sm text-accent">Attiva audio</button>
-                    )}
-                    <button type="button" onClick={() => void live.stop().catch(() => {})} disabled={live.phase === "closing"}
-                      className="min-h-11 rounded-md border border-border bg-background px-3 text-sm disabled:opacity-50">
-                      {live.phase === "preparing" ? "Annulla preparazione" : live.phase === "connecting" ? "Annulla collegamento" : "Termina conversazione"}
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted">Al termine ritrovi il dialogo qui e puoi preparare il riepilogo per l’agenzia.</p>
-                </>
-              )}
-              {(live.clientText || live.assistantText) && (
-                <details className="text-sm" open>
-                  <summary className="cursor-pointer text-xs text-muted">Trascrizione in diretta</summary>
-                  <div className="mt-2 max-h-60 space-y-2 overflow-y-auto" aria-live="off">
-                    {live.clientText && <p><strong>Tu: </strong>{live.clientText}</p>}
-                    {live.assistantText && <p><strong>Heili: </strong>{live.assistantText}</p>}
-                  </div>
-                </details>
-              )}
-            </div>
           </div>
 
           {(hasClientMessages || completed || live.clientText) && (
@@ -900,6 +1076,26 @@ export function AssistantPanel({
 }
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
+
+function MicrophoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" />
+    </svg>
+  );
+}
+
+/** Parola + punto di stato: nessuna animazione, leggibile anche con reduced motion. */
+function LiveToneDot({ tone }: { tone: LiveTone }) {
+  const colors: Record<LiveTone, string> = {
+    waiting: "bg-warning",
+    listening: "bg-accent",
+    speaking: "bg-success",
+    paused: "bg-border",
+  };
+  return <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${colors[tone]}`} aria-hidden="true" />;
+}
 
 function Chip({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: ReactNode }) {
   return (
@@ -1002,7 +1198,7 @@ function SummaryCard({
     <div className="space-y-3 rounded border border-border bg-background p-3">
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
-          Riepilogo{showVerdict && session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
+          Riepilogo per l&apos;agenzia{showVerdict && session.verdict ? ` · ${VERDICT_LABELS[session.verdict]}` : ""} · Non ancora inviato
         </p>
         <p className="whitespace-pre-wrap text-sm">{session.summary}</p>
       </div>

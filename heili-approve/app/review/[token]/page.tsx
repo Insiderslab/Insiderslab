@@ -10,6 +10,9 @@ import {
   portalNoun,
   portalPath,
 } from "@/components/portal/helpers";
+import HeiliPage from "@/components/portal/heili/heili-page";
+import type { HeiliDestination } from "@/components/portal/heili/types";
+import HomeSteps from "@/components/portal/home-steps";
 import KindTabs from "@/components/portal/kind-tabs";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
 import { clientServices } from "@/lib/clients";
@@ -94,15 +97,52 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const firstName = reviewer.name.trim().split(/\s+/)[0] || reviewer.name;
   const reviewProgress = planProgress(posts.map((post) => post.status));
 
+  // What Heili can offer from here: only server-built portal destinations.
+  const destinations: HeiliDestination[] = [];
+  if (groups.toReview.length > 0) {
+    destinations.push({
+      id: "next",
+      label: groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Rivedi il prossimo post",
+      href: portalPath(token, groups.toReview[0].id),
+      kind: "next",
+    });
+  }
+  if (firstWaitingPlan) {
+    destinations.push({ id: "plan", label: "Rivedi il piano del mese", href: firstWaitingPlan.href, kind: "plan" });
+  }
+  if (offers.length > 0) {
+    const name = offerMonthName(offers[0].month, now, timeZone);
+    destinations.push({
+      id: "month",
+      label: `Rivedi tutto ${name} insieme`,
+      href: portalMonthPath(token, offers[0].month),
+      kind: "view",
+    });
+  }
+
   return (
     <main className="space-y-8">
+      <HeiliPage
+        context={{
+          page: "home",
+          title: "Questa è la tua pagina di revisione",
+          summary:
+            groups.toReview.length === 0
+              ? "Nessun contenuto da approvare in questo momento"
+              : groups.toReview.length === 1
+                ? "1 contenuto da rivedere"
+                : `${groups.toReview.length} contenuti da rivedere`,
+          destinations,
+          services: kindsShown,
+        }}
+      />
       <section className="space-y-4 py-3 sm:py-5">
         <p className="label-caps">Il tuo spazio di revisione</p>
         <div className="flex flex-wrap items-end justify-between gap-5">
-          <h1 className="text-[30px] font-semibold leading-tight">Ciao {firstName}.<br /><span className="text-muted">Un contenuto alla volta.</span></h1>
+          <h1 className="text-2xl font-semibold leading-tight">Ciao {firstName}.</h1>
           {reviewProgress.total > 0 && <div className="w-full sm:w-64"><PlanProgressBar progress={reviewProgress} label={`${reviewProgress.approved + reviewProgress.changes} di ${reviewProgress.total} contenuti revisionati`} /></div>}
         </div>
-        <p className="text-base text-muted">
+        <p className={groups.toReview.length > 0 ? "text-lg font-medium" : "text-base text-muted"}>
           {groups.toReview.length === 0
             ? `Non ci sono ${noun.many} da approvare in questo momento. Ti scriveremo quando ce ne saranno di nuovi.`
             : groups.toReview.length === 1
@@ -120,23 +160,14 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
           </Link>
         )}
         {groups.toReview.length > 0 && (
-          <ol className="grid gap-2 pt-1 text-sm text-muted sm:grid-cols-3" aria-label="Come funziona">
-            {[
-              ["Guarda", `Apri ${noun.theOne} come apparirà davvero.`],
-              ["Commenta", "Tocca un punto o un secondo del video; puoi anche dettare a voce."],
-              ["Concludi", "Approva oppure invia le modifiche. Il tuo feedback fa avanzare il lavoro."],
-            ].map(([title, text], index) => (
-              <li key={title} className="flex gap-2.5 py-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
-                  {index + 1}
-                </span>
-                <span>
-                  <span className="block font-semibold text-foreground">{title}</span>
-                  {text}
-                </span>
-              </li>
-            ))}
-          </ol>
+          <HomeSteps
+            token={token}
+            steps={[
+              { title: "Guarda", text: `Apri ${noun.theOne} come apparirà davvero.` },
+              { title: "Commenta", text: "Tocca un punto o un secondo del video; puoi anche dettare a voce." },
+              { title: "Concludi", text: "Approva oppure invia le modifiche. Il tuo feedback fa avanzare il lavoro." },
+            ]}
+          />
         )}
       </section>
 
@@ -338,8 +369,8 @@ function PlanCard({ plan }: { plan: PlanCardData }) {
       </span>
       <PlanProgressBar progress={plan.progress} size="sm" />
       <span
-        className={`flex min-h-12 w-full items-center justify-center rounded-lg px-4 text-base font-semibold sm:w-auto sm:inline-flex ${
-          highlight ? "bg-accent text-white" : "border border-border"
+        className={`flex min-h-12 w-full items-center justify-center rounded-lg border px-4 text-base font-semibold sm:inline-flex sm:w-auto ${
+          highlight ? "border-accent text-accent" : "border-border"
         }`}
       >
         {highlight ? "Rivedi il piano" : "Apri il piano"}

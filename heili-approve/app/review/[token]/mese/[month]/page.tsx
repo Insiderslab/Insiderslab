@@ -5,7 +5,9 @@ import MonthFrame from "@/components/portal/month/month-frame";
 import MonthGrid, { monthGridTiles } from "@/components/portal/month/month-grid";
 import ViewSwitch, { QuickReviewLink } from "@/components/portal/month/view-switch";
 import { portalMonthPath, portalPath } from "@/components/portal/helpers";
-import { monthRouteAllowed, parseMonthView, parsePosition, selectMonthPosts, type MonthView } from "@/lib/month-rules";
+import HeiliPage from "@/components/portal/heili/heili-page";
+import type { HeiliDestination } from "@/components/portal/heili/types";
+import { monthRouteAllowed, parseMonthView, parsePosition, selectMonthPosts, viewPath, type MonthView } from "@/lib/month-rules";
 import { isPlanMonth, planMonthName, planMonthOf, planProgress } from "@/lib/plan-rules";
 import { listPostsForReviewer, type ReviewerRef } from "@/lib/posts";
 import { isKindEnabled } from "@/lib/variant";
@@ -46,9 +48,27 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
   const year = month.slice(0, 4);
   const heading = `Post di ${monthName}${year !== planMonthOf(now, timeZone).slice(0, 4) ? ` ${year}` : ""}`;
   const sfoglia = view === "sfoglia";
+  const monthProgress = planProgress(posts.map((p) => p.status));
+  const nextMonthPost = posts.find((p) => p.canAct);
+  const destinations: HeiliDestination[] = [];
+  if (nextMonthPost) {
+    destinations.push({ id: "next", label: "Rivedi il prossimo post", href: portalPath(token, nextMonthPost.id), kind: "next" });
+  }
+  if (!sfoglia) destinations.push({ id: "browse", label: "Rivedi veloce (Sfoglia)", href: viewPath(monthPath, "sfoglia"), kind: "view" });
+  if (sfoglia) destinations.push({ id: "grid", label: "Vai alla griglia", href: viewPath(monthPath, "griglia"), kind: "view" });
+  destinations.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
 
   return (
     <main>
+      <HeiliPage
+        context={{
+          page: sfoglia ? "browse" : "month",
+          title: `i ${heading.charAt(0).toLowerCase()}${heading.slice(1)}`,
+          summary: `${posts.length} post, ${monthProgress.inReview} da rivedere`,
+          destinations,
+          services: ["SOCIAL_POST"],
+        }}
+      />
       <MonthFrame
         backHref={portalPath(token)}
         backLabel="Tutti i post"

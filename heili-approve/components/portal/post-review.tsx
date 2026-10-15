@@ -23,14 +23,14 @@ import {
   requestChangesAction,
 } from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
-import AssistantPanel, { type AssistantPanelHandle } from "@/components/review/assistant-panel";
+import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
+import type { HeiliDestination } from "@/components/portal/heili/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
 import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
-  AssistantToggle,
   AssistantActionButton,
   DecisionBar,
   ReviewNav,
@@ -89,10 +89,9 @@ export default function PostReview({
 }: PostReviewProps) {
   const router = useRouter();
   const previewRef = useRef<HTMLDivElement>(null);
-  const assistantRef = useRef<HTMLDivElement>(null);
-  const assistantControl = useRef<AssistantPanelHandle>(null);
   const timeGetter = useRef<(() => number) | null>(null);
   const assistantApproval = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
+  const heili = useHeili();
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(
@@ -105,7 +104,6 @@ export default function PostReview({
   const [notice, setNotice] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const openedOnArrival = openAssistant && assistantEnabled && (post.canAct || post.status === "CHANGES_REQUESTED");
-  const [assistantOpen, setAssistantOpen] = useState(openedOnArrival);
   // Bumped after Heili's feedback was added: the next conversation starts fresh.
   const [assistantKey, setAssistantKey] = useState(0);
 
@@ -227,6 +225,23 @@ export default function PostReview({
     setDraftKey((k) => k + 1);
   }
 
+  /**
+   * «Indica un punto sull'immagine» / «Indica il momento sul video» dal dock:
+   * il tocco non apre il commento manuale, diventa un marcatore nel messaggio
+   * di Heili e il dock si riapre.
+   */
+  function pickOrOpenDraft(next: CommentDraft) {
+    if (heili.pick && (next.kind === "pin" || next.kind === "moment")) {
+      heili.completePick(
+        next.kind === "pin"
+          ? { kind: "pin", mediaIndex: next.mediaIndex, x: next.x, y: next.y }
+          : { kind: "moment", mediaIndex: next.mediaIndex, timeSec: next.timeSec, x: next.x, y: next.y }
+      );
+      return;
+    }
+    openDraft(next);
+  }
+
   async function submitComment(input: CommentSubmission): Promise<string | null> {
     const result = await addCommentAction(token, { postId: ref.id, versionNumber: ref.versionNumber, ...input });
     if (!result.ok) {
@@ -253,7 +268,7 @@ export default function PostReview({
     setDraft(result === "changes" ? { kind: "general" } : null);
     setDecisionError(null);
     setSheet(null);
-    setAssistantOpen(false);
+    heili.closeDock();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -273,15 +288,15 @@ export default function PostReview({
 
   async function requestChangesFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
-    if (assistantControl.current?.isLoadingFeedback()) {
+    if (heili.control.current?.isLoadingFeedback()) {
       setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
       return;
     }
     setDecisionError(null);
-    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
-      setAssistantOpen(true);
+    if (heili.open || heili.control.current?.hasPendingFeedback()) {
+      heili.openDock("feedback");
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await assistantControl.current?.requestChanges();
+      await heili.control.current?.requestChanges();
     } else {
       await requestSavedChanges();
     }
@@ -289,15 +304,15 @@ export default function PostReview({
 
   async function approveFromBar() {
     if (blockUnsavedComment() || sheetBusy) return;
-    if (assistantControl.current?.isLoadingFeedback()) {
+    if (heili.control.current?.isLoadingFeedback()) {
       setDecisionError("Sto recuperando il feedback precedente. Riprova tra un momento.");
       return;
     }
     setDecisionError(null);
-    if (assistantOpen || assistantControl.current?.hasPendingFeedback()) {
-      setAssistantOpen(true);
+    if (heili.open || heili.control.current?.hasPendingFeedback()) {
+      heili.openDock("feedback");
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await assistantControl.current?.approve();
+      await heili.control.current?.approve();
     } else {
       openSheet("approve");
     }
@@ -400,31 +415,66 @@ export default function PostReview({
       if (result.stale) setStale(true);
       throw new Error(result.error);
     }
-    setAssistantOpen(false);
+    heili.closeDock();
     setAssistantKey((key) => key + 1);
     setDecisionError(null);
     setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
   }
 
-  // Arrived from "Parla con Heili" (open from the first render): bring Heili into view.
+  // «?heili=1» (from Sfoglia): open the dock on arrival.
+  const openDock = heili.openDock;
   useEffect(() => {
-    if (!openedOnArrival) return;
-    requestAnimationFrame(() => assistantRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
-  }, [openedOnArrival]);
+    if (openedOnArrival) openDock("feedback");
+  }, [openDock, openedOnArrival]);
 
-  async function toggleAssistant() {
+  function openHeili() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
       requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Ferma dettatura"]')?.focus());
       return;
     }
-    if (assistantOpen && assistantControl.current && !(await assistantControl.current.close())) return;
-    const open = !assistantOpen;
-    setAssistantOpen(open);
-    if (open) {
-      requestAnimationFrame(() => assistantRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
-    }
+    heili.openDock("feedback");
   }
+
+  // ─── Heili: what this page offers the dock ─────────────────────────────────
+
+  const position = plan?.position ?? queue.position;
+  const total = plan?.total ?? queue.toReviewCount;
+  const networks = post.networks.map((network) => network.charAt(0).toUpperCase() + network.slice(1));
+  const heiliHeading = position !== null && total > 0 ? `Post ${position} di ${total}${networks[0] ? ` · ${networks[0]}` : ""}` : post.title;
+  const heiliDestinations: HeiliDestination[] = [];
+  if (nextHref) {
+    heiliDestinations.push({ id: "next", label: "Rivedi il prossimo post", href: nextHref, kind: "next" });
+  }
+  if (plan) {
+    heiliDestinations.push({ id: "plan", label: plan.backLabel ?? "Torna al piano", href: plan.href, kind: "plan" });
+  }
+  heiliDestinations.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
+
+  useHeiliPage({
+    page: "post",
+    title: heiliHeading,
+    summary: canAct ? "Da approvare" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
+    destinations: heiliDestinations,
+    services: listKinds,
+    review: assistantAvailable
+      ? {
+          postId: post.id,
+          versionNumber: post.versionNumber,
+          mode: assistantMode,
+          kind: "SOCIAL_POST",
+          heading: heiliHeading,
+          sessionKey: assistantKey,
+          canPickPoint: canComment && post.media.length > 0,
+          canPickMoment: canComment && hasVideo,
+          getVideoTime: hasVideo ? getVideoTime : undefined,
+          getPointContext,
+          onSubmitChanges: canAct ? submitFromAssistant : addFromAssistant,
+          onApprove: canAct ? approveFromAssistant : undefined,
+          onRequestSavedChanges: requestSavedChanges,
+        }
+      : undefined,
+  });
 
   function reload() {
     setStale(false);
@@ -523,10 +573,10 @@ export default function PostReview({
             timeZone={post.timeZone}
             pins={pins}
             markers={markers}
-            onMediaClick={canComment ? (p) => openDraft({ kind: "pin", mediaIndex: p.mediaIndex, x: p.x, y: p.y }) : undefined}
+            onMediaClick={canComment ? (p) => pickOrOpenDraft({ kind: "pin", mediaIndex: p.mediaIndex, x: p.x, y: p.y }) : undefined}
             onRequestComment={
               canComment
-                ? (p) => openDraft({ kind: "moment", mediaIndex: p.mediaIndex, timeSec: p.timeSec, x: p.x, y: p.y })
+                ? (p) => pickOrOpenDraft({ kind: "moment", mediaIndex: p.mediaIndex, timeSec: p.timeSec, x: p.x, y: p.y })
                 : undefined
             }
             registerTimeGetter={hasVideo ? registerTimeGetter : undefined}
@@ -574,24 +624,6 @@ export default function PostReview({
               </div>
               {post.comments.length > 0 && <span className="text-xs text-muted">{post.comments.length} salvati</span>}
             </div>
-            {assistantAvailable && (
-              <AssistantToggle open={assistantOpen} mounted showButton={assistantOpen} onToggle={toggleAssistant} containerRef={assistantRef}>
-                <AssistantPanel
-                  key={`${post.id}-${post.versionNumber}-${assistantKey}`}
-                  controlRef={assistantControl}
-                  onRequestSavedChanges={requestSavedChanges}
-                  token={token}
-                  postId={post.id}
-                  versionNumber={post.versionNumber}
-                  mode={assistantMode}
-                  onSubmitChanges={canAct ? submitFromAssistant : addFromAssistant}
-                  onApprove={canAct ? approveFromAssistant : undefined}
-                  getVideoTime={hasVideo ? getVideoTime : undefined}
-                  getPointContext={getPointContext}
-                />
-              </AssistantToggle>
-            )}
-            <div hidden={assistantOpen}>
             {draft && canComment ? (
               <CommentComposer
                 key={draftKey}
@@ -603,7 +635,7 @@ export default function PostReview({
                 onDirtyChange={setCommentDirty}
                 onListeningChange={setCommentListening}
                 assistantAction={
-                  assistantAvailable ? <AssistantActionButton onToggle={toggleAssistant} /> : undefined
+                  assistantAvailable ? <AssistantActionButton onToggle={openHeili} /> : undefined
                 }
                 onCancel={() => {
                   setCommentDirty(false);
@@ -620,7 +652,6 @@ export default function PostReview({
                 Scrivi un commento per l&apos;agenzia…
               </button>
             ) : null}
-            </div>
             {notice && <p className="text-sm text-success" role="status">{notice}</p>}
             <div className="border-t border-border pt-4">
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -644,12 +675,12 @@ export default function PostReview({
                 {decisionError}
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg bg-accent px-3 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -657,7 +688,7 @@ export default function PostReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 flex-1 rounded-lg border border-border bg-background px-3 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50"
+                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
               >
                 Approva
               </button>

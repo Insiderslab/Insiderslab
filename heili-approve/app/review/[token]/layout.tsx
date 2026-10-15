@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import InvalidLink from "@/components/portal/invalid-link";
 import PortalHeader from "@/components/portal/portal-header";
-import HelpGuide from "@/components/help/help-guide";
+import HeiliDock from "@/components/portal/heili/heili-dock";
+import { HeiliProvider } from "@/components/portal/heili/context";
 import { portalPath, portalTagline, portalTitle } from "@/components/portal/helpers";
 import { clientServices } from "@/lib/clients";
 import { enabledKinds, productName } from "@/lib/variant";
@@ -45,20 +46,18 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
   if (!reviewer) return <InvalidLink productName={productName()} />;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <PortalHeader
-        clientName={reviewer.client.name}
-        logoUrl={reviewer.client.logoUrl}
-        homeHref={portalPath(token)}
-        productName={productName()}
-        tagline={portalTagline(portalServices(reviewer.client))}
-      />
-      <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-10 pt-4 sm:px-6">
-        <div className="mb-4 flex justify-end">
-          <HelpGuide audience="client" services={portalServices(reviewer.client)} />
-        </div>
-        {children}
+    <HeiliProvider token={token}>
+      <div className="flex min-h-screen flex-col bg-background">
+        <PortalHeader
+          clientName={reviewer.client.name}
+          logoUrl={reviewer.client.logoUrl}
+          homeHref={portalPath(token)}
+          productName={productName()}
+          tagline={portalTagline(portalServices(reviewer.client))}
+        />
+        <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-4 sm:px-6">{children}</div>
+        <HeiliDock />
       </div>
-    </div>
+    </HeiliProvider>
   );
 }

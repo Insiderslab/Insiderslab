@@ -134,8 +134,18 @@ test("cliente (390px): commento con pin e richiesta di modifiche", async ({ brow
   await page.getByText(state.imageTitle).first().click();
   await page.waitForURL(new RegExp(`/posts/${state.imagePostId}$`));
 
-  // No AI provider key is configured on the test server: no assistant button.
+  // No AI provider key is configured on the test server: the dock offers the
+  // deterministic Guida, not the assistant chat.
   await expect(page.getByRole("button", { name: "Parla con Heili" })).toHaveCount(0);
+  await page.getByTestId("heili-dock-button").click();
+  await expect(page.getByTestId("heili-dock")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Assistente di revisione" })).toHaveCount(0);
+  // H-03: the Guida shows where the client is.
+  await expect(page.getByTestId("heili-guide-status")).toBeVisible();
+  // From a post, «Rivedi il prossimo post» points to another post still waiting.
+  await expect(page.getByTestId("heili-guide-next")).toHaveAttribute("href", new RegExp(`/posts/(?!${state.imagePostId}$)[^/]+$`));
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("heili-dock")).not.toBeVisible();
 
   const image = page.getByRole("region", { name: "Anteprima del post" }).locator("img").first();
   await image.scrollIntoViewIfNeeded();

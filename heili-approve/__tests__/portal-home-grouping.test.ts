@@ -42,4 +42,11 @@ describe("portal plans and standalone content", () => {
     expect(html).not.toContain("portal-plan-card");
     expect(html).not.toContain("Contenuto singolo");
   });
+  it("first-visit steps give way to a compact «Come funziona?» (U-05)", async () => {
+    const html = await render();
+    // Server and repeat visits show the compact row; the full steps appear only
+    // on the real first visit, client-side.
+    expect(html).toContain("Come funziona?");
+    expect(html).not.toContain("Tocca un punto o un secondo del video");
+  });
 });

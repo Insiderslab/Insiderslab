@@ -2,23 +2,26 @@
 //
 // The client has already asked for changes (post in CHANGES_REQUESTED) and
 // waits for the agency's new version: Heili stays available on that version,
-// next to the comment field, and its conclusion is added to the feedback like
-// a typed comment: no approval, no second change request, status unchanged.
+// from the floating button of the portal dock, and its conclusion is added to
+// the feedback like a typed comment: no approval, no second change request,
+// status unchanged.
 //
 // The AI provider is mocked: a second server (the same build) starts on
 // E2E_HELI_PORT (default 3102) with OPENAI_BASE_URL pointing at a tiny HTTP
 // server in this file that answers the Responses API with fixed structured
 // outputs, and records the prompts it received. The main test server has no AI
-// key (approval-flow checks that Heili is hidden there).
+// key (approval-flow checks that there is no chat then).
 //
-// 1. In review: Heili is there with «Approva».
+// 1. In review: the dock offers Heili with «Approva».
 // 2. A typed comment + «Chiedi modifiche» → CHANGES_REQUESTED.
 // 3. After a reload (390 px): Heili is offered again, no «Approva»; a chat turn,
 //    the summary and «Aggiungi al feedback» → comments on the same version,
 //    one COMMENTED event, still CHANGES_REQUESTED, no second CHANGES_REQUESTED
 //    or APPROVED event; the prompts say it is extra feedback.
-// 4. The agency sees the comments; the sent conversation is not offered again.
-// 5. Other client's post and an old version are refused by the assistant API.
+// 4. «Indica un punto sull'immagine»: the dock closes, a tap on the image adds
+//    the point marker to the message and the dock reopens.
+// 5. The agency sees the comments; the sent conversation is not offered again.
+// 6. Other client's post and an old version are refused by the assistant API.
 
 import { execFileSync, spawn } from "node:child_process";
 import http from "node:http";
@@ -215,8 +218,8 @@ test("cliente (390px): in revisione Heili c'è; un commento e «Chiedi modifiche
   await page.goto(postPath());
   await expect(page.getByText(state.fixture.post.title).first()).toBeVisible();
 
-  // Waiting for the decision: Heili and «Approva», as always.
-  await expect(page.getByRole("button", { name: "Parla con Heili" })).toBeVisible();
+  // Waiting for the decision: Heili in the floating dock and «Approva», as always.
+  await expect(page.getByTestId("heili-dock-button")).toHaveAttribute("aria-label", "Parla con Heili");
   await expect(page.getByRole("button", { name: "Approva", exact: true })).toBeVisible();
 
   await page.getByPlaceholder(/Per esempio/).fill(TYPED);
@@ -229,7 +232,7 @@ test("cliente (390px): in revisione Heili c'è; un commento e «Chiedi modifiche
   // field and Heili (feedback mode) are right there; «Approva» never returns.
   await expect(page.getByText("Hai già chiesto modifiche: puoi aggiungere altro")).toBeVisible();
   await expect(page.getByRole("button", { name: "Invia commento" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Parla con Heili" })).toBeVisible();
+  await expect(page.getByTestId("heili-dock-button")).toHaveAttribute("aria-label", "Parla con Heili");
   await expect(page.getByRole("button", { name: "Approva", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Chiedi modifiche" })).toHaveCount(0);
 
@@ -244,9 +247,9 @@ test("cliente (390px): dopo le modifiche Heili resta disponibile e il riepilogo 
   await page.goto(postPath());
   await expect(page.getByText("Modifiche richieste").first()).toBeVisible();
 
-  // Heili is offered where the client writes; nothing to approve any more.
+  // Heili is offered in the floating dock; nothing to approve any more.
   await expect(page.getByText("Hai già chiesto modifiche: puoi aggiungere altro scrivendo, dettando o parlando con Heili.")).toBeVisible();
-  const heili = page.getByRole("button", { name: "Parla con Heili" });
+  const heili = page.getByTestId("heili-dock-button");
   await expect(heili).toBeVisible();
   await expect(page.getByRole("button", { name: "Approva", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Chiedi modifiche" })).toHaveCount(0);
@@ -257,12 +260,27 @@ test("cliente (390px): dopo le modifiche Heili resta disponibile e il riepilogo 
   await heili.click();
   const panel = page.getByRole("region", { name: "Assistente di revisione" });
   await expect(panel).toBeVisible();
-  await expect(panel.getByText("Hai già chiesto modifiche: quello che aggiungi qui si somma al tuo feedback.")).toBeVisible();
+  await expect(panel.getByText("Hai già chiesto modifiche e l'agenzia sta preparando la nuova versione")).toBeVisible();
   await expect(panel.getByRole("button", { name: /Approva/ })).toHaveCount(0);
+
+  // «Indica un punto sull'immagine»: the sheet closes, the tap on the image
+  // becomes a point marker in the message and the sheet reopens.
+  await panel.getByRole("button", { name: "Indica un punto sull'immagine" }).click();
+  await expect(page.getByTestId("heili-dock")).not.toBeVisible();
+  const image = page.locator('[aria-label="Anteprima del post"] img').first();
+  await image.scrollIntoViewIfNeeded();
+  // The tap overlay sits on the image (as in approval-flow): click by coordinates.
+  const imageBox = await image.boundingBox();
+  await page.mouse.click(imageBox.x + 30, imageBox.y + 30);
+  await expect(page.getByTestId("heili-dock")).toBeVisible();
+  await expect(panel.getByLabel("Messaggio per l'assistente")).toHaveValue(/\[punto media=0/);
 
   await panel.getByLabel("Messaggio per l'assistente").fill(CHAT);
   await panel.getByRole("button", { name: "Invia", exact: true }).click();
-  await expect(panel.getByText("Capito: un secondo logo in alto a destra.")).toBeVisible();
+  // U-01: il messaggio del cliente compare una volta sola e la risposta
+  // (identica nel mock) non si duplica con l'invio o con la bolla ottimistica.
+  await expect(panel.getByText(CHAT)).toHaveCount(1);
+  await expect(panel.getByText("Capito: un secondo logo in alto a destra.")).toHaveCount(1);
   // The mock says "ready_approve": the panel must not turn it into an approval.
   await expect(panel.getByRole("button", { name: /Approva/ })).toHaveCount(0);
 
@@ -318,7 +336,7 @@ test("cliente (390px): dopo le modifiche Heili resta disponibile e il riepilogo 
 
   // A reload keeps the page in the same state, and the sent conversation is not offered again.
   await page.reload();
-  await page.getByRole("button", { name: "Parla con Heili" }).click();
+  await page.getByTestId("heili-dock-button").click();
   const reopened = page.getByRole("region", { name: "Assistente di revisione" });
   await expect(reopened.getByText("Dimmi pure cos'altro vorresti aggiungere")).toBeVisible();
   await expect(reopened.getByText("Non ancora inviato")).toHaveCount(0);

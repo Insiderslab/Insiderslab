@@ -70,7 +70,7 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   expect(xlsx.buffer.subarray(0, 2).toString()).toBe("PK");
   const csv = await download(page, page.getByTestId("import-template-csv"));
   expect(csv.name).toBe("modello-importa-post.csv");
-  expect(csv.buffer.toString("utf8")).toContain("Data,Ora,Reti,Testo,Primo commento,Titolo,Immagini");
+  expect(csv.buffer.toString("utf8")).toContain("Data;Ora;Reti;Testo;Primo commento;Titolo;Immagini");
   state.template = xlsx.buffer;
   await context.close();
 });

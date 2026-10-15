@@ -320,22 +320,33 @@ export default function Browse({
         {post && state ? (
           <article
             key={post.id}
-            className="browse-card space-y-3"
+            className="browse-card space-y-3 pb-16 sm:pb-0"
             data-dir={direction ?? undefined}
             data-testid="browse-card"
             data-post-id={post.id}
             data-state={state}
             aria-labelledby={`browse-title-${post.id}`}
           >
-            <header className="space-y-2">
+            {/* Telefono: intestazione su due righe (titolo e stato), per lasciare
+                spazio all'immagine 4:5 sopra la barra (U-08 / K-10). */}
+            <header className="space-y-1.5 sm:space-y-2">
               <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
                 <StepButton dir="prev" disabled={current === 0 || busy} onClick={() => step(-1)} />
                 <div className="min-w-0 text-center">
-                  <p className="text-xs font-medium text-muted tabular" data-testid="browse-position">
-                    Post {current + 1} di {total}
-                  </p>
-                  <p className="text-sm font-semibold text-foreground tabular" data-testid="browse-slot">
-                    {post.slotLabel}
+                  <h2
+                    id={`browse-title-${post.id}`}
+                    data-focus-target
+                    tabIndex={-1}
+                    // Focused by script after a move (to announce the card): not a control, no ring.
+                    style={{ outline: "none" }}
+                    className="truncate text-base font-semibold leading-snug sm:text-lg"
+                  >
+                    {post.title}
+                  </h2>
+                  <p className="truncate text-xs text-muted tabular">
+                    <span data-testid="browse-position">Post {current + 1} di {total}</span>
+                    <span className="mx-1" aria-hidden="true">·</span>
+                    <span data-testid="browse-slot">{post.slotLabel}</span>
                   </p>
                 </div>
                 <StepButton
@@ -345,22 +356,12 @@ export default function Browse({
                   onClick={() => step(1)}
                 />
               </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
                 <span className={CHIP[state].className} data-testid="browse-state">
                   {CHIP[state].label(post)}
                 </span>
                 <span className="text-xs text-muted">Versione {post.versionNumber}</span>
               </div>
-              <h2
-                id={`browse-title-${post.id}`}
-                data-focus-target
-                tabIndex={-1}
-                // Focused by script after a move (to announce the card): not a control, no ring.
-                style={{ outline: "none" }}
-                className="text-lg font-semibold leading-snug"
-              >
-                {post.title}
-              </h2>
             </header>
 
             <StateNotice state={state} post={post} schedulingOn={schedulingOn} />

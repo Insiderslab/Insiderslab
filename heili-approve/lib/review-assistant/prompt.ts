@@ -594,7 +594,7 @@ function buildSocialFinalizeSystemPrompt(ctx: AssistantPostContext): string {
 
 Output fields:
 - verdict: "approve" if the client is happy with the post and asked for no changes; "changes" if they asked for at least one change; "unclear" if the conversation does not make it clear.
-- summary: in Italian, 2–4 sentences, written for the agency team in the third person (use the reviewer's name). Say what the client thinks overall and what they want changed, including their reasons when given.
+- summary: in Italian, 2–4 sentences, written for the agency team in the first person, as the client would say it («Vorrei che…»); do not write a report about the client and do not use the client's name. Say what they think overall and what they want changed, including their reasons when given.
 - actionItems: one entry per concrete change the client asked for (empty when there are none).
   - area: one of ${ACTION_AREAS.map((a) => `"${a}"`).join(", ")} ("media" for images/videos and their colours or style, "orario" for publication date/time, "altro" for anything else such as the first comment).
   - mediaIndex: the 0-based mediaIndex from the media list when the change is about one specific image or video (the client's "image n°2" is mediaIndex 1), otherwise null.
@@ -656,7 +656,7 @@ function buildBlogFinalizeSystemPrompt(ctx: AssistantPostContext): string {
 
 Output fields:
 - verdict: "approve" if the client is happy with the article and asked for no changes; "changes" if they asked for at least one change; "unclear" if the conversation does not make it clear.
-- summary: in Italian, 2–4 sentences, written for the agency team in the third person (use the reviewer's name). Say what the client thinks overall and what they want changed, including their reasons when given.
+- summary: in Italian, 2–4 sentences, written for the agency team in the first person, as the client would say it («Vorrei che…»); do not write a report about the client and do not use the client's name. Say what they think overall and what they want changed, including their reasons when given.
 - actionItems: one entry per concrete change the client asked for (empty when there are none).
   - area: one of ${ACTION_AREAS.map((a) => `"${a}"`).join(", ")} ("testo" for wording, content and length, "tono" for the tone of voice, "seo" for SEO title, meta description, keyword or page address, "media" for the featured image or other images, "cta" for the closing call to action, "altro" for anything else such as categories, tags or author).
   - anchorQuote: when the change is about a specific passage of the article, that passage copied EXACTLY, character by character, from <testo_articolo> (a sentence or a short part of a paragraph, without the §n number and without adding quotes or ellipses; a "[passaggio «...»]" marker in the transcript gives it to you). Null when the change is about the whole article, the headline, the SEO fields or the image.
@@ -714,7 +714,7 @@ function buildAdsFinalizeSystemPrompt(ctx: AssistantPostContext): string {
 
 Output fields:
 - verdict: "approve" if the client is happy with the creatives (at least one variant) and asked for no changes; "changes" if they asked for at least one change; "unclear" if the conversation does not make it clear.
-- summary: in Italian, 2–4 sentences, written for the agency team in the third person (use the reviewer's name). Say which variants the client prefers or rejects and what they want changed, including their reasons when given.
+- summary: in Italian, 2–4 sentences, written for the agency team in the first person, as the client would say it («Preferisco la variante A…»); do not write a report about the client and do not use the client's name. Say which variants they prefer or reject and what they want changed, including their reasons when given.
 - actionItems: one entry per concrete change the client asked for (empty when there are none).
   - area: one of ${ACTION_AREAS.map((a) => `"${a}"`).join(", ")} ("testo" for the main text, headline or description, "media" for images/videos and their colours or style, "cta" for the button or the link it opens, "tono" for the tone of voice, "orario" for the campaign dates, "altro" for anything else such as the placements).
   - variantId: the variantId of the variant the change is about, exactly as in its <variante> block; null only when it concerns the whole set.

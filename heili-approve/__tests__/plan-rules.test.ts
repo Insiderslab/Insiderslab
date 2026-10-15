@@ -131,6 +131,13 @@ describe("plan status", () => {
     expect(html).not.toContain("1 approvati");
     expect(plural(1, "commento", "commenti")).toBe("1 commento");
     expect(plural(2, "commento", "commenti")).toBe("2 commenti");
+    // U-05: «0 approvati» non serve, e con soli cambi richiesti resta solo quello.
+    const untouched = renderToStaticMarkup(createElement(PlanProgressBar, { progress: { approved: 0, changes: 0, total: 3 }, size: "sm" }));
+    expect(untouched).not.toContain("0 approvati");
+    expect(untouched).not.toContain("con modifiche richieste");
+    const changesOnly = renderToStaticMarkup(createElement(PlanProgressBar, { progress: { approved: 0, changes: 2, total: 3 }, size: "sm" }));
+    expect(changesOnly).toContain("2 con modifiche richieste");
+    expect(changesOnly).not.toContain("0 approvati");
   });
 
   it("is decided when nothing waits for the client and something got an answer", () => {

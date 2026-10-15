@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import type { ReactNode, RefObject } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { PortalQueue } from "./types";
 import type { PortalWording } from "./helpers";
@@ -123,46 +123,6 @@ export function SuccessPanel({
   );
 }
 
-/** Compact assistant action, kept beside the other feedback tools. */
-export function AssistantToggle({
-  open,
-  mounted = open,
-  showButton = true,
-  onToggle,
-  containerRef,
-  children,
-}: {
-  open: boolean;
-  /** Keep local feedback while the panel is collapsed, after its first opening. */
-  mounted?: boolean;
-  /** The compact trigger can live inside the manual composer action row. */
-  showButton?: boolean;
-  onToggle: () => void;
-  containerRef: RefObject<HTMLDivElement | null>;
-  /** The panel, rendered while open. */
-  children: ReactNode;
-}) {
-  return (
-    <div ref={containerRef} className="scroll-mt-4 space-y-3">
-      {showButton && <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={open ? "Chiudi Heili" : "Parla con Heili"}
-        className={`flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${open ? "border-accent bg-accent/5" : "border-border bg-background hover:border-accent"}`}
-      >
-        <HeiliAssistantIcon className="h-7 w-7" />
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-foreground">{open ? "Torna al commento manuale" : "Parla con Heili"}</span>
-          <span className="block truncate text-xs text-muted">Conversazione guidata, anche a voce</span>
-        </span>
-        <span className="ml-auto text-lg text-muted" aria-hidden="true">{open ? "←" : "→"}</span>
-      </button>}
-      {mounted && <div hidden={!open}>{children}</div>}
-    </div>
-  );
-}
-
 /** Compact conversational action shown inside the manual feedback composer. */
 export function AssistantActionButton({ onToggle }: { onToggle: () => void }) {
   return (
@@ -203,8 +163,38 @@ export function newVersionNotice(hasEmail: boolean): string {
 
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */
 export function DecisionBar({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // The floating Heili button sits above this bar. The bar is sticky, so at the
+  // end of the page it rises above the bottom edge: --decision-bar-h is the
+  // space it really takes from the bottom of the viewport, not just its height.
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const space = Math.max(0, Math.round(window.innerHeight - element.getBoundingClientRect().top));
+      document.documentElement.style.setProperty("--decision-bar-h", `${space}px`);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    const observer = new ResizeObserver(schedule);
+    observer.observe(element);
+    window.addEventListener("scroll", schedule, { passive: true, capture: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("scroll", schedule, { capture: true });
+      window.removeEventListener("resize", schedule);
+      document.documentElement.style.removeProperty("--decision-bar-h");
+    };
+  }, []);
   return (
     <div
+      ref={ref}
       className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >

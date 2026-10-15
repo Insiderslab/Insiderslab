@@ -22,7 +22,7 @@ export function PlanProgressBar({
   label,
 }: {
   progress: Pick<PlanProgress, "approved" | "total"> & Partial<Pick<PlanProgress, "changes">>;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
   /** Defaults to "8 di 12 approvati". */
   label?: string;
 }) {
@@ -30,11 +30,13 @@ export function PlanProgressBar({
   const completed = Math.min(progress.total, progress.approved + changes);
   const percent = progress.total > 0 ? Math.round((completed / progress.total) * 100) : 0;
   const text = label ?? `${completed} di ${progress.total} revisionati`;
+  const textClass = size === "xs" ? "text-xs" : size === "sm" ? "text-sm" : "text-base";
+  const barClass = size === "xs" ? "h-1" : size === "sm" ? "h-1.5" : "h-2.5";
   return (
     <div className="space-y-1.5">
-      <p className={`tabular font-semibold ${size === "sm" ? "text-sm" : "text-base"}`}>{text}</p>
+      <p className={`tabular font-semibold ${textClass}`}>{text}</p>
       <div
-        className={`overflow-hidden rounded-full bg-surface-sunken ${size === "sm" ? "h-1.5" : "h-2.5"}`}
+        className={`overflow-hidden rounded-full bg-surface-sunken ${barClass}`}
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={Math.max(progress.total, 1)}
@@ -43,8 +45,15 @@ export function PlanProgressBar({
       >
         <span className="block h-full bg-node" style={{ width: `${percent}%` }} />
       </div>
-      {progress.changes !== undefined && progress.total > 0 && (
-        <p className="text-xs text-muted">{plural(progress.approved, "approvato", "approvati")}{changes > 0 ? ` · ${changes} con modifiche richieste` : ""}</p>
+      {progress.changes !== undefined && progress.total > 0 && (progress.approved > 0 || changes > 0) && (
+        <p className={`${size === "xs" ? "text-[11px]" : "text-xs"} text-muted`}>
+          {[
+            progress.approved > 0 ? plural(progress.approved, "approvato", "approvati") : null,
+            changes > 0 ? `${changes} con modifiche richieste` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
       )}
     </div>
   );

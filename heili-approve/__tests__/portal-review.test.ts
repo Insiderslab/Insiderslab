@@ -15,6 +15,7 @@ vi.mock("@/app/review/[token]/actions", () => ({
 
 import AdsReview from "@/components/portal/ads-review";
 import BlogReview from "@/components/portal/blog-review";
+import CommentComposer from "@/components/portal/comment-composer";
 import PostCard from "@/components/portal/post-card";
 import PostReview from "@/components/portal/post-review";
 import { OpenFeedbackNotice, savedFeedbackBlocker } from "@/components/portal/review-pieces";
@@ -275,6 +276,19 @@ describe("PostReview (social) keeps its wording", () => {
     const withoutEmail = renderToStaticMarkup(createElement(PostReview, { ...props, reviewerHasEmail: false }));
     expect(withoutEmail).not.toContain("email");
     expect(withoutEmail).toContain("l&#x27;agenzia ti avviserà quando la nuova versione sarà pronta");
+  });
+
+  it("does not offer «Annulla» while the comment field is empty (U-06)", () => {
+    const html = renderToStaticMarkup(
+      createElement(CommentComposer, {
+        draft: { kind: "general" },
+        mediaLabel: null,
+        onSubmit: async () => null,
+        onCancel: () => {},
+      })
+    );
+    // The empty comment field has nothing to discard: no full-width cancel.
+    expect(html).not.toContain(">Annulla<");
   });
 
   it("puts the preview before collapsed details and keeps the complete copy accessible", () => {
