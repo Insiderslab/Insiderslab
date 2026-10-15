@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { checkImportAction, createImportAction } from "@/app/(dashboard)/posts/import/actions";
 import DropZone from "@/components/posts/import/drop-zone";
+import ImportSummary, { plural } from "@/components/posts/import/import-summary";
 import ImportRow, { type DroppedFile, type EditableRow } from "@/components/posts/import/import-row";
 import { formatBytes } from "@/components/posts/helpers";
 import { ToneChip } from "@/components/status-badge";
@@ -66,10 +67,6 @@ function toRaw(row: EditableRow): RawRow {
     sourceRow: row.sourceRow, date: row.date, time: row.time, networks: row.networks, text: row.text,
     firstComment: row.firstComment, title: row.title, images: row.images, kind: row.kind, format: row.format, networkOptions: row.networkOptions,
   };
-}
-
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
 }
 
 export default function ImportWizard({ client }: Props) {
@@ -572,12 +569,7 @@ export default function ImportWizard({ client }: Props) {
           </ul>
 
           <section className="panel sticky bottom-3 z-10 space-y-3 p-3 sm:p-4" aria-label="Crea le bozze" data-testid="import-bar">
-            <p className="text-sm" data-testid="import-summary">
-              <span className="font-semibold">{plural(ready.length, "riga pronta", "righe pronte")}</span>
-              {already.length > 0 && <span className="text-muted"> · {plural(already.length, "già importata", "già importate")}</span>}
-              {invalidCount > 0 && <span className="text-error"> · {plural(invalidCount, "riga da correggere", "righe da correggere")}, non verrà importata</span>}
-              {awaiting && <span className="text-muted"> · Controllo le righe…</span>}
-            </p>
+            <ImportSummary ready={ready.length} already={already.length} invalid={invalidCount} awaiting={awaiting} />
             {invalidCount > 0 && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <button type="button" className="btn btn-sm" onClick={gotoNextInvalid} data-testid="import-goto-invalid">
