@@ -75,7 +75,7 @@ export interface FileRef {
   mimeType: string;
 }
 
-export type RowField = "date" | "time" | "networks" | "text" | "title" | "firstComment" | "images" | "row";
+export type RowField = "date" | "time" | "networks" | "format" | "text" | "title" | "firstComment" | "images" | "row";
 
 export interface RowIssue {
   field: RowField;
@@ -116,6 +116,8 @@ export interface RowEvaluation {
   images: Array<{ name: string; file: FileRef | null }>;
   /** The title the post will get (typed, or the first words of the text). */
   title: string;
+  /** What the «Formato» column was read as, per network ("Instagram" → "Reel"); empty when blank or wrong. */
+  formats: Array<{ network: Network; label: string }>;
 }
 
 // ─── Text helpers ────────────────────────────────────────────────────────────
@@ -434,6 +436,25 @@ const FORMAT_VALUES: Record<string, string> = {
   story: "STORY",
 };
 
+/** Words of the «Formato» menu, and what each means in Metricool terms. */
+export const FORMAT_CHOICES = [
+  { value: "Post", type: "POST" },
+  { value: "Reel", type: "REEL" },
+  { value: "Storia", type: "STORY" },
+] as const;
+
+/**
+ * Which entry of the «Formato» menu a typed cell is: "" (blank), "Post",
+ * "Reel" or "Storia" (also «story», any case), or null for anything else
+ * ("Instagram: Reel", "Video"…), which the menu shows as it is.
+ */
+export function formatChoice(raw: string | undefined): "" | "Post" | "Reel" | "Storia" | null {
+  const value = (raw ?? "").trim();
+  if (!value) return "";
+  const type = FORMAT_VALUES[fold(value)];
+  return FORMAT_CHOICES.find((choice) => choice.type === type)?.value ?? null;
+}
+
 /**
  * The «Formato» column: "Post", "Reel" or "Storia" for every network of the
  * row that offers it (Instagram and Facebook), or "Rete: Formato" for one
@@ -576,7 +597,12 @@ export function evaluateRow(raw: RawRow, context: EvalContext): RowEvaluation {
   const options = parseNetworkOptions(raw.networkOptions);
   if (options.error) add("row", options.error);
   const formatOptions = parseFormatColumn(raw.format, networks);
-  if (formatOptions.error) add("row", formatOptions.error);
+  if (formatOptions.error) add("format", formatOptions.error);
+  const formats = Object.entries(formatOptions.value).flatMap(([key, data]) => {
+    const network = networks.find((candidate) => `${candidate}Data` === key);
+    const label = FORMAT_CHOICES.find((choice) => choice.type === data.type)?.value;
+    return network && label ? [{ network, label }] : [];
+  });
   // The friendly «Formato» column merges over the JSON network_options, per network.
   const networkOptions: NetworkOptions = { ...options.value };
   for (const [key, data] of Object.entries(formatOptions.value)) {
@@ -613,7 +639,7 @@ export function evaluateRow(raw: RawRow, context: EvalContext): RowEvaluation {
     issues.length === 0 && publishAt && localDateTime
       ? { publishAt, localDateTime, networks, title, text, firstComment: firstComment || null, files: matched, networkOptions }
       : null;
-  return { draft, issues, when: localDateTime ? formatWhen(localDateTime) : null, networks, images, title };
+  return { draft, issues, when: localDateTime ? formatWhen(localDateTime) : null, networks, images, title, formats };
 }
 
 /**

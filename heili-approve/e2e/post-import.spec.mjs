@@ -217,18 +217,23 @@ test("righe in due mesi: il piano non viene proposto", async ({ browser }) => {
   await context.close();
 });
 
-test("la colonna «Formato» arriva fino alla bozza: un Reel resta un Reel (QA-01)", async ({ browser }) => {
+test("la colonna «Formato» arriva fino alla bozza: un Reel resta un Reel, e si corregge dal menu (QA-01, QA-03)", async ({ browser }) => {
   const context = await agencyContext(browser, data);
   const page = await context.newPage();
   await page.goto(`/posts/import?clientId=${client.id}`);
   const when = dmy(460);
   await page.getByTestId("import-paste").fill(
-    `Data\tOra\tReti\tTesto\tTitolo\tImmagini\tFormato\n${when}\t10:30\tInstagram\tTesto del reel\tE2E import Reel\te2e-reel.mp4\tReel`
+    `Data\tOra\tReti\tTesto\tTitolo\tImmagini\tFormato\n${when}\t10:30\tInstagram\tTesto del reel\tE2E import Reel\te2e-reel.mp4\tVideo`
   );
   await page.getByTestId("import-paste-read").click();
   await page.getByTestId("import-media-drop-input").setInputFiles(REEL);
   const row = page.getByTestId("import-row");
+  // «Video» is not a format: the row is red and the «Formato» menu (QA-03) fixes it.
+  await expect(row).toHaveAttribute("data-state", "invalid");
+  await expect(row.getByTestId("import-row-issues")).toContainText("Formato non riconosciuto: «Video»");
+  await row.getByLabel("Formato").selectOption("Reel");
   await expect(row).toHaveAttribute("data-state", "ready");
+  await expect(row.getByTestId("import-format-read")).toContainText("Instagram: Reel");
   await page.getByTestId("import-create").click();
   await expect(page.getByTestId("import-result-title")).toHaveText("Creata 1 bozza", { timeout: 60_000 });
   const { rows } = await db.query(`select "networkOptions" from "Post" where title = 'E2E import Reel'`);

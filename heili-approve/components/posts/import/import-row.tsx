@@ -2,7 +2,7 @@
 
 /**
  * One row of the "Importa post" preview: the cells as editable fields (date,
- * time, networks, text, pictures, title, first comment), what was understood
+ * time, networks, format, text, pictures, title, first comment), what was understood
  * from them (the date in words, the networks, a thumbnail per picture) and,
  * when the row cannot become a draft, the reasons in Italian. A row with
  * problems is red and always says "Da correggere".
@@ -10,7 +10,7 @@
 
 import { ToneChip } from "@/components/status-badge";
 import { NETWORK_LABELS } from "@/lib/domain";
-import { fileKey, type FileRef, type RawRow, type RowEvaluation, type RowField, type RowIssue } from "@/lib/post-import/rows";
+import { FORMAT_CHOICES, fileKey, formatChoice, type FileRef, type RawRow, type RowEvaluation, type RowField, type RowIssue } from "@/lib/post-import/rows";
 
 export type EditableRow = RawRow & { id: number };
 
@@ -92,6 +92,11 @@ export default function ImportRow({
       ? { className: "field", style: { borderColor: "var(--color-error)" }, "aria-invalid": true as const }
       : { className: "field" };
   const characters = Array.from(row.text).length;
+  // «Formato» is a menu of the three words; anything else typed in the sheet
+  // ("Video", "Instagram: Reel") stays selectable as it is until it is changed.
+  const choice = formatChoice(row.format);
+  const customFormat = choice === null ? (row.format ?? "").trim() : null;
+  const formatSelectValue = choice ?? customFormat ?? "";
 
   return (
     <li
@@ -159,25 +164,54 @@ export default function ImportRow({
             onChange={(e) => onChange(row.id, { time: e.target.value })}
           />
         </Cell>
-        <Cell id={`${base}-networks`} label="Reti" invalid={has("networks")} className="sm:col-span-2 lg:col-span-1">
-          <input
-            id={`${base}-networks`}
-            {...fieldProps("networks")}
-            value={row.networks}
-            disabled={disabled}
-            placeholder="Instagram, Facebook"
-            onChange={(e) => onChange(row.id, { networks: e.target.value })}
-          />
-          {evaluation.networks.length > 0 && (
-            <span className="flex flex-wrap gap-1">
-              {evaluation.networks.map((network) => (
-                <span key={network} className="chip chip-brand">
-                  {NETWORK_LABELS[network]}
-                </span>
+        <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-1 lg:grid-cols-1 lg:content-start">
+          <Cell id={`${base}-networks`} label="Reti" invalid={has("networks")}>
+            <input
+              id={`${base}-networks`}
+              {...fieldProps("networks")}
+              value={row.networks}
+              disabled={disabled}
+              placeholder="Instagram, Facebook"
+              onChange={(e) => onChange(row.id, { networks: e.target.value })}
+            />
+            {evaluation.networks.length > 0 && (
+              <span className="flex flex-wrap gap-1">
+                {evaluation.networks.map((network) => (
+                  <span key={network} className="chip chip-brand">
+                    {NETWORK_LABELS[network]}
+                  </span>
+                ))}
+              </span>
+            )}
+          </Cell>
+          <Cell id={`${base}-format`} label="Formato" invalid={has("format")}>
+            <select
+              id={`${base}-format`}
+              {...fieldProps("format")}
+              value={formatSelectValue}
+              disabled={disabled}
+              onChange={(e) => onChange(row.id, { format: e.target.value })}
+              data-testid="import-format"
+            >
+              <option value="">Predefinito (Post)</option>
+              {FORMAT_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.value}
+                </option>
               ))}
-            </span>
-          )}
-        </Cell>
+              {customFormat !== null && <option value={customFormat}>«{customFormat}»</option>}
+            </select>
+            {evaluation.formats.length > 0 && (
+              <span className="flex flex-wrap gap-1" data-testid="import-format-read">
+                {evaluation.formats.map(({ network, label }) => (
+                  <span key={network} className="chip chip-brand">
+                    {NETWORK_LABELS[network]}: {label}
+                  </span>
+                ))}
+              </span>
+            )}
+          </Cell>
+        </div>
         <Cell id={`${base}-text`} label="Testo" invalid={has("text")} className="sm:col-span-2 lg:col-span-1">
           <textarea
             id={`${base}-text`}

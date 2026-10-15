@@ -321,3 +321,31 @@ describe("createImportedDrafts", () => {
     expect(again.plan).toMatchObject({ status: "error", message: expect.stringContaining("il piano no") });
   });
 });
+
+describe("«Formato» in the preview grid (QA-03)", () => {
+  it("reads the menu words, any case, and tells apart what the menu cannot show", async () => {
+    const { formatChoice } = await import("@/lib/post-import/rows");
+    expect(formatChoice("")).toBe("");
+    expect(formatChoice(undefined)).toBe("");
+    expect(formatChoice(" reel ")).toBe("Reel");
+    expect(formatChoice("STORY")).toBe("Storia");
+    expect(formatChoice("Post")).toBe("Post");
+    expect(formatChoice("Video")).toBeNull();
+    expect(formatChoice("Instagram: Reel")).toBeNull();
+  });
+
+  it("puts a wrong format on the «Formato» field, not on the whole row", () => {
+    const result = evaluateRow(row({ format: "Video" }), ctx());
+    expect(result.issues).toEqual([{ field: "format", message: expect.stringContaining("Formato non riconosciuto: «Video»") }]);
+    expect(result.formats).toEqual([]);
+  });
+
+  it("says which format was read, per network", () => {
+    const reel: FileRef = { name: "reel.mp4", size: 2000, type: "video", mimeType: "video/mp4" };
+    const all = evaluateRow(row({ images: "reel.mp4", format: "Reel" }), ctx({ files: [reel] }));
+    expect(all.formats).toEqual([{ network: "instagram", label: "Reel" }, { network: "facebook", label: "Reel" }]);
+    const one = evaluateRow(row({ images: "reel.mp4", format: "Instagram: Storia" }), ctx({ files: [reel] }));
+    expect(one.formats).toEqual([{ network: "instagram", label: "Storia" }]);
+    expect(evaluateRow(row(), ctx()).formats).toEqual([]);
+  });
+});
