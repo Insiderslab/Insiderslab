@@ -44,3 +44,20 @@ describe("ImportRow «Formato» cell", () => {
     expect(render({})).toMatch(/<option value="" selected="">Predefinito \(Post\)<\/option>/);
   });
 });
+
+describe("ImportRow as a focus target (QA-02)", () => {
+  it("can be focused by script and is named by its row number, with the reasons as its description", () => {
+    const html = render({ date: "01/01/2020" });
+    const li = html.match(/<li[^>]*data-testid="import-row"[^>]*>|<li[^>]*id="import-row-1"[^>]*>/)?.[0] ?? "";
+    expect(li).toContain('tabindex="-1"');
+    expect(li).toContain('aria-labelledby="import-row-1-name"');
+    expect(li).toContain('aria-describedby="import-row-1-issues"');
+    expect(html).toContain('id="import-row-1-name"');
+    expect(html).toContain('id="import-row-1-issues"');
+    expect(li).toContain("scroll-mt-3");
+  });
+
+  it("has no description when the row is fine", () => {
+    expect(render({})).not.toContain("aria-describedby");
+  });
+});

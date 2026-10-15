@@ -153,7 +153,13 @@ export default function ImportWizard({ client }: Props) {
     if (invalids.length === 0) return;
     const target = invalids[invalidCursor.current % invalids.length];
     invalidCursor.current += 1;
-    document.getElementById(`import-row-${target.row.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const row = document.getElementById(`import-row-${target.row.id}`);
+    if (!row) return;
+    // Top of the row (its red reasons and first fields) at the top of the page: a row is
+    // taller than the room a phone leaves above the bar, so centring hid half of it under
+    // the bar. Focus moves to the row so keyboard and screen reader follow.
+    row.scrollIntoView({ block: "start", behavior: "smooth" });
+    row.focus({ preventScroll: true });
   }
   // A sendable row without the server's answer yet (check scheduled or in flight):
   // creating now would trust a stale picture of the rows.
@@ -543,6 +549,18 @@ export default function ImportWizard({ client }: Props) {
               hint="Trascina qui le foto e i video che mancano: li abbino per nome alla colonna «Immagini»."
               testId="import-media-drop"
             />
+            {(invalidCount > 0 || onlyInvalid) && (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-accent"
+                  checked={onlyInvalid}
+                  onChange={(e) => setOnlyInvalid(e.target.checked)}
+                  data-testid="import-only-invalid"
+                />
+                Mostra solo da correggere
+              </label>
+            )}
             {unused.length > 0 && (
               <p className="text-sm text-warning" data-testid="import-unused">
                 File non usati da nessuna riga: {unused.map((f) => f.ref.name).join(", ")}.
@@ -568,25 +586,9 @@ export default function ImportWizard({ client }: Props) {
             ))}
           </ul>
 
-          <section className="panel sticky bottom-3 z-10 space-y-3 p-3 sm:p-4" aria-label="Crea le bozze" data-testid="import-bar">
+          {/* Compact on phones (QA-02): the bar stays over the rows, so each line it adds is a line of the sheet hidden. */}
+          <section className="panel sticky bottom-3 z-10 space-y-2 p-3 sm:space-y-3 sm:p-4" aria-label="Crea le bozze" data-testid="import-bar">
             <ImportSummary ready={ready.length} already={already.length} invalid={invalidCount} awaiting={awaiting} />
-            {invalidCount > 0 && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <button type="button" className="btn btn-sm" onClick={gotoNextInvalid} data-testid="import-goto-invalid">
-                  Vai alla prossima da correggere
-                </button>
-                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-accent"
-                    checked={onlyInvalid}
-                    onChange={(e) => setOnlyInvalid(e.target.checked)}
-                    data-testid="import-only-invalid"
-                  />
-                  Mostra solo da correggere
-                </label>
-              </div>
-            )}
             {sendable.length > 0 &&
               (planMonth ? (
                 <label className="flex min-h-11 items-center gap-3 text-sm">
@@ -605,17 +607,29 @@ export default function ImportWizard({ client }: Props) {
                   Le righe sono in mesi diversi ({months.map((m) => planMonthLabel(m)).join(", ")}): il piano riguarda un mese solo, lo crei dopo dalla pagina Piani.
                 </p>
               ))}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 sm:flex-wrap sm:gap-3">
+              {invalidCount > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-sm min-w-0 px-3"
+                  onClick={gotoNextInvalid}
+                  aria-label="Vai alla prossima da correggere"
+                  data-testid="import-goto-invalid"
+                >
+                  <span className="sm:hidden" aria-hidden="true">Prossima da correggere</span>
+                  <span className="hidden sm:inline" aria-hidden="true">Vai alla prossima da correggere</span>
+                </button>
+              )}
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-primary min-w-0 flex-1 whitespace-normal sm:flex-none sm:whitespace-nowrap"
                 disabled={busy !== null || ready.length === 0 || awaiting}
                 onClick={create}
                 data-testid="import-create"
               >
                 {busy ?? (awaiting ? "Controllo le righe…" : ready.length === 0 ? "Nessuna riga da creare" : ready.length === 1 ? "Crea 1 bozza" : `Crea ${ready.length} bozze`)}
               </button>
-              <span className="text-xs text-muted">Si creano solo bozze: non parte nulla verso il cliente.</span>
+              <span className="hidden text-xs text-muted sm:inline">Si creano solo bozze: non parte nulla verso il cliente.</span>
             </div>
           </section>
         </>

@@ -101,13 +101,19 @@ export default function ImportRow({
   return (
     <li
       id={`import-row-${row.id}`}
-      className="panel space-y-3 p-3 sm:p-4"
+      // Focusable by script: "Vai alla prossima da correggere" lands here, so keyboard and screen reader follow.
+      tabIndex={-1}
+      aria-labelledby={`${base}-name`}
+      aria-describedby={invalid ? `${base}-issues` : undefined}
+      className="panel scroll-mt-3 space-y-3 p-3 sm:p-4"
       style={invalid ? { borderColor: "var(--color-error)", background: "var(--color-error-soft)" } : undefined}
       data-testid="import-row"
       data-state={invalid ? "invalid" : existing ? "existing" : checking ? "checking" : "ready"}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="label-caps">Riga {row.sourceRow}</span>
+        <span id={`${base}-name`} className="label-caps">
+          Riga {row.sourceRow}
+        </span>
         {invalid ? (
           <ToneChip tone="error">Da correggere</ToneChip>
         ) : existing ? (
@@ -134,7 +140,7 @@ export default function ImportRow({
       </div>
 
       {invalid && (
-        <ul className="space-y-1 text-sm text-error" data-testid="import-row-issues">
+        <ul id={`${base}-issues`} className="space-y-1 text-sm text-error" data-testid="import-row-issues">
           {issues.map((issue) => (
             <li key={`${issue.field}-${issue.message}`}>{issue.message}</li>
           ))}

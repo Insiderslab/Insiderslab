@@ -242,6 +242,44 @@ test("la colonna «Formato» arriva fino alla bozza: un Reel resta un Reel, e si
   await context.close();
 });
 
+test("a 390 px la barra è bassa e «Prossima da correggere» mostra la riga sopra la barra (QA-02, QA-07)", async ({ browser }) => {
+  const context = await agencyContext(browser, data, { options: MOBILE });
+  const page = await context.newPage();
+  await page.goto(`/posts/import?clientId=${client.id}`);
+  const bad = Array.from({ length: 7 }, (_, i) => ["01/01/2020", "09:00", "Facebook", `E2E import R${i + 1}`]);
+  await page.getByTestId("import-paste").fill(sheet([[dmy(430), "10:30", "Facebook", "E2E import Q"], ...bad]));
+  await page.getByTestId("import-paste-read").click();
+  const rows = page.getByTestId("import-row");
+  await expect(rows).toHaveCount(8);
+  await expect(page.getByTestId("import-summary")).toContainText("7 righe da correggere, non verranno importate");
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…");
+
+  // The bar over the rows is a fifth of the phone at most (it was 310 px of 844).
+  const bar = page.getByTestId("import-bar");
+  expect((await bar.boundingBox()).height).toBeLessThanOrEqual(844 * 0.25);
+  // Both buttons are whole (no text spilling out) and at least 44 px high.
+  for (const id of ["import-goto-invalid", "import-create"]) {
+    const box = await page.getByTestId(id).boundingBox();
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(await page.getByTestId(id).evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  }
+
+  // «Prossima da correggere»: the row's reasons end up above the bar and the focus is on the row.
+  for (const n of [1, 2]) {
+    await page.getByTestId("import-goto-invalid").click();
+    const row = rows.nth(n); // row 0 is the good one
+    await expect
+      .poll(async () => {
+        const issues = await row.getByTestId("import-row-issues").boundingBox();
+        const barBox = await bar.boundingBox();
+        return issues.y >= 0 && issues.y + issues.height <= barBox.y;
+      }, { message: `riga ${n} sopra la barra` })
+      .toBe(true);
+    expect(await row.evaluate((el) => el === document.activeElement)).toBe(true);
+  }
+  await context.close();
+});
+
 test("a 390 px niente scorrimento laterale", async ({ browser }) => {
   const context = await agencyContext(browser, data, { options: MOBILE });
   const page = await context.newPage();
