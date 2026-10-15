@@ -2,9 +2,10 @@
 
 ## Riepilogo in cima
 
-- **Fatte:** H-01, H-02, U-01, H-03, H-04, U-03, U-02, U-06, U-07, U-05, U-04, U-08, H-05
+- **Fatte:** H-01, H-02, U-01, H-03, H-04, U-03, U-02, U-06, U-07, U-05, U-04, U-08, H-05, **C-01** (documento `docs/SITO-WEB.md`)
+- **C-01 / merge del base (seconda sessione):** eseguito `git merge --no-edit origin/claude/bold-lovelace-xdiiw9` e push. Il documento `docs/SITO-WEB.md` (365 righe) **era già presente e completo** nel commit `5b35099` del ramo base («Repo safety net, website review design and product plan»): non ho scritto codice né riscritto il documento, l'ho solo verificato contro i requisiti di C-01 (modello dati, script «Sul sito», foto della zona, Istantanee, Heili, flussi agenzia/cliente, rischi, test, fasi). Tutti i punti sono coperti. Verifica post-merge: `npx tsc --noEmit` pulito, `npx vitest run --maxWorkers=4` **70 file / 1021 test verdi**.
 - **Saltate:** niente di previsto; **e2e e schermate impossibili** (vedi punto 1 e 2 sotto)
-- **Resta da fare:** niente sul piano; la verifica visiva/e2e delle attività H/U resta all'ambiente completo
+- **Resta da fare:** niente sul piano (C-01 chiuso); la verifica visiva/e2e delle attività H/U e la revisione del documento C-01 restano a Claude/Stefano
 - **Da controllare da Claude domattina:**
   1. **e2e non eseguibili stanotte** (mancano Postgres, Redis, worker e Playwright su questa macchina; `sh` non c'è). Le spec e2e sono state aggiornate solo dove il percorso cambia; vanno eseguite in CI/ambiente completo.
   2. **Schermate prima/dopo non fatte** per lo stesso motivo: l'app non parte senza database. La cartella `docs/notte/shots-13-10/` non è stata creata.
@@ -95,6 +96,13 @@
 - `npx vitest run --maxWorkers=4`: **67 file, 1003 test, tutti verdi**.
 - `npm run build` **tentato**: si ferma con `FATAL ERROR: Zone Allocation failed - process out of memory` (Turbopack, esaurimento risorse della macchina — probabilmente anche per il processo esterno QA-17 attivo). Non è un errore di codice emerso dai test; **va rilanciato in CI** o su una macchina libera.
 - E2e e schermate: **non eseguibili stanotte** (niente Postgres, Redis, worker, Playwright né `sh` su questa macchina). La cartella `docs/notte/shots-13-10/` non è stata creata; le spec e2e sono aggiornate dove serviva e vanno eseguite in ambiente completo.
+
+## Seconda sessione — merge del ramo base e C-01 (15/10/2026)
+
+- `git fetch origin && git merge --no-edit origin/claude/bold-lovelace-xdiiw9` (merge, non rebase, come richiesto) → portato sul branch il commit `5b35099` («Repo safety net, website review design and product plan») e la storia intermedia; `git push -u origin deepseek/notte-2026-10-13`.
+- Il merge ha portato anche `.gitignore` alla radice, `.github/workflows/approve-ci.yml`, `docs/PIANO-PRODOTTO.md` e una serie di ritocchi a `e2e/`, `lib/` e `components/` (vedi il diff del commit `5b35099`): nessuno in conflitto con le attività H/U già fatte.
+- **C-01 (`docs/SITO-WEB.md`): già completo nel ramo base.** Il documento (365 righe) era stato scritto da Claude nel commit `5b35099` e si auto-identifica come task C-01. Ho verificato che copra tutti i punti richiesti dal piano: modello dati (`ContentKind.WEBSITE`, `WebsiteSite`/`WebsiteSession`/`WebsiteCapture`, contenuto della versione, ancore `LiveAnchor`/`SnapshotAnchor`), script «Sul sito» (iframe + Shadow DOM + `postMessage` con controllo d'origine), foto della zona commentata (scelta motivata: lato server), Istantanee (Chromium nel `capture-worker`, anti-SSRF 1–7, impatto Docker, ricattura = nuova versione), Heili (ramo sito nei prompt, marcatori, voce, dock Parte A), flusso agenzia e flusso cliente, sicurezza/privacy (tabella rischi), piano di test (unit + e2e) e fasi con impegno. **Nessun codice, nessuna migrazione Prisma, nessun `app/generated/`** (coerente con «Non stanotte»).
+- Verifica post-merge: `npx tsc --noEmit` **pulito**; `npx vitest run --maxWorkers=4` **70 file / 1021 test, tutti verdi** (i 18 test in più rispetto alla notte scorsa sono i nuovi `db-client`, `env`, `glossary`, `proxy` portati dal ramo base).
 
 ## Commit sul branch (da `f81d10b`)
 
