@@ -34,6 +34,7 @@ async function cleanup() {
   await db.query(`delete from "Post" where title like 'E2E import %'`);
 }
 
+const REEL = { name: "e2e-reel.mp4", mimeType: "video/mp4", buffer: readFileSync(path.join(FIXTURES, "reel-test.mp4")) };
 const IMAGE = { name: "e2e-foto.png", mimeType: "image/png", buffer: readFileSync(path.join(FIXTURES, "post-image.png")) };
 
 /** TSV with a header: [date, time, networks, text, images] per row. */
@@ -213,6 +214,26 @@ test("righe in due mesi: il piano non viene proposto", async ({ browser }) => {
   await expect(page.getByTestId("import-plan-multi")).toContainText("mesi diversi");
   await expect(page.getByTestId("import-plan-check")).toHaveCount(0);
   await expect(page.getByTestId("import-create")).toHaveText("Crea 2 bozze");
+  await context.close();
+});
+
+test("la colonna «Formato» arriva fino alla bozza: un Reel resta un Reel (QA-01)", async ({ browser }) => {
+  const context = await agencyContext(browser, data);
+  const page = await context.newPage();
+  await page.goto(`/posts/import?clientId=${client.id}`);
+  const when = dmy(460);
+  await page.getByTestId("import-paste").fill(
+    `Data\tOra\tReti\tTesto\tTitolo\tImmagini\tFormato\n${when}\t10:30\tInstagram\tTesto del reel\tE2E import Reel\te2e-reel.mp4\tReel`
+  );
+  await page.getByTestId("import-paste-read").click();
+  await page.getByTestId("import-media-drop-input").setInputFiles(REEL);
+  const row = page.getByTestId("import-row");
+  await expect(row).toHaveAttribute("data-state", "ready");
+  await page.getByTestId("import-create").click();
+  await expect(page.getByTestId("import-result-title")).toHaveText("Creata 1 bozza", { timeout: 60_000 });
+  const { rows } = await db.query(`select "networkOptions" from "Post" where title = 'E2E import Reel'`);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].networkOptions).toEqual({ instagramData: { type: "REEL" } });
   await context.close();
 });
 
