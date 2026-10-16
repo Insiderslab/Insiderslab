@@ -2656,13 +2656,56 @@ export function summarizeVersionForList(
   return { cover: null, mediaCount: 0, variantCount: kind === "AD_CREATIVE" ? 0 : null, excerpt: "" };
 }
 
-/** Posts of the reviewer's client that the portal lists, by publish date. */
-export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<ReviewerPostSummary[]> {
-  const posts = await prisma.post.findMany({
-    where: { clientId: reviewer.clientId, status: { in: CLIENT_VISIBLE_STATUSES }, kind: { in: enabledKinds() } },
-    orderBy: { publishAt: "asc" },
-    take: 500,
-  });
+/** Statuses still open for the client: always listed, however long the history is. */
+const REVIEWER_OPEN_STATUSES: PostStatus[] = ["IN_REVIEW", "CHANGES_REQUESTED"];
+/** Decided posts (approved, scheduled…) listed besides the open ones: the most recent by publish date. */
+export const REVIEWER_HISTORY_LIMIT = 300;
+/** Safety cap for one query (a plan or a month never comes close). */
+const REVIEWER_LIST_CAP = 1000;
+
+export interface ReviewerListScope {
+  /** Only this plan's posts (the plan page). */
+  planId?: string;
+  /** Only posts published in [from, to) (the month page; filter the exact month afterwards). */
+  from?: Date;
+  to?: Date;
+}
+
+/**
+ * Posts of the reviewer's client that the portal lists, by publish date.
+ *
+ * Without a scope: every post still open for the client (in review, changes
+ * requested) plus the REVIEWER_HISTORY_LIMIT most recent decided ones. A long
+ * history never hides what waits for the client (a plain `take` on the oldest
+ * first did: with 500 past posts the home said "nothing to approve").
+ */
+export async function listPostsForReviewer(reviewer: ReviewerRef, scope: ReviewerListScope = {}): Promise<ReviewerPostSummary[]> {
+  const base: Prisma.PostWhereInput = {
+    clientId: reviewer.clientId,
+    status: { in: CLIENT_VISIBLE_STATUSES },
+    kind: { in: enabledKinds() },
+    ...(scope.planId ? { planId: scope.planId } : {}),
+    ...(scope.from || scope.to ? { publishAt: { ...(scope.from ? { gte: scope.from } : {}), ...(scope.to ? { lt: scope.to } : {}) } } : {}),
+  };
+  const scoped = Boolean(scope.planId || scope.from || scope.to);
+  const posts = scoped
+    ? await prisma.post.findMany({ where: base, orderBy: { publishAt: "asc" }, take: REVIEWER_LIST_CAP })
+    : (
+        await Promise.all([
+          prisma.post.findMany({
+            where: { AND: [base, { status: { in: REVIEWER_OPEN_STATUSES } }] },
+            orderBy: { publishAt: "asc" },
+            take: REVIEWER_LIST_CAP,
+          }),
+          prisma.post.findMany({
+            where: { AND: [base, { status: { notIn: REVIEWER_OPEN_STATUSES } }] },
+            orderBy: { publishAt: "desc" },
+            take: REVIEWER_HISTORY_LIMIT,
+          }),
+        ])
+      )
+        .flat()
+        .sort((a, b) => a.publishAt.getTime() - b.publishAt.getTime());
   if (posts.length === 0) return [];
 
   const submitted = await lastSubmittedVersions(prisma, posts.map((p) => p.id));
