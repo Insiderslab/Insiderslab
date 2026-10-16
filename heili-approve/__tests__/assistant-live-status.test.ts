@@ -4,12 +4,22 @@ import { liveStatus } from "@/components/review/assistant-panel";
 /** H-04: stato della chiamata con parola e tinta, senza animazioni. */
 describe("stati della conversazione vocale", () => {
   it("una parola chiara per ogni fase", () => {
+    // The microphone is asked for at the tap: the first word says so.
+    expect(liveStatus("preparing", { muted: false, speaking: false, step: "microphone" })).toEqual({
+      label: "Attivo il microfono: se il browser lo chiede, tocca «Consenti».",
+      tone: "waiting",
+    });
+    // Then the media context, with the count from /voice/prepare.
+    expect(liveStatus("preparing", { muted: false, speaking: false, step: "context", preparation: { total: 3, ready: 2, videos: 0 } })).toEqual({
+      label: "Preparo le immagini: 2 di 3",
+      tone: "waiting",
+    });
     expect(liveStatus("preparing", { muted: false, speaking: false })).toEqual({
-      label: "Preparo il contesto di immagini e video…",
+      label: "Preparo la conversazione…",
       tone: "waiting",
     });
     expect(liveStatus("connecting", { muted: false, speaking: false })).toEqual({
-      label: "Collegamento al microfono…",
+      label: "Mi collego a Heili…",
       tone: "waiting",
     });
     expect(liveStatus("closing", { muted: false, speaking: false })).toEqual({

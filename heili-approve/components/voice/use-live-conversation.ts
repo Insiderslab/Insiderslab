@@ -1,13 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { VOICE_COPY, type VoiceUnavailableReason } from "@/lib/review-assistant/shared";
+import {
+  isSlowPreparation,
+  microphoneErrorMessage,
+  voiceSupportProblem,
+  type VoicePreparation,
+  type VoiceSupportProblem,
+} from "./voice-rules";
 
 const subscribeCapabilities = () => () => {};
-const browserSupportsVoice = () => Boolean(window.isSecureContext && window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia);
-const serverSupportsVoice = () => false;
+const browserVoiceProblem = (): VoiceSupportProblem | null =>
+  voiceSupportProblem({
+    isSecureContext: window.isSecureContext,
+    RTCPeerConnection: window.RTCPeerConnection,
+    getUserMedia: navigator.mediaDevices?.getUserMedia,
+  });
+// The panel only renders in the browser (inside the dock): the server value never shows.
+const serverVoiceProblem = (): VoiceSupportProblem | null => "browser";
 
 type Phase = "idle" | "preparing" | "connecting" | "active" | "closing";
+/** Inside "preparing": first the microphone (asked at the tap), then the media context. */
+export type PreparingStep = "microphone" | "context";
 type Call = { callId: string; sdp: string; expiresAt: string; sessionId: string };
+type Readiness = VoicePreparation & { status: "ready" | "pending" | "unavailable"; reason?: VoiceUnavailableReason | null };
 type Connection = {
   generation: number;
   peer: RTCPeerConnection;
@@ -21,12 +38,18 @@ type Connection = {
 };
 
 async function request<T>(url: string, method: string, body: unknown, keepalive = false, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, {
-    method, cache: "no-store", keepalive,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: keepalive ? undefined : signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method, cache: "no-store", keepalive,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: keepalive ? undefined : signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+    });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError" && signal?.aborted) throw cause;
+    throw new Error("Connessione non riuscita. Controlla la rete e riprova.");
+  }
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.success) {
     throw new Error(result?.error || "La connessione vocale non è riuscita. Riprova.");
@@ -52,7 +75,10 @@ export function useLiveConversation(input: {
   onClosed: () => Promise<unknown>;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
-  const supported = useSyncExternalStore(subscribeCapabilities, browserSupportsVoice, serverSupportsVoice);
+  const supportProblem = useSyncExternalStore(subscribeCapabilities, browserVoiceProblem, serverVoiceProblem);
+  const [step, setStep] = useState<PreparingStep | null>(null);
+  const [preparation, setPreparation] = useState<VoicePreparation | null>(null);
+  const [slow, setSlow] = useState(false);
   const [muted, setMuted] = useState(false);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +109,7 @@ export function useLiveConversation(input: {
     generation.current++;
     connection.preparationAbort.abort();
     setPhase("closing");
+    setStep(null);
     connection.stream?.getTracks().forEach((track) => track.stop());
     connection.audio.pause();
     connection.closing = (async () => {
@@ -101,6 +128,8 @@ export function useLiveConversation(input: {
         release(connection);
         if (current.current === connection) current.current = null;
         setPhase("idle");
+        setPreparation(null);
+        setSlow(false);
         setExpiresAtMs(null);
         setRemainingSeconds(null);
         setMuted(false);
@@ -127,8 +156,21 @@ export function useLiveConversation(input: {
 
   const start = useCallback(async (contextMarker: string) => {
     if (current.current) return;
+    // The microphone is asked for right here, inside the tap, before any wait:
+    // mobile browsers (iOS Safari above all) may refuse a request that comes
+    // seconds later, and the permission prompt is the tap's first answer. The
+    // track stays disabled (nothing is captured or sent) until the call starts.
+    let microphone: Promise<MediaStream>;
+    try {
+      microphone = navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (cause) {
+      microphone = Promise.reject(cause);
+    }
     setError(null);
     setPhase("preparing");
+    setStep("microphone");
+    setPreparation(null);
+    setSlow(false);
     setExpiresAtMs(null);
     setRemainingSeconds(null);
     setClientText("");
@@ -189,14 +231,30 @@ export function useLiveConversation(input: {
     };
     channel.onclose = () => { if (alive()) fail("Connessione vocale chiusa. Puoi continuare nella chat."); };
     try {
+      const stream = await microphone;
+      if (!alive()) { stream.getTracks().forEach((track) => track.stop()); return; }
+      connection.stream = stream;
+      stream.getAudioTracks().forEach((track) => { track.enabled = false; });
+      setStep("context");
+
       const preparationDeadline = Date.now() + 90_000;
+      let lastReady = -1;
+      let lastProgressAt = Date.now();
       while (alive()) {
-        const readiness = await request<{ status: "ready" | "pending" | "unavailable" }>(
+        const readiness = await request<Readiness>(
           `${input.url}/prepare`, "POST", { postId: input.postId, versionNumber: input.versionNumber }, false, connection.preparationAbort.signal
         );
         if (!alive()) return;
+        setPreparation({ total: readiness.total ?? 0, ready: readiness.ready ?? 0, videos: readiness.videos ?? 0 });
         if (readiness.status === "ready") break;
-        if (readiness.status !== "pending") throw new Error("Non riesco ad analizzare le immagini o i video di questo contenuto. Puoi usare i commenti scritti; l’agenzia può verificare i file caricati.");
+        if (readiness.status !== "pending") {
+          throw new Error(readiness.reason === "media-analysis-off" ? VOICE_COPY.mediaAnalysisOff : VOICE_COPY.analysisFailed);
+        }
+        if ((readiness.ready ?? 0) > lastReady) {
+          lastReady = readiness.ready ?? 0;
+          lastProgressAt = Date.now();
+        }
+        setSlow(isSlowPreparation(lastProgressAt, Date.now()));
         if (Date.now() >= preparationDeadline) throw new Error("L’analisi del contenuto sta richiedendo più tempo del previsto. Riprova tra poco: la conversazione vocale non è ancora iniziata.");
         await new Promise<void>((resolve, reject) => {
           const signal = connection.preparationAbort.signal;
@@ -208,11 +266,13 @@ export function useLiveConversation(input: {
       }
       if (!alive()) return;
       setPhase("connecting");
+      setStep(null);
+      setSlow(false);
       connection.timer = setTimeout(() => fail("La connessione vocale sta impiegando troppo tempo. Riprova."), 45_000);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      if (!alive()) { stream.getTracks().forEach((track) => track.stop()); return; }
-      connection.stream = stream;
-      stream.getAudioTracks().forEach((track) => peer.addTrack(track, stream));
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+        peer.addTrack(track, stream);
+      });
       await peer.setLocalDescription(await peer.createOffer());
       if (peer.iceGatheringState !== "complete") {
         await new Promise<void>((resolve, reject) => {
@@ -238,9 +298,7 @@ export function useLiveConversation(input: {
       await peer.setRemoteDescription({ type: "answer", sdp: call.sdp });
     } catch (cause) {
       if (!alive()) return;
-      const denied = cause instanceof DOMException && (cause.name === "NotAllowedError" || cause.name === "PermissionDeniedError");
-      const absent = cause instanceof DOMException && cause.name === "NotFoundError";
-      fail(denied ? "Consenti l’accesso al microfono nel browser per parlare con Heili." : absent ? "Non trovo un microfono collegato. Puoi usare la chat scritta." : cause instanceof Error ? cause.message : "Conversazione vocale non disponibile. Riprova.");
+      fail(microphoneErrorMessage(cause) ?? (cause instanceof Error ? cause.message : "Conversazione vocale non disponibile. Riprova."));
     }
   }, [input.url, input.postId, input.versionNumber]);
 
@@ -261,12 +319,16 @@ export function useLiveConversation(input: {
 
   async function enablePlayback() {
     try { await current.current?.audio.play(); setPlaybackBlocked(false); }
-    catch { setError("Il browser non riesce a riprodurre l’audio. Controlla le impostazioni del dispositivo."); }
+    catch { setError("Il browser non riesce a riprodurre l’audio. Controlla il volume e le impostazioni del dispositivo."); }
   }
 
   return {
     phase,
-    supported,
+    supported: supportProblem === null,
+    supportProblem,
+    step,
+    preparation,
+    slow,
     muted,
     playbackBlocked,
     error,
