@@ -22,7 +22,7 @@ import Link from "next/link";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
-import { approveMonthAction, approvePlanAction, approvePostAction, undoApprovalAction } from "@/app/review/[token]/actions";
+import { approveMonthAction, approvePlanAction, approvePostAction, undoApprovalAction } from "@/components/portal/safe-actions";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { NetworkPreviewTabs } from "@/components/post-preview";
 import BottomSheet from "@/components/portal/bottom-sheet";
@@ -326,7 +326,7 @@ export default function Browse({
 
       {stale && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning bg-surface p-3 text-sm" role="alert">
-          <span>L&apos;agenzia ha aggiornato qualcosa nel frattempo.</span>
+          <span>Qualcosa è cambiato nel frattempo: l&apos;ha aggiornato l&apos;agenzia, oppure lo hai già rivisto da un altro dispositivo.</span>
           <button
             type="button"
             onClick={() => {

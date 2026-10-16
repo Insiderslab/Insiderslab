@@ -30,7 +30,7 @@ import {
   finalizeDecisionsAction,
   requestChangesAction,
   undoApprovalAction,
-} from "@/app/review/[token]/actions";
+} from "@/components/portal/safe-actions";
 import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdVariantReview, { type AdCommentRequest } from "@/components/ads/ad-variant-review";
 import AssetCommentComposer from "@/components/ads/asset-comment-composer";
@@ -629,7 +629,7 @@ export default function AdsReview({
     <div className="space-y-6">
       <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato questi annunci nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="Questi annunci sono cambiati nel frattempo: li ha aggiornati l'agenzia, oppure li hai già rivisti da un altro dispositivo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
@@ -895,7 +895,7 @@ export default function AdsReview({
             />
           )}
           <div className="border-t border-border pt-4">
-            <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
+            <h3 className="mb-3 text-sm font-semibold">Commenti salvati</h3>
           <CommentList
             comments={setComments}
             media={[]}
@@ -1073,7 +1073,7 @@ function CampaignSummary({
           {rows.map((row) => (
             <div key={row.label} className="min-w-0">
               <dt className="text-xs text-muted">{row.label}</dt>
-              <dd className="whitespace-pre-wrap break-words text-sm">{row.value}</dd>
+              <dd className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{row.value}</dd>
             </div>
           ))}
         </dl>
@@ -1110,7 +1110,7 @@ function DecisionList({
             {rejected.map((item) => (
               <li key={item.name} className="break-words">
                 ✕ {item.name}
-                {item.note && <span className="block whitespace-pre-wrap pl-4 text-muted">{item.note}</span>}
+                {item.note && <span className="block whitespace-pre-wrap break-words [overflow-wrap:anywhere] pl-4 text-muted">{item.note}</span>}
               </li>
             ))}
           </ul>

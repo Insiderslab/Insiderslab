@@ -20,7 +20,7 @@ export default function OlderVersions({ versions }: { versions: PortalOlderVersi
               Versione {version.number} <span className="font-normal text-muted">· {version.dateLabel}</span>
             </p>
             {version.changeNote && (
-              <p className="whitespace-pre-wrap break-words text-sm text-muted">
+              <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm text-muted">
                 Nota dell&apos;agenzia: {version.changeNote}
               </p>
             )}

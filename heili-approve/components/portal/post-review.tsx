@@ -22,7 +22,7 @@ import {
   addCommentAction,
   requestChangesAction,
   undoApprovalAction,
-} from "@/app/review/[token]/actions";
+} from "@/components/portal/safe-actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
 import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
 import type { HeiliDestination } from "@/components/portal/heili/types";
@@ -524,7 +524,7 @@ export default function PostReview({
   const draftIndex = draft && (draft.kind === "pin" || draft.kind === "moment") ? draft.mediaIndex : null;
   const draftMedia = draftIndex !== null ? post.media[draftIndex] : undefined;
   const scheduleSentence = client.schedulingOn
-    ? `Il post verrà programmato su Metricool per ${post.publishLabel}.`
+    ? `Il post verrà programmato per ${post.publishLabel}.`
     : `L'agenzia programmerà il post per ${post.publishLabel}.`;
 
   return (
@@ -535,7 +535,7 @@ export default function PostReview({
         <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
       )}
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato questo post nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="Questo post è cambiato nel frattempo: l'ha aggiornato l'agenzia, oppure lo hai già rivisto da un altro dispositivo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
@@ -554,7 +554,7 @@ export default function PostReview({
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,640px)_minmax(340px,1fr)] lg:grid-rows-[auto_1fr] lg:items-start">
-        <div className="space-y-4 lg:col-start-2 lg:row-start-1">
+        <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1">
           <header className="space-y-2">
             {mixedList && <KindLabel kind="SOCIAL_POST" />}
             <h1 className="text-xl font-semibold leading-snug sm:text-2xl">{post.title}</h1>
@@ -617,7 +617,7 @@ export default function PostReview({
           />
         </section>
 
-        <div className="space-y-4 lg:col-start-2 lg:row-start-2">
+        <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-2">
           {(post.text || post.firstCommentText) && (
             <details className="rounded-lg border border-border bg-surface">
               <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-base font-semibold text-accent">
@@ -627,13 +627,13 @@ export default function PostReview({
                 {post.text && (
                   <div className="space-y-1">
                     <h2 className="text-sm font-semibold">Testo del post</h2>
-                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+                    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed">{post.text}</p>
                   </div>
                 )}
                 {post.firstCommentText && (
                   <div className="space-y-1">
                     <h2 className="text-sm font-semibold">Primo commento</h2>
-                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.firstCommentText}</p>
+                    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed">{post.firstCommentText}</p>
                   </div>
                 )}
               </div>
@@ -688,7 +688,7 @@ export default function PostReview({
             {notice && <p className="text-sm text-success" role="status">{notice}</p>}
             <div className="border-t border-border pt-4">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Richieste raccolte</h3>
+                <h3 className="text-sm font-semibold">Commenti salvati</h3>
                 <span className="text-xs text-muted">{post.comments.length}</span>
               </div>
               <CommentList comments={post.comments} media={post.media} onSeek={hasVideo ? seekTo : undefined}

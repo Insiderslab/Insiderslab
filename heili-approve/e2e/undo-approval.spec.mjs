@@ -118,7 +118,7 @@ test("Sfoglia (390 px): approva, Annulla, il post torna «Da approvare» e non v
   await expect(toast).toHaveAttribute("aria-live", /polite|assertive/);
   await expect(toast.getByTestId("undo-label")).toContainText("Approvato");
   const button = toast.getByTestId("undo-button");
-  await expect(button).toHaveText("Annulla");
+  await expect(button).toHaveText("Annulla l'approvazione");
   expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await expectNoHorizontalScroll(page);
   await viewportShot(page, "undo-toast-sfoglia-mobile.png");

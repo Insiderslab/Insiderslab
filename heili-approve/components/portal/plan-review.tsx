@@ -18,7 +18,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
-import { addPlanCommentAction, approvePlanAction } from "@/app/review/[token]/actions";
+import { addPlanCommentAction, approvePlanAction } from "@/components/portal/safe-actions";
 import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
 import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
@@ -53,7 +53,7 @@ export default function PlanReview({
   gridSlot: ReactNode;
   /** "Panoramica · Griglia · Sfoglia" switch, under the way back. */
   modeSlot?: ReactNode;
-  /** Phones: "Rivedi in modalità veloce", the way into Sfoglia. */
+  /** Phones: «Sfoglia i post, uno alla volta», the way into Sfoglia. */
   quickReviewSlot?: ReactNode;
 }) {
   const router = useRouter();
@@ -175,7 +175,7 @@ export default function PlanReview({
         {plan.intro && (
           <div className="inset space-y-1 p-4">
             <p className="label-caps">Il messaggio dell&apos;agenzia</p>
-            <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{plan.intro}</p>
+            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed">{plan.intro}</p>
           </div>
         )}
         <PlanProgressBar progress={progress} />
@@ -195,10 +195,10 @@ export default function PlanReview({
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                // On phones "Rivedi in modalità veloce" is the one primary action.
+                // On phones «Sfoglia i post, uno alla volta» is the one primary action.
                 className={`btn btn-primary min-h-12 order-1${quickReviewSlot ? " max-sm:!border-line-strong max-sm:!bg-surface max-sm:!text-foreground" : ""}`}
               >
-                Rivedi uno per uno
+                Apri il primo post
               </Link>
             )}
           </div>
@@ -245,7 +245,7 @@ export default function PlanReview({
                 <p className="text-xs text-muted">
                   {c.isMine ? "Tu" : c.authorName} · {c.createdLabel}
                 </p>
-                <p className="whitespace-pre-wrap break-words">{c.body}</p>
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{c.body}</p>
               </li>
             ))}
           </ul>

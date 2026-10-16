@@ -258,7 +258,7 @@ test("QA-15: «Approva tutto il piano» compare una volta sola, nella barra; in 
     // That one is the bar's: sticky at the bottom of the window.
     expect(await all.evaluate((el) => !!el.closest(".sticky.bottom-0"))).toBe(true);
     // Reviewing is still offered in the card: quick mode (when on) and one by one.
-    await expect(page.getByRole("link", { name: "Rivedi uno per uno" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Apri il primo post" })).toBeVisible();
     if (options === MOBILE) await viewportShot(page, "qa15-piano-390.png");
     await context.close();
   }

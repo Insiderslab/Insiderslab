@@ -20,7 +20,7 @@ import {
   approvePostAction,
   requestChangesAction,
   undoApprovalAction,
-} from "@/app/review/[token]/actions";
+} from "@/components/portal/safe-actions";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
 import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
@@ -478,7 +478,7 @@ export default function BlogReview({
     <div className="space-y-6">
       <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato questo articolo nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="Questo articolo è cambiato nel frattempo: l'ha aggiornato l'agenzia, oppure lo hai già rivisto da un altro dispositivo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
@@ -578,7 +578,7 @@ export default function BlogReview({
         )}
         {notice && <p className="text-sm text-success" role="status">{notice}</p>}
         <div className="border-t border-border pt-4">
-          <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
+          <h3 className="mb-3 text-sm font-semibold">Commenti salvati</h3>
         <BlogCommentList
           passages={passageComments}
           general={generalComments}
@@ -806,7 +806,7 @@ function BlogCommentItem({
             <p className="text-xs text-muted">Il passaggio è stato modificato: è evidenziato il testo più simile.</p>
           )}
           {missing && <p className="text-xs text-muted">Il passaggio è stato riscritto e non è più nel testo.</p>}
-          <p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p>
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{comment.body}</p>
           {onShowInText && !missing && (
             <button
               type="button"

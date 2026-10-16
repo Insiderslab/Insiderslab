@@ -116,7 +116,7 @@ export default function UndoToast({
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 py-1 pl-4 pr-1">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 py-1 pl-4 pr-1">
               <p className="min-w-0 text-base font-semibold text-success" data-testid="undo-label">
                 {label}
                 <span className="mx-1.5 font-normal text-muted" aria-hidden="true">
@@ -130,10 +130,10 @@ export default function UndoToast({
                 type="button"
                 onClick={undo}
                 disabled={busy}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg px-4 text-base font-semibold text-accent hover:bg-accent-soft disabled:opacity-50"
+                className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg px-4 text-base font-semibold text-accent hover:bg-accent-soft disabled:opacity-50"
                 data-testid="undo-button"
               >
-                {busy ? "Annullo…" : "Annulla"}
+                {busy ? "Annullo…" : "Annulla l'approvazione"}
               </button>
             </div>
             <div className="h-0.5 bg-surface-sunken" aria-hidden="true">

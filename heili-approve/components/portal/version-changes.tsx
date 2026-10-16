@@ -13,7 +13,7 @@ import type { PortalVersionChanges } from "./types";
 
 function DiffText({ segments }: { segments: DiffSegment[] }) {
   return (
-    <p className="whitespace-pre-wrap break-words rounded-md border border-border bg-background p-3 text-sm leading-relaxed">
+    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md border border-border bg-background p-3 text-sm leading-relaxed">
       {segments.map((segment, i) =>
         segment.type === "added" ? (
           <ins key={i} className="rounded-sm bg-success/15 text-foreground no-underline">
@@ -66,7 +66,7 @@ export default function VersionChanges({
           <p className="text-xs text-muted">
             Nota dell&apos;agenzia · versione {note.number} · {note.dateLabel}
           </p>
-          <p className="whitespace-pre-wrap break-words text-sm">{note.note}</p>
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{note.note}</p>
         </blockquote>
       ))}
 
