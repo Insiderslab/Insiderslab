@@ -653,10 +653,27 @@ export async function notifyApproved(postId: string): Promise<void> {
   }
 }
 
+/**
+ * True when the version on Metricool was approved in bulk («Approva tutto il
+ * piano», «Approva i rimanenti»): the agency already has the summary, and 300
+ * «Programmato» emails in ten seconds (QA 2026-10-16) bury it. Failures are
+ * still emailed one by one (notifyScheduleFailed).
+ */
+export async function approvedInBulk(postId: string, versionNumber: number): Promise<boolean> {
+  const event = await prisma.postEvent.findFirst({
+    where: { postId, type: "APPROVED", versionNumber },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true },
+  });
+  const metadata = event?.metadata;
+  return Boolean(metadata && typeof metadata === "object" && !Array.isArray(metadata) && (metadata as { bulk?: unknown }).bulk === true);
+}
+
 export async function notifyScheduled(postId: string): Promise<void> {
   try {
     const post = await loadPost(postId);
     if (!post) return;
+    if (await approvedInBulk(post.id, post.currentVersionNumber)) return;
     await sendToAgency(post.workspaceId, `Programmato: ${post.title}`, {
       heading: "Post programmato su Metricool",
       paragraphs: [

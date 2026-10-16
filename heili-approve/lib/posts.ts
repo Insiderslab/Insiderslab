@@ -1832,6 +1832,9 @@ export async function approvePost(
     }
 
     if (opts.undoable === true) metadata = { ...(metadata ?? {}), undoable: true };
+    // «Approva tutto il piano» / «Approva i rimanenti»: the agency gets one summary,
+    // not one «Programmato» email per post (notifyScheduled reads this mark).
+    if (opts.bulkSafety === true) metadata = { ...(metadata ?? {}), bulk: true };
     await recordEvent(tx, { postId, type: "APPROVED", actor, versionNumber, ...(metadata ? { metadata } : {}) });
     return { post: { ...post, status: next, approvedAt: now, approvedByReviewerId: reviewer.id }, changed: true };
   });
