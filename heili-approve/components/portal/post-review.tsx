@@ -521,7 +521,7 @@ export default function PostReview({
   const draftIndex = draft && (draft.kind === "pin" || draft.kind === "moment") ? draft.mediaIndex : null;
   const draftMedia = draftIndex !== null ? post.media[draftIndex] : undefined;
   const scheduleSentence = client.schedulingOn
-    ? `Il post verrà programmato su Metricool per ${post.publishLabel}.`
+    ? `Il post verrà programmato per ${post.publishLabel}.`
     : `L'agenzia programmerà il post per ${post.publishLabel}.`;
 
   return (

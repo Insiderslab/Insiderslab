@@ -9,7 +9,9 @@
 //         message and can be tapped again (they used to stay on «Approvazione…»
 //         / «Invio…» for good);
 // - K-02  a comment made of one very long word (a link) does not widen the page
-//         at 390 px.
+//         at 390 px;
+// - K-03  the client never reads «Metricool» (the sheet and the done panel say
+//         «programmato per <data>»).
 
 import { execFileSync } from "node:child_process";
 import { MOBILE, connectDb, expect, expectNoHorizontalScroll, root, seed, test, uniq } from "./helpers.mjs";
@@ -109,6 +111,19 @@ test("K-02: un commento fatto di una sola parola lunghissima non allarga la pagi
   await page.getByRole("button", { name: "Invia commento" }).click();
   await expect(page.locator("main")).toContainText("x".repeat(100));
   await expectNoHorizontalScroll(page);
+  await context.close();
+});
+
+test("K-03: il cliente non legge mai «Metricool» nel foglio di conferma né dopo l'approvazione", async ({ browser }) => {
+  const { context, page } = await phone(browser, state.b.reviewUrl);
+  await page.goto(`${state.b.reviewUrl}/posts/${state.b.secondId}`);
+  await page.getByTestId("decision-approve").click();
+  const sheet = page.locator("dialog[open]");
+  await expect(sheet).toContainText(/Il post verrà programmato per /);
+  await expect(sheet).not.toContainText("Metricool");
+  await sheet.getByRole("button", { name: "Sì, approva" }).click();
+  await expect(page.getByText("Fatto! Post approvato.")).toBeVisible();
+  expect(await page.locator("body").innerText()).not.toContain("Metricool");
   await context.close();
 });
 
