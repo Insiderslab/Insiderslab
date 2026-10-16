@@ -391,6 +391,80 @@ test("GPT-Live rifiuta la sessione: il cliente legge cosa succede e il microfono
   await context.close();
 });
 
+// ─── Dettatura del commento (SpeechRecognition del browser) ──────────────────
+
+/** The comment field's microphone, whatever its state. */
+const dictationButton = (page) =>
+  page.locator('button[aria-label="Detta il commento"], button[aria-label="Ferma dettatura"], button[aria-label="Dettatura non disponibile in questo browser"]').first();
+
+test("dettatura: senza riconoscimento vocale il tocco spiega cosa fare", async ({ browser }) => {
+  const context = await browser.newContext({ ...MOBILE, baseURL: HELI_BASE });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    delete window.SpeechRecognition;
+    delete window.webkitSpeechRecognition;
+  });
+  await page.goto(postUrl(state.fixture.secondId));
+  const mic = dictationButton(page);
+  await expect(mic).toHaveAttribute("aria-label", "Dettatura non disponibile in questo browser");
+  expect(await mic.evaluate((button) => button.disabled)).toBe(false);
+  await mic.click({ force: true }); // aria-disabled: a real tap still lands
+  await expect(page.getByRole("alert").filter({ hasText: "La dettatura non è disponibile in questo browser" })).toBeVisible({ timeout: 300 });
+  await context.close();
+});
+
+test("dettatura: un riconoscimento che non parte non lascia «Ti ascolto…» per sempre", async ({ browser }) => {
+  const context = await browser.newContext({ ...MOBILE, baseURL: HELI_BASE });
+  await context.grantPermissions(["microphone"], { origin: HELI_BASE });
+  const page = await context.newPage();
+  // Accepts start() and then never sends a single event (seen in in-app browsers).
+  await page.addInitScript(() => {
+    window.SpeechRecognition = window.webkitSpeechRecognition = class {
+      start() {}
+      stop() {}
+      abort() {}
+    };
+  });
+  await page.goto(postUrl(state.fixture.secondId));
+  await dictationButton(page).click();
+  await expect(page.getByText("Ti ascolto…")).toBeVisible({ timeout: 300 });
+  await expect(page.getByRole("alert").filter({ hasText: "Il microfono non risponde" })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText("Ti ascolto…")).toHaveCount(0);
+  await expect(dictationButton(page)).toHaveAttribute("aria-label", "Detta il commento");
+  await context.close();
+});
+
+test("dettatura: il testo arriva nel campo e «Ferma» chiude anche se il browser non lo conferma", async ({ browser }) => {
+  const context = await browser.newContext({ ...MOBILE, baseURL: HELI_BASE });
+  await context.grantPermissions(["microphone"], { origin: HELI_BASE });
+  const page = await context.newPage();
+  // Starts, hears one sentence, and never sends onend after stop().
+  await page.addInitScript(() => {
+    window.SpeechRecognition = window.webkitSpeechRecognition = class {
+      start() {
+        setTimeout(() => this.onstart?.(), 50);
+        setTimeout(() => this.onresult?.({ results: [[{ transcript: "il titolo è troppo piccolo" }]] }), 150);
+      }
+      stop() {}
+      abort() {}
+    };
+  });
+  await page.goto(postUrl(state.fixture.secondId));
+  await dictationButton(page).click();
+  const field = page.getByPlaceholder(/Per esempio/);
+  await expect(field).toHaveValue("il titolo è troppo piccolo");
+  // Past the start watchdog: a recognizer that started is never cut off.
+  await page.waitForTimeout(5_500);
+  await expect(dictationButton(page)).toHaveAttribute("aria-label", "Ferma dettatura");
+  await dictationButton(page).click();
+  await expect(dictationButton(page)).toHaveAttribute("aria-label", "Detta il commento", { timeout: 3_000 });
+  await expect(field).toHaveValue("il titolo è troppo piccolo");
+  // And it can start again at once.
+  await dictationButton(page).click();
+  await expect(page.getByText("Ti ascolto…")).toBeVisible({ timeout: 300 });
+  await context.close();
+});
+
 test("se la voce non può funzionare su questo contenuto il riquadro lo spiega; se non c'è, non compare", async ({ browser }) => {
   const context = await browser.newContext({ ...MOBILE, baseURL: HELI_BASE });
   const page = await context.newPage();

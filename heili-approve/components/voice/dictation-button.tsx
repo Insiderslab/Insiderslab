@@ -33,16 +33,26 @@ export default function DictationButton({
   }, [onErrorChange, speech.error]);
 
   if (!speech.supported) {
+    // Not a dead disabled icon: on a phone a `title` never shows, so the tap
+    // itself says why (start() sets the message) and what to do instead.
     return compact ? (
-      <button
-        type="button"
-        disabled
-        aria-label="Dettatura non disponibile in questo browser"
-        title="Dettatura non disponibile in questo browser"
-        className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border bg-background text-muted opacity-60"
-      >
-        <MicrophoneIcon />
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => speech.start()}
+          aria-disabled="true"
+          aria-label="Dettatura non disponibile in questo browser"
+          title="Dettatura non disponibile in questo browser"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border bg-background text-muted opacity-60"
+        >
+          <MicrophoneIcon />
+        </button>
+        {speech.error && !onErrorChange && (
+          <p className="absolute right-0 top-full z-10 mt-1 w-56 rounded-md border border-error/30 bg-surface p-2 text-xs text-error shadow-sm" role="alert">
+            {speech.error}
+          </p>
+        )}
+      </div>
     ) : <span className="text-xs text-muted">La dettatura non è supportata da questo browser: puoi scrivere normalmente.</span>;
   }
 
