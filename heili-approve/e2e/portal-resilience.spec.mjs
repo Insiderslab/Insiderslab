@@ -13,7 +13,9 @@
 // - K-03  the client never reads «Metricool» (the sheet and the done panel say
 //         «programmato per <data>»);
 // - K-04  the same link open on two devices: after approving on one, the other
-//         does not blame the agency for the change.
+//         does not blame the agency for the change;
+// - K-06  the toast after an approval says what «Annulla» undoes («Annulla
+//         l'approvazione»), so it is not mistaken for the sheet's «Annulla».
 
 import { execFileSync } from "node:child_process";
 import { MOBILE, connectDb, expect, expectNoHorizontalScroll, root, seed, test, uniq } from "./helpers.mjs";
@@ -149,6 +151,32 @@ test("K-04: lo stesso link su due dispositivi: l'altra scheda non dà la colpa a
   await expect(banner.getByRole("button", { name: "Mostra la versione aggiornata" })).toBeVisible();
   await one.context.close();
   await two.context.close();
+});
+
+test("K-06: il toast dopo l'approvazione dice cosa annulla e sta nello schermo a 360 e 390 px", async ({ browser }) => {
+  for (const width of [360, 390]) {
+    const token = state.c.reviewUrl.split("/").pop();
+    const context = await browser.newContext({ ...MOBILE, viewport: { width, height: 800 } });
+    await context.addInitScript((key) => window.localStorage.setItem(key, "1"), `portal.howto.${token}`);
+    const page = await context.newPage();
+    await page.goto(`${state.c.reviewUrl}/posts/${state.c.carouselId}`);
+    await page.getByTestId("decision-approve").click();
+    const sheet = page.locator("dialog[open]");
+    // In the sheet «Annulla» means «non approvare».
+    await expect(sheet.getByRole("button", { name: "Annulla", exact: true })).toBeVisible();
+    await sheet.getByRole("button", { name: "Sì, approva" }).click();
+    const undo = page.getByTestId("undo-button");
+    await expect(undo).toHaveText("Annulla l'approvazione");
+    const box = await undo.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    const fit = await undo.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+    expect(fit.scroll).toBeLessThanOrEqual(fit.client);
+    await expectNoHorizontalScroll(page, width);
+    await undo.click();
+    await expect(page.getByTestId("decision-approve")).toBeVisible();
+    await context.close();
+  }
 });
 
 async function postStatus(id) {
