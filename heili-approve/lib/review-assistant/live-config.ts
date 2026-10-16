@@ -1,6 +1,6 @@
 import type { InitialItem } from "openai/resources/live/live";
 import type { HistoryMessage } from "./prompt";
-import { ASSISTANT_BUTTONS, type AssistantMode } from "./shared";
+import { ASSISTANT_BUTTONS, type AssistantMode, type AssistantVoiceAvailability } from "./shared";
 
 export const LIVE_MODEL = "gpt-live-1";
 export const LIVE_VOICE = "marin";
@@ -14,6 +14,29 @@ function positiveIntSetting(name: string, fallback: number, maximum: number): nu
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.min(maximum, Math.max(1, Math.floor(parsed)));
+}
+
+/**
+ * Voice needs an OpenAI key with GPT-Live access; REVIEW_ASSISTANT_VOICE_ENABLED=false
+ * switches it off (for a key without that access) while the chat keeps working.
+ */
+export function liveVoiceConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.REVIEW_ASSISTANT_VOICE_ENABLED?.trim().toLowerCase() === "false") return false;
+  return Boolean(env.OPENAI_API_KEY?.trim());
+}
+
+/**
+ * What the panel can promise before any tap: a content with images or videos
+ * needs the private media analysis (the voice model never sees the files).
+ */
+export function voiceAvailability(input: {
+  configured: boolean;
+  mediaCount: number;
+  mediaAnalysisEnabled: boolean;
+}): AssistantVoiceAvailability {
+  if (!input.configured) return { available: false, reason: "not-configured" };
+  if (input.mediaCount > 0 && !input.mediaAnalysisEnabled) return { available: false, reason: "media-analysis-off" };
+  return { available: true, reason: null };
 }
 
 export function liveLimits() {

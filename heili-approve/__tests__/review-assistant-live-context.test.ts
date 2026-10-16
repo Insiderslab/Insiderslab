@@ -383,7 +383,7 @@ describe("Live service visual-context gate", () => {
     });
 
     const result = await prepareLiveCall(reviewer, { postId: "post-1", versionNumber: 4 });
-    expect(result).toEqual({ status: "pending", total: 2, ready: 1 });
+    expect(result).toEqual({ status: "pending", total: 2, ready: 1, videos: 0, reason: null });
     expect(JSON.stringify(result)).not.toContain("informazione server");
     expect(serviceMocks.prisma.$transaction).not.toHaveBeenCalled();
   });
