@@ -120,13 +120,26 @@ export function guideStatusSentence(context: Pick<HeiliPageContext, "page" | "ti
       case "browse":
         return `Stai sfogliando ${lowerFirst(title)}`;
       case "month":
-      case "post":
-      case "article":
-      case "ads":
         return `Stai rivedendo ${lowerFirst(title)}`;
+      // The dock's header already says which one ("Post 3 di 12 · Instagram"): not repeated here.
+      case "post":
+        return "Stai rivedendo questo post";
+      case "article":
+        return "Stai rivedendo questo articolo";
+      case "ads":
+        return "Stai rivedendo questo set di annunci";
     }
   })();
-  return summary ? `${base}: ${summary}.` : `${base}.`;
+  return summary ? `${base}: ${lowerFirst(summary)}.` : `${base}.`;
+}
+
+/**
+ * The line under «Heili» in the dock's header. On a content page: which one it is
+ * («Post 3 di 12 · Instagram»). Elsewhere just «Guida»: the page's title opens the status
+ * sentence right below, so it is not said twice (QA-17).
+ */
+export function dockSubtitle(context: Pick<HeiliPageContext, "review"> | null): string {
+  return context?.review ? context.review.heading : "Guida";
 }
 
 // ─── Prima visita ────────────────────────────────────────────────────────────

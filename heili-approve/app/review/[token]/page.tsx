@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   formatPortalDate,
   groupPortalPosts,
+  homePrimaryAction,
   portalMonthPath,
   portalPlanPath,
   parsePortalKind,
@@ -98,17 +99,23 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const reviewProgress = planProgress(posts.map((post) => post.status));
 
   // What Heili can offer from here: only server-built portal destinations.
+  // The Guida's «Prossimo passo» is the page's own primary button (same label, same link).
+  const primary = homePrimaryAction({
+    planHref: firstWaitingPlan?.href ?? null,
+    firstPostHref: groups.toReview[0] ? portalPath(token, groups.toReview[0].id) : null,
+    toReviewCount: groups.toReview.length,
+    theOne: noun.theOne,
+  });
   const destinations: HeiliDestination[] = [];
-  if (groups.toReview.length > 0) {
+  if (primary) destinations.push({ id: "next", label: primary.label, href: primary.href, kind: "next" });
+  if (firstWaitingPlan && groups.toReview.length > 0) {
+    // With a plan waiting, the single post is a shortcut, not the next step.
     destinations.push({
-      id: "next",
+      id: "post",
       label: groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Rivedi il prossimo post",
       href: portalPath(token, groups.toReview[0].id),
-      kind: "next",
+      kind: "post",
     });
-  }
-  if (firstWaitingPlan) {
-    destinations.push({ id: "plan", label: "Rivedi il piano del mese", href: firstWaitingPlan.href, kind: "plan" });
   }
   if (offers.length > 0) {
     const name = offerMonthName(offers[0].month, now, timeZone);
@@ -151,12 +158,9 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
                 ? `Ci sono ${groups.toReview.length} ${noun.many} che aspettano la tua approvazione: ${kindCountPhrase(toReviewByKind, { adSets: true })}.`
                 : `Ci sono ${groups.toReview.length} ${noun.many} che aspettano la tua approvazione.`}
         </p>
-        {groups.toReview.length > 0 && (
-          <Link
-            href={firstWaitingPlan?.href ?? portalPath(token, groups.toReview[0].id)}
-            className="btn btn-primary !min-h-12 w-full !text-base sm:w-auto"
-          >
-            {firstWaitingPlan ? "Rivedi il piano del mese" : groups.toReview.length === 1 ? `Rivedi ${noun.theOne}` : "Inizia dal primo"}
+        {primary && (
+          <Link href={primary.href} className="btn btn-primary !min-h-12 w-full !text-base sm:w-auto">
+            {primary.label}
           </Link>
         )}
         {groups.toReview.length > 0 && (

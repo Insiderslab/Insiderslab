@@ -251,3 +251,47 @@ test("QA-16: l'icona di Heili ha un solo significato: dove si commenta apre la c
   await expect(dock.getByRole("tab", { name: "Feedback" })).toHaveAttribute("aria-selected", "true");
   await ctx.close();
 });
+
+// ─── QA-17 ───────────────────────────────────────────────────────────────────
+
+test("QA-17: la Guida rafforza il percorso della pagina: stesso prossimo passo, niente frase ripetuta, terzo passo col nome del gesto", async ({ browser }) => {
+  const ctx = await context(browser, MOBILE);
+  const page = await ctx.newPage();
+  const dock = page.getByTestId("heili-dock");
+
+  // Home with a plan waiting: the page's big button and the Guida's next step are the same.
+  await page.goto(`${HELI_BASE}${new URL(state.month.a.reviewUrl).pathname}`);
+  const primary = page.getByRole("link", { name: "Rivedi il piano del mese" }).first();
+  await expect(primary).toBeVisible();
+  const href = await primary.getAttribute("href");
+  await page.getByTestId("heili-dock-button").click();
+  await expect(dock).toBeVisible();
+  const next = dock.getByTestId("heili-guide-next");
+  await expect(next).toHaveText("Rivedi il piano del mese");
+  await expect(next).toHaveAttribute("href", href);
+  // The line under «Heili» does not repeat the sentence that opens the Guida.
+  const subtitle = (await dock.getByTestId("heili-dock-context").textContent()).trim();
+  const status = (await dock.getByTestId("heili-guide-status").textContent()).trim();
+  expect(subtitle).toBe("Guida");
+  expect(status.startsWith(subtitle)).toBe(false);
+  expect(status).toContain("Questa è la tua pagina di revisione");
+  expect((status.match(/Questa è la tua pagina di revisione/g) ?? []).length).toBe(1);
+  await page.getByRole("button", { name: "Chiudi Heili" }).click();
+
+  // Home without a plan: «Inizia dal primo» (several waiting) is the next step too.
+  await page.goto(`${HELI_BASE}${reviewPath()}`);
+  const first = page.getByRole("link", { name: "Inizia dal primo" });
+  await expect(first).toBeVisible();
+  const firstHref = await first.getAttribute("href");
+  await page.getByTestId("heili-dock-button").click();
+  await expect(dock.getByTestId("heili-guide-next")).toHaveText("Inizia dal primo");
+  await expect(dock.getByTestId("heili-guide-next")).toHaveAttribute("href", firstHref);
+  await page.getByRole("button", { name: "Chiudi Heili" }).click();
+
+  // After «Chiedi modifiche» the last of the three steps is the gesture that closes the flow.
+  await page.goto(postUrl(state.fixture.askedId));
+  await page.getByTestId("heili-dock-button").click();
+  await expect(dock.getByTestId("assistant-steps")).toContainText("3 Aggiungi");
+  await expect(dock.getByTestId("assistant-steps")).not.toContainText("3 Invia");
+  await ctx.close();
+});

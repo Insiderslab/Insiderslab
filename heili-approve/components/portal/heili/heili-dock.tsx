@@ -19,7 +19,7 @@ import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import AssistantPanel from "@/components/review/assistant-panel";
 import { useHeili } from "./context";
 import HeiliGuide from "./heili-guide";
-import { DOCK_SIDE_MIN_WIDTH, LAUNCHER_LABELS, dockTabs, introStorageKey, launcherKind } from "./rules";
+import { DOCK_SIDE_MIN_WIDTH, LAUNCHER_LABELS, dockSubtitle, dockTabs, introStorageKey, launcherKind } from "./rules";
 
 const INTRO_MS = 6000;
 
@@ -207,7 +207,7 @@ export default function HeiliDock() {
               <div className="min-w-0">
                 <h2 className="text-base font-semibold leading-tight">Heili</h2>
                 <p className="truncate text-xs text-muted" data-testid="heili-dock-context">
-                  {review ? review.heading : context?.title ?? ""}
+                  {dockSubtitle(context)}
                 </p>
               </div>
             </div>

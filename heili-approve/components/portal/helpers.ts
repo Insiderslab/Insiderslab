@@ -495,3 +495,24 @@ export function formatPlanSlot(date: Date, timeZone: string | null | undefined):
   });
   return `${p.weekday} ${p.day} ${p.month} · ${p.hour}:${p.minute}`;
 }
+
+/**
+ * The home page's one primary action (the big button) and, identical, the Guida's
+ * «Prossimo passo»: Heili reinforces the page's path, it never contradicts it (QA-17).
+ * The monthly plan comes first, then the post waiting.
+ */
+export function homePrimaryAction(input: {
+  planHref: string | null;
+  firstPostHref: string | null;
+  toReviewCount: number;
+  /** "il post" / "l'articolo" / …, from portalNoun(...).theOne */
+  theOne: string;
+}): { label: string; href: string } | null {
+  if (input.toReviewCount <= 0) return null;
+  if (input.planHref) return { label: "Rivedi il piano del mese", href: input.planHref };
+  if (!input.firstPostHref) return null;
+  return {
+    label: input.toReviewCount === 1 ? `Rivedi ${input.theOne}` : "Inizia dal primo",
+    href: input.firstPostHref,
+  };
+}

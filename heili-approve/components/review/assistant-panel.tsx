@@ -854,12 +854,12 @@ export function AssistantPanel({
       )}
 
       {!loading && done === null && (
-        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" aria-label="Passi: parla, controlla, invia" data-testid="assistant-steps">
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" aria-label={feedbackMode ? "Passi: parla, controlla, aggiungi" : "Passi: parla, controlla, invia"} data-testid="assistant-steps">
           {(
             [
               [1, "Parla"],
               [2, "Controlla"],
-              [3, "Invia"],
+              [3, feedbackMode ? "Aggiungi" : "Invia"],
             ] as const
           ).map(([step, label], index) => {
             const current = assistantStep({ completed, submitting: busy === "submit", done: done !== null }) === step;

@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   dockTabs,
+  dockSubtitle,
   draftMarker,
   filterDestinations,
   guideStatusSentence,
@@ -133,9 +136,13 @@ describe("frase di stato della Guida", () => {
       "Stai sfogliando piano social di novembre."
     );
     expect(guideStatusSentence(context({ page: "month", title: "i post di novembre" }))).toBe("Stai rivedendo i post di novembre.");
-    expect(guideStatusSentence(context({ page: "post", title: "Post 3 di 12 · Instagram" }))).toBe(
-      "Stai rivedendo post 3 di 12 · Instagram."
+    // QA-17: on a content page the header already names it; the sentence does not repeat the title.
+    expect(guideStatusSentence(context({ page: "post", title: "Post 3 di 12 · Instagram" }))).toBe("Stai rivedendo questo post.");
+    expect(guideStatusSentence(context({ page: "post", title: "Post 3 di 12 · Instagram", summary: "Da approvare" }))).toBe(
+      "Stai rivedendo questo post: da approvare."
     );
+    expect(guideStatusSentence(context({ page: "article", title: "Articolo 1 di 2" }))).toBe("Stai rivedendo questo articolo.");
+    expect(guideStatusSentence(context({ page: "ads", title: "Set 1 di 1" }))).toBe("Stai rivedendo questo set di annunci.");
   });
 });
 
@@ -153,5 +160,48 @@ describe("«Indica un punto» e prima visita", () => {
   it("remembers the first visit per token", () => {
     expect(introStorageKey("abc")).toBe("heili.intro.abc");
     expect(introStorageKey("abc")).not.toBe(introStorageKey("def"));
+  });
+});
+
+describe("Guida coerente con la pagina (QA-17)", () => {
+  it("la riga sotto «Heili» non ripete la frase di stato", () => {
+    // Fuori dai contenuti: «Guida»; il titolo della pagina apre la frase di stato.
+    expect(dockSubtitle(context())).toBe("Guida");
+    expect(dockSubtitle(null)).toBe("Guida");
+    const home = context({ page: "home", summary: "7 contenuti da rivedere" });
+    expect(dockSubtitle(home)).not.toBe(home.title);
+    expect(guideStatusSentence(home)).toBe("Questa è la tua pagina di revisione: 7 contenuti da rivedere.");
+    // Su un contenuto: quale (Post 1 di 7 · Instagram).
+    expect(dockSubtitle(context({ page: "post", review }))).toBe("Post 3 di 12 · Instagram");
+    // Una frase di riepilogo che comincia con la maiuscola non resta maiuscola dopo i due punti.
+    expect(guideStatusSentence(context({ summary: "Nessun contenuto da approvare in questo momento" }))).toBe(
+      "Questa è la tua pagina di revisione: nessun contenuto da approvare in questo momento."
+    );
+  });
+
+  it("il prossimo passo della home è il pulsante principale della pagina", async () => {
+    const { homePrimaryAction } = await import("@/components/portal/helpers");
+    const base = { toReviewCount: 3, theOne: "il post", firstPostHref: "/review/t/posts/p1", planHref: null };
+    expect(homePrimaryAction({ ...base, planHref: "/review/t/piani/pl1" })).toEqual({
+      label: "Rivedi il piano del mese",
+      href: "/review/t/piani/pl1",
+    });
+    expect(homePrimaryAction(base)).toEqual({ label: "Inizia dal primo", href: "/review/t/posts/p1" });
+    expect(homePrimaryAction({ ...base, toReviewCount: 1 })).toEqual({ label: "Rivedi il post", href: "/review/t/posts/p1" });
+    expect(homePrimaryAction({ ...base, toReviewCount: 0 })).toBeNull();
+    // Il passo evidenziato nella Guida è proprio questa destinazione (kind "next").
+    const primary = homePrimaryAction({ ...base, planHref: "/review/t/piani/pl1" })!;
+    const destinations = [
+      destination({ id: "next", label: primary.label, href: primary.href, kind: "next" }),
+      destination({ id: "post", label: "Rivedi il prossimo post", href: "/review/t/posts/p1", kind: "post" }),
+    ];
+    expect(nextStepDestination(destinations)?.label).toBe("Rivedi il piano del mese");
+  });
+
+  it("la home usa lo stesso helper per il pulsante e per la Guida", () => {
+    const page = readFileSync(path.join(__dirname, "..", "app", "review", "[token]", "page.tsx"), "utf8");
+    expect(page).toContain("homePrimaryAction({");
+    expect(page).toContain('{ id: "next", label: primary.label, href: primary.href, kind: "next" }');
+    expect(page).toContain("href={primary.href}");
   });
 });
