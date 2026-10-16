@@ -172,7 +172,7 @@ describe("portable Python importer against the real automation routes", () => {
         csv,
         [
           "source_id,client_id,title,publish_at,networks,text",
-          `excel-001,client-1,Post da Excel,2026-10-15T10:30:00+02:00,INSTAGRAM,${text}`,
+          `excel-001,client-1,Post da Excel,2030-10-15T10:30:00+02:00,INSTAGRAM,${text}`,
         ].join("\n"),
         "utf8"
       );
