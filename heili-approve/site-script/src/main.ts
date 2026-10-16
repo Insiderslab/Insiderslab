@@ -10,7 +10,7 @@
  *
  * When active it only finds the element the client taps and hosts an iframe
  * served by Approve (Heili, comments, login all live there, in Approve's own
- * origin). It never reads cookies, localStorage or the values of form fields,
+ * origin). It never reads cookies, persistent storage or the values of form fields,
  * never sends anything to the network itself, and talks to the iframe only
  * with postMessage on an explicit origin and a random channel.
  */

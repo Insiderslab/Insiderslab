@@ -547,6 +547,8 @@ describe("panel copy per kind", () => {
     expect(ASSISTANT_KIND_COPY.AD_CREATIVE.intro).toContain("Usa la variante e il momento attuali");
     expect(ASSISTANT_KIND_COPY.AD_CREATIVE.approveLabel).toBe("Invia le mie decisioni");
     expect(ASSISTANT_KIND_COPY.SOCIAL_POST.approveLabel).toBe("Approva");
+    expect(ASSISTANT_KIND_COPY.WEBSITE.approveLabel).toBe("Approva");
+    expect(ASSISTANT_KIND_COPY.WEBSITE.intro).toContain("in quale pagina");
   });
 });
 

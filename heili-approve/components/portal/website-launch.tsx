@@ -31,7 +31,7 @@ export default function WebsiteLaunch({
   const [error, setError] = useState<string | null>(null);
   const target = pageUrl || post.content.siteUrl;
   if (!target) return null;
-  const live = post.liveReady && canComment;
+  const withHeili = post.liveReady && canComment;
 
   async function launch() {
     if (busy) return;
@@ -55,7 +55,7 @@ export default function WebsiteLaunch({
   }
 
   const label = compact ? "Apri questa pagina" : "Apri il sito";
-  const control = live ? (
+  const control = withHeili ? (
     <button
       type="button"
       onClick={launch}
@@ -96,7 +96,7 @@ export default function WebsiteLaunch({
   return (
     <div className="space-y-2">
       {control}
-      {live ? (
+      {withHeili ? (
         <ol className="list-decimal space-y-1 pl-5 text-sm text-muted">
           <li>Il sito si apre in una nuova scheda, con il pulsante di Heili in basso a destra.</li>
           <li>Tocca Heili, poi «Indica un punto» e tocca l&apos;elemento che vuoi commentare.</li>

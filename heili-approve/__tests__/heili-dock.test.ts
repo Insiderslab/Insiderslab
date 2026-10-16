@@ -143,6 +143,9 @@ describe("frase di stato della Guida", () => {
     );
     expect(guideStatusSentence(context({ page: "article", title: "Articolo 1 di 2" }))).toBe("Stai rivedendo questo articolo.");
     expect(guideStatusSentence(context({ page: "ads", title: "Set 1 di 1" }))).toBe("Stai rivedendo questo set di annunci.");
+    expect(guideStatusSentence(context({ page: "website", title: "il sito «Nuovo sito»", summary: "Da approvare" }))).toBe(
+      "Stai rivedendo questo sito: da approvare."
+    );
   });
 });
 
