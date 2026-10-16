@@ -422,7 +422,7 @@ del server.
 npx prisma generate
 npx tsc --noEmit --incremental false
 npm run lint
-npx vitest run            # 574 test unitari
+npx vitest run            # 1257 test unitari
 npm run build
 ```
 

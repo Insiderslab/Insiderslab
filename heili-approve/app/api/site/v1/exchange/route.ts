@@ -11,7 +11,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { embedContext } from "@/lib/website/embed";
-import { SITE_API_LIMITS, clientIp, errorJson, json, limit, preflight } from "@/lib/website/http";
+import { SITE_API_LIMITS, appOrigin, clientIp, errorJson, json, limit, preflight } from "@/lib/website/http";
 import { exchangeLaunch } from "@/lib/website/sessions";
 
 const exchangeSchema = z
@@ -25,6 +25,12 @@ const exchangeSchema = z
 
 export async function POST(request: NextRequest) {
   try {
+    // Only the iframe (Approve's own origin) exchanges codes: a page of the site
+    // calling this route directly is refused even if its origin is registered.
+    const callerOrigin = request.headers.get("origin");
+    if (callerOrigin && callerOrigin.toLowerCase() !== appOrigin()) {
+      return json({ success: false, error: "Richiesta non consentita" }, { status: 403, request });
+    }
     const body = exchangeSchema.safeParse(await request.json().catch(() => null));
     if (!body.success) return json({ success: false, error: "Richiesta non valida" }, { status: 400, request });
     limit(`exchange:${clientIp(request)}:${body.data.siteKey}`, SITE_API_LIMITS.exchange);
