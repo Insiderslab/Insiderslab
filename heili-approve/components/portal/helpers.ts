@@ -336,6 +336,7 @@ export const PORTAL_KIND_LABELS: Record<ContentKind, { one: string; many: string
   SOCIAL_POST: { one: "Post social", many: "Post social" },
   BLOG_ARTICLE: { one: "Articolo", many: "Articoli" },
   AD_CREATIVE: { one: "Annuncio", many: "Annunci" },
+  WEBSITE: { one: "Sito web", many: "Siti web" },
 };
 
 /**
@@ -352,6 +353,8 @@ export function portalTagline(kinds: readonly ContentKind[]): string {
       return "I tuoi articoli da approvare";
     case "AD_CREATIVE":
       return "I tuoi annunci da approvare";
+    case "WEBSITE":
+      return "I tuoi siti da approvare";
     default:
       return "I tuoi post da approvare";
   }

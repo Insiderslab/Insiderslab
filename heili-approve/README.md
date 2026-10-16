@@ -203,6 +203,39 @@ Le regole di versione e di approvazione sono le stesse per tutti i tipi.
   anche `google-ads-rsa.csv`, `google-ads-keywords.csv` e
   `google-ads-pmax-assets.csv`, da importare in Google Ads Editor.
 
+### Siti web «Sul sito»
+
+Per i siti fatti dall'agenzia ([progetto](docs/SITO-WEB.md), [guida di installazione](docs/INSTALLARE-SUL-SITO.md)).
+Servizio «Siti web» del cliente, solo con `APP_VARIANT=all`.
+
+- **Agenzia:** **Nuovo → Sito web**: indirizzo del sito di prova, giro con nota per
+  il cliente, pagine da rivedere (anche solo `/chi-siamo`). Nella scheda, riquadro
+  **«Sul sito»**: la riga di codice da copiare
+  (`<script src="https://approve.heili.cloud/heili-review.js" data-site="hs_…" defer>`)
+  o il **plugin WordPress** (`public/wordpress/heili-approve-review.zip`), gli
+  **indirizzi consentiti** (esatti; `http://` solo localhost o «sito di prova»),
+  **«Verifica installazione»** (scarica la home con le regole anti-SSRF e cerca il
+  tag), revoca / nuova chiave. Ogni nota del cliente mostra pagina, dispositivo ed
+  elemento; **«Apri nel punto»** apre il sito lì (sola lettura). **«Nuovo giro»** crea
+  la versione successiva. **«Segna come pubblicato»** revoca la chiave e ricorda di
+  togliere la riga dal sito.
+- **Cliente:** **«Apri il sito»** apre il sito vero con un codice monouso di 10 minuti
+  nel frammento (`#heili-review=`, tolto subito dall'indirizzo); tocca Heili,
+  **«Indica un punto»**, tocca l'elemento e scrive (o chiede a Heili). Torna al
+  portale: **«Le tue note (n)»** e decide lì, **«Chiedi modifiche»** o **«Approva»**
+  (mai dentro il sito).
+- **Sicurezza:** lo script (`site-script/src/`, compilato con
+  `npm run build:site-script`, ≤ 12 KB) è inerte senza frammento, non legge cookie,
+  `localStorage` né valori dei campi; tutto il resto è nell'iframe `/embed/site`
+  servito da Approve, con `frame-ancestors` e CORS solo per le origini registrate;
+  sessioni salvate come hash, 2 h scorrevoli / 8 h al massimo; limiti di richieste
+  sulle rotte `/api/site/v1/*`.
+- **Rimandato:** le «Istantanee» (foto delle pagine lato server, per i siti di altri)
+  aspettano la verifica della RAM del VPS; i siti protetti da password.
+- **Test:** `e2e/website-live.spec.mjs` avvia un sito statico su `E2E_SITE_PORT`
+  (4180) e uno non registrato su `E2E_OTHER_SITE_PORT` (3304); l'app va avviata con
+  `WEBSITE_FETCH_ALLOW_LOCAL=1`.
+
 ### Cliente attivo e link per il cliente
 
 - **Cliente attivo:** nel menu principale si sceglie il cliente su cui si lavora;
@@ -389,7 +422,7 @@ del server.
 npx prisma generate
 npx tsc --noEmit --incremental false
 npm run lint
-npx vitest run            # 574 test unitari
+npx vitest run            # 1257 test unitari
 npm run build
 ```
 
@@ -461,6 +494,13 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   sparisce da sola alla prima approvazione); i tre passi del cliente alla prima
   visita del portale, una volta sola, senza coprire barra delle decisioni e Heili.
   La stessa guida, da mandare per email o WhatsApp, è in `docs/GUIDA-RAPIDA.md`;
+- `website-live.spec.mjs` — sito web «Sul sito» con un sito statico locale
+  (`e2e/support/static-site.mjs`, porta `E2E_SITE_PORT`, default 4180): l'agenzia
+  crea il sito, verifica l'installazione e lo invia; il cliente lo apre dal
+  portale (il frammento sparisce), indica il titolo e un campo password (diventa il
+  suo contenitore), nessuna richiesta contiene `SEGRETO-123`; codice già usato e
+  origine non registrata (porta `E2E_OTHER_SITE_PORT`, default 3304) rifiutati;
+  «Apri nel punto»; 390 px; approvazione e chiave revocata a «Segna come pubblicato»;
 - `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
   (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
   «Articoli», che non ci sia Metricool e che una creatività ads non si possa
@@ -478,7 +518,7 @@ Il test social copre tutto il flusso, in quest'ordine:
 
 ```bash
 npm run build
-PORT=3000 METRICOOL_FAKE=1 APP_VARIANT=all npm run start &
+PORT=3000 METRICOOL_FAKE=1 APP_VARIANT=all WEBSITE_FETCH_ALLOW_LOCAL=1 npm run start &
 METRICOOL_FAKE=1 APP_VARIANT=all npm run worker > /tmp/worker.log 2>&1 &
 E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e              # tutti
 E2E_WORKER_LOG=/tmp/worker.log npm run test:e2e -- blog-flow # uno solo

@@ -138,3 +138,94 @@ export interface VariantDecision {
   verdict: "APPROVED" | "REJECTED";
   note: string | null;
 }
+
+// ─── Website («Sito web», docs/SITO-WEB.md) ──────────────────────────────────
+
+/**
+ * How the client reviews the site: «Sul sito» (live: the review script is
+ * installed on the agency's own site) or «Istantanee» (snapshot: server-side
+ * photos of someone else's site). Only "live" is accepted for now: the
+ * snapshot pipeline (capture-worker, Chromium) is postponed until the VPS
+ * memory is checked; the shapes below keep room for it.
+ */
+export const WEBSITE_MODES = ["live", "snapshot"] as const;
+export type WebsiteMode = (typeof WEBSITE_MODES)[number];
+
+export const WEBSITE_DEVICES = ["desktop", "phone"] as const;
+export type WebsiteDevice = (typeof WEBSITE_DEVICES)[number];
+
+export const WEBSITE_VIEWPORTS: Record<WebsiteDevice, { w: number; h: number }> = {
+  desktop: { w: 1440, h: 900 },
+  phone: { w: 390, h: 844 },
+};
+
+/** Reserved for «Istantanee»: one full-page photo of a page on a device, in strips. */
+export interface WebsiteCaptureRef {
+  captureId: string;
+  capturedAt: string;
+  finalUrl: string;
+  pageTitle: string;
+  width: number;
+  fullHeight: number;
+  truncated: boolean;
+  strips: Array<{ assetId: string; url: string; y: number; h: number }>;
+}
+
+/** One page the client should look at in this round. */
+export interface WebsitePage {
+  /** "p1", "p2"… stable within the post. */
+  id: string;
+  /** «Home», «Chi siamo». */
+  title: string;
+  /** Absolute URL on the same origin as siteUrl ("" while drafting). */
+  url: string;
+  /** What to look at on this page (optional, shown to the client). */
+  note: string;
+  /** «Istantanee» only (postponed). */
+  captures?: Partial<Record<WebsiteDevice, WebsiteCaptureRef>>;
+}
+
+export interface WebsiteContent {
+  mode: WebsiteMode;
+  /** The test site's address: origin + path, no credentials ("" while drafting). */
+  siteUrl: string;
+  /** WebsiteSite.id (review key and allowed origins), set by the server. */
+  siteId: string | null;
+  /** Review round (1, 2…): a new round is new content, hence a new version. */
+  round: number;
+  /** What to look at / what changed in this round (≤ 1000). */
+  roundNote: string;
+  /** Devices to check («Istantanee» photographs these; «Sul sito» shows them as a hint). */
+  devices: WebsiteDevice[];
+  /** 0..20 while drafting, 1..20 to send to the client. */
+  pages: WebsitePage[];
+}
+
+/**
+ * «Sul sito»: the element the client pointed at on the real site. The
+ * selector, the element's text and the scroll position are the truth; a
+ * zone photo (captureRef) may be added by the postponed capture-worker.
+ * Never carries values typed in form fields.
+ */
+export interface LiveAnchor {
+  /** Registered origin + path; no hash, no tracking or sensitive parameters. */
+  pageUrl: string;
+  /** From the viewport width (< 768 = phone). */
+  device: WebsiteDevice;
+  viewport: { w: number; h: number };
+  /** CSS selector, ≤ 300. */
+  selector: string;
+  /** Text of the element, ≤ 160, never form values. */
+  textSnippet: string;
+  /** Lower-case tag name of the element ("h1", "a", "section"…). */
+  tag?: string;
+  /** Nearest heading above the element, ≤ 120 (helps the agency). */
+  sectionHeading?: string;
+  /** Point tapped inside the element, 0..1. */
+  offsetX: number;
+  offsetY: number;
+  /** Page scroll in px, integer ≥ 0. */
+  scrollY: number;
+  /** Reserved: WebsiteCapture id of the zone photo (capture-worker). */
+  captureRef?: string;
+}

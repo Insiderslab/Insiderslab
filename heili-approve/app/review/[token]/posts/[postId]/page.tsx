@@ -5,6 +5,7 @@ import BlogVersionDiff from "@/components/blog/blog-version-diff";
 import { SerpPreview } from "@/components/blog/seo-panel";
 import AdsReview from "@/components/portal/ads-review";
 import BlogReview from "@/components/portal/blog-review";
+import WebsiteReview from "@/components/portal/website-review";
 import {
   dateLabelFor,
   diffBaseline,
@@ -30,11 +31,14 @@ import type {
   PortalQueue,
   PortalVariantDecision,
   PortalVersionChanges,
+  PortalWebsitePost,
 } from "@/components/portal/types";
 import VersionChanges from "@/components/portal/version-changes";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { coerceAdContent } from "@/lib/content/ads";
 import { coerceBlogContent, locateAnchors, renderMarkdownSafe } from "@/lib/content/blog";
+import { coerceWebsiteContent } from "@/lib/content/website";
+import { portalLiveReady } from "@/lib/website/service";
 import type { BlogContent } from "@/lib/content/types";
 import { prisma } from "@/lib/db/client";
 import { NotFoundError } from "@/lib/errors";
@@ -84,6 +88,7 @@ function toPortalComment(comment: ReviewerPostComment, timeZone: string): Portal
     timeSec: comment.timeSec,
     timeEndSec: comment.timeEndSec,
     anchor: comment.anchor,
+    siteAnchor: comment.siteAnchor,
     variantId: comment.variantId,
     resolved: comment.resolvedAt !== null,
     createdAt: comment.createdAt,
@@ -336,6 +341,40 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
           reviewerHasEmail={Boolean(reviewer.email)}
           changesSlot={changesSlot}
           seoSlot={<SeoDetails content={content} />}
+          historySlot={historySlot}
+        />
+      </main>
+    );
+  }
+
+  // ─── Website («Sul sito») ──────────────────────────────────────────────────
+
+  if (post.kind === "WEBSITE") {
+    const content = coerceWebsiteContent(current.content);
+    const websitePost: PortalWebsitePost = {
+      ...base,
+      kind: "WEBSITE",
+      content,
+      liveReady: post.versions[0]?.number === current.number && (await portalLiveReady(content)),
+    };
+    let changesSlot: React.ReactNode;
+    if (found) {
+      const summary = summarizeVersionDiff(diffVersions(found.from, current, "WEBSITE")).map((line) =>
+        line === "Data di pubblicazione cambiata" ? "Data di messa online cambiata" : line
+      );
+      changesSlot = <VersionChanges changes={{ ...found.base, summary }} currentNumber={current.number} />;
+    }
+    return (
+      <main>
+        {progressSlot}
+        <WebsiteReview
+          token={token}
+          post={websitePost}
+          queue={queue}
+          listKinds={listKinds}
+          assistantEnabled={assistantEnabled}
+          reviewerHasEmail={Boolean(reviewer.email)}
+          changesSlot={changesSlot}
           historySlot={historySlot}
         />
       </main>

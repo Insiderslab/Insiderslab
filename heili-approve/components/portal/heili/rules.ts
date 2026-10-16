@@ -128,6 +128,8 @@ export function guideStatusSentence(context: Pick<HeiliPageContext, "page" | "ti
         return "Stai rivedendo questo articolo";
       case "ads":
         return "Stai rivedendo questo set di annunci";
+      case "website":
+        return "Stai rivedendo questo sito";
     }
   })();
   return summary ? `${base}: ${lowerFirst(summary)}.` : `${base}.`;

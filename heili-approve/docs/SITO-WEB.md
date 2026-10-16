@@ -4,6 +4,26 @@ Richiesta del titolare: il cliente rivede un sito (di solito la versione di prov
 
 Leggi anche `docs/VARIANTI.md` (tipi di contenuto) e `docs/CONTRATTO.md` (sicurezza): valgono tutte le regole, salvo dove questo file le estende.
 
+## Stato di avanzamento (16/10)
+
+| Parte | Stato |
+|---|---|
+| **Fase 1 senza Istantanee** — `ContentKind.WEBSITE` (solo in `APP_VARIANT=all`), contenuto della versione (`lib/content/website.ts`), ancore `LiveAnchor`, editor agenzia, scheda Revisione, portale («Apri il sito», «Le tue note», Approva / Chiedi modifiche), email, glossario, guida, Heili (prompt, marcatore `[elemento …]`, `<sito_contesto>`), MCP in sola lettura | **Fatta** (migrazione `20261016090000_website_kind`) |
+| **Istantanee** (capture-worker, Chromium, `WebsiteCapture`, foto della zona, foto di prova all'approvazione) | **Rimandate**: prima va verificata la RAM del VPS. Il contenuto tiene il posto (`mode`, `devices`, `pages[].captures`, `anchor.captureRef`); oggi `mode: "snapshot"` è rifiutato con un messaggio chiaro |
+| **Fase 2 «Sul sito»** — `WebsiteSite` / `WebsiteSession`, `public/heili-review.js` (sorgente `site-script/src/`, ~9,9 KB, ~4,3 KB gzip), iframe `/embed/site` con commenti e Heili, scambio del codice monouso, CORS e `frame-ancestors` per origine registrata, rotte `/api/site/v1/*`, riquadro «Sul sito» (riga da copiare, indirizzi consentiti, «Verifica installazione», revoca / nuova chiave), «Apri nel punto», revoca a «Segna come pubblicato» | **Fatta** (migrazione `20261016120000_website_live_sessions`) |
+| **Fase 3 parziale** — plugin WordPress in un file (`wordpress/heili-approve-review/heili-approve-review.php`, zip in `public/wordpress/`), guida `docs/INSTALLARE-SUL-SITO.md` | **Fatta** |
+| Siti protetti da password / IP (credenziali cifrate, IP fisso), verifica tramite API del plugin | **Rimandati** |
+
+Scostamenti dal progetto, decisi durante l'implementazione:
+
+- **Flag di scheda**: lo script legge e scrive solo la propria chiave `sessionStorage["heili-review"]` (valore `"1"`, non segreto). Non legge cookie, `localStorage`, altre chiavi né valori dei campi (test di sorgente in `__tests__/website-script.test.ts`).
+- **`WebsiteSite`** ha in più `testOrigins` (origini `http://` segnate dall'agenzia come «sito di prova»), `verifyMessage` (esito leggibile dell'ultima verifica) e `verifyWaivedAt` («Non riesco a verificare, invia comunque»: l'invio registra `verifiedOverride: true` nell'evento `SUBMITTED_FOR_REVIEW`). La chiave si rinnova sulla stessa riga («Crea una nuova chiave»): `WebsiteContent.siteId` non cambia.
+- **Il sito si collega da solo al salvataggio**: se il contenuto ha un indirizzo, `attachSite` usa un sito attivo dello stesso cliente con quell'origine o ne crea uno (origine iniziale solo se https o localhost).
+- **Test in locale**: la variabile è `WEBSITE_FETCH_ALLOW_LOCAL=1` (apre solo indirizzi di loopback, su qualsiasi porta) e vale solo se Approve stesso gira su un indirizzo locale: su `approve.heili.cloud` è ignorata.
+- **Heili nell'iframe**: stesso pannello del portale con un trasporto per sessione (`/api/site/v1/assistant`), senza chiamata vocale (resta la dettatura) e senza pulsanti di decisione: il riepilogo si prepara anche nel sito e si invia dal portale. Le voci del riepilogo restano nel commento di riepilogo; gli elementi indicati diventano commenti ancorati direttamente.
+- **Saluto ripetuto**: lo script ripete `hello` ogni 500 ms (massimo 15 s) finché l'iframe non risponde `ready`, perché l'iframe ascolta solo dopo l'idratazione.
+- `frame-ancestors` è calcolato in `proxy.ts` (Node.js in Next 16) da `lib/website/sites.ts`, con cache di 60 s; lo scambio del codice ricontrolla comunque l'origine.
+
 ## Decisioni già prese (non riaprire)
 
 | # | Decisione | Perché |
@@ -349,7 +369,18 @@ Un piccolo server in `e2e/support/static-site.mjs` serve `e2e/fixtures/site/` (`
 
 Totale indicativo 21–26 giorni. La Fase 1 è utile da sola (copre i siti di altri e getta le basi del tipo di contenuto); la Fase 2 è quella che dà il valore sui siti nostri.
 
-## Domande per Stefano
+## Decisioni (decise il 16/10)
+
+1. **Dove si decide**: solo nel portale. Nel sito si commenta e si parla con Heili; la sessione del sito non può approvare né chiedere modifiche (non esiste una rotta per farlo).
+2. **Codice monouso nel frammento** `#heili-review=` (10 minuti, una volta sola), mai il link permanente del cliente.
+3. **Script in produzione**: a «Segna come pubblicato» la chiave del sito viene **revocata** e l'agenzia vede il promemoria di **togliere lo script** (riquadro «Sul sito», email «Sito approvato», messaggio dell'azione).
+4. **Origini solo esatte**; `http://` ammesso solo per `localhost` e per indirizzi di prova **esplicitamente segnati** dall'agenzia.
+5. **Niente analisi visiva** delle foto (Qwen spenta per le catture, quando arriveranno).
+6. **Parole**: «Sito web», «Sul sito», «Apri nel punto» (il portale non dice mai «live» né «snapshot»).
+7. **Nessuna variante `APP_VARIANT=web`**: i siti web esistono solo dentro `all` (`lib/variant.ts`).
+8. Restano aperte (domande sotto): capacità del VPS per le Istantanee (5), siti protetti (6), retention delle foto (4), banner dei cookie (10), import dalla sitemap (11), distribuzione del plugin (12).
+
+## Domande per Stefano (testo originale)
 
 1. **Dove si decide?** Proposta: dentro il sito si commenta e si parla con Heili, **Approva/Chiedi modifiche solo nel portale** (la sessione del sito non può cambiare lo stato). Va bene, o vuoi il pulsante anche nel sito?
 2. **Codice di avvio monouso nel frammento** (invece del link permanente del cliente): confermi? Cambia solo il token nel frammento, non il flusso deciso.

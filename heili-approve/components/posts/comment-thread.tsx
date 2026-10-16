@@ -14,7 +14,7 @@
  */
 
 import { parseAssetComment } from "@/lib/content/google-ads";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { addCommentAction, resolveCommentsAction } from "@/app/(dashboard)/posts/actions";
 import { formatDateTime, formatMoment, type CommentLike, type CommentThread } from "./helpers";
 
@@ -63,6 +63,10 @@ export interface ThreadCardProps {
   active?: boolean;
   /** DOM id, so the page can scroll to the card. */
   domId?: string;
+  /** Website: where the comment is on the site («Home · Telefono · «…»»). */
+  siteLabel?: string | null;
+  /** Website: «Apri nel punto» (opens the site at the element), when the site key is active. */
+  siteAction?: ReactNode;
 }
 
 export default function ThreadCard({
@@ -79,6 +83,8 @@ export default function ThreadCard({
   variantLabel,
   active = false,
   domId,
+  siteLabel,
+  siteAction,
 }: ThreadCardProps) {
   const [replying, setReplying] = useState(false);
   const [reply, setReply] = useState("");
@@ -92,13 +98,13 @@ export default function ThreadCard({
     if (!body) return;
     setError(null);
     startTransition(async () => {
-      const anchored = root.mediaIndex !== null || Boolean(root.anchor);
+      const anchored = root.mediaIndex !== null || Boolean(root.anchor) || Boolean(root.siteAnchor);
       const result = await addCommentAction({
         postId,
         // A general comment has no anchor to share: the reply names its author.
         body: anchored ? body : `@${root.authorName} ${body}`,
         ...(root.versionId ? { versionId: root.versionId } : {}),
-        ...(root.anchor ? { anchor: root.anchor } : {}),
+        ...(root.anchor ? { anchor: root.anchor } : root.siteAnchor ? { anchor: root.siteAnchor } : {}),
         ...(root.variantId ? { variantId: root.variantId } : {}),
         ...(root.mediaIndex !== null
           ? {
@@ -137,6 +143,14 @@ export default function ThreadCard({
         thread.resolved ? "opacity-70" : ""
       }`}
     >
+      {siteLabel && (
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded border border-border bg-surface px-3 py-2">
+          <p className="min-w-0 flex-1 break-words text-sm" data-testid="site-anchor-chip">
+            {siteLabel}
+          </p>
+          {siteAction && <div className="shrink-0">{siteAction}</div>}
+        </div>
+      )}
       {root.anchor && (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded border border-border bg-surface px-3 py-2">
           <blockquote className="min-w-0 flex-1 break-words text-sm italic text-foreground">

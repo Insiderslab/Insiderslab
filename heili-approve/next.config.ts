@@ -5,7 +5,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        // Everything except the «Sul sito» iframe (/embed/*): its
+        // frame-ancestors come from the site's registered origins (proxy.ts).
+        source: "/:path((?!embed(?:/|$)).*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           // Approval screens must not be embedded in another site's UI.
@@ -13,6 +15,30 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'" },
           // Review links are bearer credentials, including on error responses.
           { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
+        source: "/embed/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      },
+      // The review script on clients' sites: short cache, loadable with SRI (crossorigin).
+      ...["/heili-review.js", "/heili-review.v1.js"].map((source) => ({
+        source,
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=300, stale-while-revalidate=86400" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+        ],
+      })),
+      {
+        source: "/api/site/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
         ],
       },
       {

@@ -27,8 +27,32 @@ export function isAllowedAuthPath(pathname: string): boolean {
   return AUTH_ACTIONS.some((action) => rest === `/api/auth/${action}`) || rest.startsWith("/api/auth/callback/");
 }
 
-export function proxy(request: NextRequest) {
+/**
+ * The «Sul sito» iframe (/embed/site?k=hs_…) may be framed only by the exact
+ * origins registered for that site key (docs/SITO-WEB.md). proxy.ts runs on
+ * Node.js in Next 16, so the list is read from the database (cached 60 s in
+ * lib/website/sites.ts). Unknown key, revoked site or a database error →
+ * frame-ancestors 'none'. The code exchange checks the origin again anyway.
+ */
+export async function embedFramePolicy(siteKey: string | null): Promise<string> {
+  let ancestors = "'none'";
+  try {
+    const { frameAncestorsFor } = await import("@/lib/website/sites");
+    ancestors = await frameAncestorsFor(siteKey);
+  } catch (error) {
+    console.error("[proxy] frame-ancestors lookup failed:", error instanceof Error ? error.message : error);
+  }
+  return `frame-ancestors ${ancestors}; base-uri 'self'; object-src 'none'`;
+}
+
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (pathname === "/embed" || pathname.startsWith("/embed/")) {
+    const response = NextResponse.next();
+    response.headers.set("Content-Security-Policy", await embedFramePolicy(request.nextUrl.searchParams.get("k")));
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  }
   if (pathname.startsWith("/api/auth/") && !isAllowedAuthPath(pathname)) {
     return new NextResponse(null, { status: 404 });
   }
@@ -58,5 +82,6 @@ export const config = {
     "/settings/:path*",
     "/guida/:path*",
     "/api/auth/:path*",
+    "/embed/:path*",
   ],
 };

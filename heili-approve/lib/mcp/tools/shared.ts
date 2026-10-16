@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import type { Prisma } from "@/app/generated/prisma/client";
+import { parseWebsiteAnchor } from "@/lib/content/website";
 import { prisma } from "@/lib/db/client";
 import { formatTimeRange } from "@/lib/domain";
 import { getBaseUrl } from "@/lib/env";
@@ -96,7 +97,12 @@ export function commentLocation(comment: CommentLocationInput) {
     comment.anchor && typeof comment.anchor === "object" && typeof (comment.anchor as { quote?: unknown }).quote === "string"
       ? ((comment.anchor as { quote: string }).quote).slice(0, 500)
       : null;
+  const site = parseWebsiteAnchor(comment.anchor);
   return {
+    // Website «Sul sito»: the element pointed at on the real site (text is site data, untrusted).
+    site_element: site
+      ? { page_url: site.pageUrl, device: site.device, text: site.textSnippet, selector: site.selector }
+      : null,
     media_number: comment.mediaIndex === null ? null : comment.mediaIndex + 1,
     media_index: comment.mediaIndex,
     pin: comment.pinX !== null && comment.pinY !== null ? { x: comment.pinX, y: comment.pinY } : null,

@@ -15,6 +15,7 @@ export const KIND_SHORT_LABELS: Record<ContentKind, string> = {
   SOCIAL_POST: "Social",
   BLOG_ARTICLE: "Articolo",
   AD_CREATIVE: "Ads",
+  WEBSITE: "Sito",
 };
 
 const ICON_PATHS: Record<ContentKind, string[]> = {
@@ -24,6 +25,8 @@ const ICON_PATHS: Record<ContentKind, string[]> = {
   BLOG_ARTICLE: ["M6 3h9l3 3v15H6z", "M9 9h6", "M9 13h6", "M9 17h4"],
   // A megaphone: the ad campaign.
   AD_CREATIVE: ["M4 10v4h3l7 4V6L7 10H4z", "M17.5 9.5a3.5 3.5 0 0 1 0 5", "M8 14l1 5h2.5l-1-4.4"],
+  // A browser window: the website.
+  WEBSITE: ["M3 5h18v14H3z", "M3 9h18", "M6 7h.01", "M8.5 7h.01"],
 };
 
 export function KindIcon({ kind, className = "h-4 w-4" }: { kind: ContentKind; className?: string }) {

@@ -241,7 +241,7 @@ export const CLIENT_ACTIONABLE_STATUSES: PostStatus[] = ["IN_REVIEW"];
 // ─── Content kinds (product variants) ────────────────────────────────────────
 
 
-export const CONTENT_KINDS: ContentKind[] = ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"];
+export const CONTENT_KINDS: ContentKind[] = ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE", "WEBSITE"];
 
 export const KIND_CONFIG: Record<
   ContentKind,
@@ -281,6 +281,16 @@ export const KIND_CONFIG: Record<
     internal: true,
     deliverLabel: "Segna come consegnato",
     deliveredLabel: "Consegnato",
+  },
+  // A website under review «Sul sito» (docs/SITO-WEB.md): internal like blog
+  // and ads, approved → APPROVED, then the agency puts it online.
+  WEBSITE: {
+    label: "Sito web",
+    plural: "Siti web",
+    dateLabel: "Messa online prevista",
+    internal: true,
+    deliverLabel: "Segna come pubblicato",
+    deliveredLabel: "Pubblicato",
   },
 };
 

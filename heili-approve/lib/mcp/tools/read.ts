@@ -37,7 +37,8 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: 
 const postStatusSchema = z.enum([
   "DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULING", "SCHEDULED", "FAILED", "CANCELLED", "DELIVERED",
 ]);
-const kindSchema = z.enum(["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"]);
+// Read only: WEBSITE reviews are listed and read, never written (no MCP tool creates or changes them).
+const kindSchema = z.enum(["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE", "WEBSITE"]);
 
 const MAX_COMMENTS_IN_POST = 200;
 const MAX_EVENTS_IN_POST = 50;
@@ -97,7 +98,7 @@ export const listPostsTool = defineTool({
     client_id: idSchema("Id del cliente (da list_clients)").optional(),
     month: monthSchema.optional(),
     status: postStatusSchema.optional().describe("Solo i post in questo stato (predefinito: tutti tranne gli annullati)"),
-    kind: kindSchema.optional().describe("SOCIAL_POST, BLOG_ARTICLE o AD_CREATIVE (predefinito: tutti)"),
+    kind: kindSchema.optional().describe("SOCIAL_POST, BLOG_ARTICLE, AD_CREATIVE o WEBSITE (predefinito: tutti)"),
     limit: z.number().int().min(1).max(50).default(20).describe("Post per pagina (1-50)"),
     cursor: z.string().max(300).optional().describe("next_cursor della pagina precedente"),
   }),
@@ -244,7 +245,7 @@ export const getPostTool = defineTool({
         first_comment: isSocial ? (version?.firstCommentText ?? null) : null,
         media,
         video_cover_ms: version?.videoCoverMs ?? null,
-        // Blog / ads: the kind's own structure (body, SEO, variants…), read only.
+        // Blog / ads / website: the kind's own structure (body, SEO, variants, pages…), read only.
         structured: isSocial ? null : (version?.content ?? null),
         change_note: version?.changeNote ?? null,
       },

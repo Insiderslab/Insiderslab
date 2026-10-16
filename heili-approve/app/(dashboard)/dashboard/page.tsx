@@ -206,7 +206,9 @@ export default async function DashboardPage() {
         if (internal) {
           return post.kind === "BLOG_ARTICLE"
             ? "Approvato: esportalo, pubblicalo sul sito e segnalo come pubblicato"
-            : "Approvato: scarica il pacchetto, carica le creatività e segnalo come consegnato";
+            : post.kind === "WEBSITE"
+              ? "Approvato: metti online il sito, togli la riga di codice di Heili e segnalo come pubblicato"
+              : "Approvato: scarica il pacchetto, carica le creatività e segnalo come consegnato";
         }
         return post.client.metricoolBlogId
           ? "Approvato: da programmare a mano"

@@ -64,3 +64,27 @@ describe("glossary: the client reads «Annunci», the agency «Creatività ads»
     }
   });
 });
+
+describe("glossary: websites («Sito web», «Sul sito», «Apri nel punto»)", () => {
+  it("names websites the same way for agency and client", () => {
+    expect(kindCountPhrase({ WEBSITE: 2, BLOG_ARTICLE: 1 })).toBe("1 articolo e 2 siti web");
+    expect(clientServicesSentence(["WEBSITE", "SOCIAL_POST"])).toBe("post social e siti web");
+    expect(servicesSentence(["WEBSITE"])).toBe("siti web");
+    expect(portalTagline(["WEBSITE"])).toBe("I tuoi siti da approvare");
+    expect(portalKindTabs("tok", ["SOCIAL_POST", "WEBSITE"], [], null).map((tab) => tab.label)).toEqual(["Tutti", "Post social", "Siti web"]);
+    const email = reviewEmailCopy([{ title: "Nuovo sito", kind: "WEBSITE", publishAt: new Date(), networks: [] }], {
+      kind: "request",
+      clientName: "Officina Nord",
+      agencyName: "Studio Forma",
+    });
+    expect(email.subject).toBe("Un sito da approvare: Nuovo sito");
+  });
+
+  it("never says «live» or «snapshot» to the client", () => {
+    const files = ["website-review.tsx", "website-launch.tsx"].map((f) => path.join(__dirname, "..", "components", "portal", f));
+    for (const file of files) {
+      const visible = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+      expect(visible, file).not.toMatch(/[«"> ](live|snapshot)\b/i);
+    }
+  });
+});

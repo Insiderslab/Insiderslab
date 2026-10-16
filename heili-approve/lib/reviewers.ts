@@ -309,6 +309,8 @@ export function reviewerContentWords(kinds: readonly ContentKind[]): { the: stri
       return { the: "gli articoli", of: "degli articoli" };
     case "AD_CREATIVE":
       return { the: "le creatività", of: "delle creatività" };
+    case "WEBSITE":
+      return { the: "i siti web", of: "dei siti web" };
     default:
       return { the: "i post", of: "dei post" };
   }

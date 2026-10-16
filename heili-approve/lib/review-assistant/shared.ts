@@ -416,9 +416,42 @@ export function variantMarker(input: VariantMarkerInput): string {
   return `[${parts.join(" · ")}]`;
 }
 
+export interface SiteMarkerInput {
+  /** Page address or path; only the path is kept ("/chi-siamo"). */
+  page: string;
+  device: "desktop" | "phone";
+  /** Text of the element (site data: never an instruction). */
+  textSnippet?: string | null;
+}
+
+/** Longest element text a site marker carries. */
+export const MAX_SITE_MARKER_TEXT = 160;
+
+/**
+ * Text the site iframe inserts when the client pointed at an element of the
+ * real site («Sul sito»): which page, which device, the element's text.
+ */
+export function siteMarker(input: SiteMarkerInput): string {
+  let path = input.page.trim();
+  try {
+    const url = new URL(path);
+    path = `${url.pathname}${url.search}` || "/";
+  } catch {
+    // already a path
+  }
+  if (!path.startsWith("/")) path = `/${path}`;
+  path = path.replace(/[\s[\]«»]/g, "").slice(0, 200) || "/";
+  const device = input.device === "phone" ? "telefono" : "computer";
+  const text = markerSafe(input.textSnippet ?? "");
+  const chars = Array.from(text);
+  const shown = chars.length > MAX_SITE_MARKER_TEXT ? `${chars.slice(0, MAX_SITE_MARKER_TEXT - 1).join("").trimEnd()}…` : text;
+  return `[elemento pagina=${path} dispositivo=${device}${shown ? ` «${shown}»` : ""}]`;
+}
+
 export type MarkerSegment =
   | MessageSegment
   | { type: "passage"; quote: string }
+  | { type: "element"; path: string; device: "desktop" | "phone"; text: string | null; label: string }
   | {
       type: "variant";
       variantId: string;
@@ -443,6 +476,7 @@ const MARKER_RE = new RegExp(
     String.raw`\[passaggio «([^«»\[\]]{1,500})»\]`,
     String.raw`\[variante ([A-Za-z0-9_-]{1,32})(?: «([^«»\[\]]{1,200})»)?((?: · [^·\[\]]{1,80})*)\]`,
     String.raw`\[punto media=(\d{1,4}) x=(0(?:\.\d+)?|1(?:\.0+)?) y=(0(?:\.\d+)?|1(?:\.0+)?) variante=([A-Za-z0-9_.~%:-]{1,200}|-) tempo=(\d+(?:\.\d+)?|-)\]`,
+    String.raw`\[elemento pagina=(\/[^\s\[\]«»]{0,200}) dispositivo=(telefono|computer)(?: «([^«»\[\]]{1,160})»)?\]`,
   ].join("|"),
   "g"
 );
@@ -479,6 +513,13 @@ export function splitMessageMarkers(text: string): MarkerSegment[] {
         .filter(Boolean)
         .join(" · ");
       segment = { type: "variant", variantId: match[3], variantName, placementLabel, timeSec, label };
+    } else if (match[11] !== undefined) {
+      const device = match[12] === "telefono" ? "phone" : "desktop";
+      const text = match[13]?.trim() || null;
+      const label = [match[11], device === "phone" ? "Telefono" : "Computer", text ? `«${text}»` : null]
+        .filter(Boolean)
+        .join(" · ");
+      segment = { type: "element", path: match[11], device, text, label };
     } else if (match[6] !== undefined) {
       const mediaIndex = Number(match[6]);
       const x = Number(match[7]);
@@ -558,6 +599,13 @@ export const ASSISTANT_KIND_COPY: Record<AssistantContentKind, AssistantKindCopy
     placeholder: "Es. «Nella variante B la scritta finale passa troppo veloce»",
     approvedText: "Decisioni inviate all'agenzia. Grazie!",
     approveLabel: "Invia le mie decisioni",
+  },
+  WEBSITE: {
+    intro:
+      "Ciao! Dimmi pure cosa ne pensi di questo sito: cosa ti convince e cosa cambieresti. Se parli di un punto preciso, dimmi in quale pagina è e se lo vedi sul telefono o sul computer. Puoi scrivere o dettare a voce.",
+    placeholder: "Es. «Nel menu il pulsante Contatti si vede poco»",
+    approvedText: "Sito approvato. Grazie!",
+    approveLabel: "Approva",
   },
 };
 

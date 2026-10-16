@@ -23,14 +23,18 @@ import type { PostStatus } from "@/app/generated/prisma/client";
 import { createContentAction, submitForReviewAction, updateContentAction } from "@/app/(dashboard)/posts/actions";
 import AdSetEditor from "@/components/ads/ad-set-editor";
 import BlogEditor from "@/components/blog/blog-editor";
+import WebsiteEditor from "@/components/website/website-editor";
 import { validateAdsForReview } from "@/lib/content/ads";
 import { validateBlogForReview } from "@/lib/content/blog";
-import type { AdContent, BlogContent } from "@/lib/content/types";
+import type { AdContent, BlogContent, WebsiteContent } from "@/lib/content/types";
+import { validateWebsiteForReview } from "@/lib/content/website";
 import { KIND_CONFIG, canTransition } from "@/lib/domain";
 import { KIND_NOUNS, editWarning, localPartsToUtc, timeZoneAbbr } from "./helpers";
 import type { ContentFormInput, EditorClient } from "./types";
 
-export type InternalKind = "BLOG_ARTICLE" | "AD_CREATIVE";
+export type InternalKind = "BLOG_ARTICLE" | "AD_CREATIVE" | "WEBSITE";
+
+type InternalContent = BlogContent | AdContent | WebsiteContent;
 
 export interface ContentEditorValues {
   clientId: string;
@@ -39,8 +43,8 @@ export interface ContentEditorValues {
   date: string;
   /** "HH:mm" in the client's zone. */
   time: string;
-  /** BlogContent for BLOG_ARTICLE, AdContent for AD_CREATIVE. */
-  content: BlogContent | AdContent;
+  /** BlogContent for BLOG_ARTICLE, AdContent for AD_CREATIVE, WebsiteContent for WEBSITE. */
+  content: InternalContent;
   changeNote: string;
 }
 
@@ -64,23 +68,35 @@ const labelClass = "mb-1.5 block text-sm font-medium text-foreground";
 const TITLE_PLACEHOLDERS: Record<InternalKind, string> = {
   BLOG_ARTICLE: "Es. Articolo di ottobre: come scegliere il caffè in grani",
   AD_CREATIVE: "Es. Campagna saldi invernali · Meta",
+  WEBSITE: "Es. Nuovo sito · revisione della home e dei contatti",
 };
 
 function snapshot(values: ContentEditorValues): string {
   return JSON.stringify(values);
 }
 
-/** Title used when the agency leaves it empty: the headline or the campaign name. */
-function fallbackTitle(kind: InternalKind, content: BlogContent | AdContent): string {
+/** Title used when the agency leaves it empty: the headline, the campaign name or the site's host. */
+function fallbackTitle(kind: InternalKind, content: InternalContent): string {
+  if (kind === "WEBSITE") {
+    try {
+      return `Sito ${new URL((content as WebsiteContent).siteUrl).host}`;
+    } catch {
+      return "";
+    }
+  }
   return kind === "BLOG_ARTICLE"
     ? (content as BlogContent).headline.trim()
     : (content as AdContent).campaign.name.trim();
 }
 
 /** Open points that block sending to the client, as Italian messages. */
-function reviewIssues(kind: InternalKind, content: BlogContent | AdContent): string[] {
+function reviewIssues(kind: InternalKind, content: InternalContent): string[] {
   const issues =
-    kind === "BLOG_ARTICLE" ? validateBlogForReview(content as BlogContent) : validateAdsForReview(content as AdContent);
+    kind === "BLOG_ARTICLE"
+      ? validateBlogForReview(content as BlogContent)
+      : kind === "WEBSITE"
+        ? validateWebsiteForReview(content as WebsiteContent)
+        : validateAdsForReview(content as AdContent);
   return issues.map((issue) => issue.message);
 }
 
@@ -139,7 +155,9 @@ export default function ContentEditor({
     if (!title) {
       return kind === "BLOG_ARTICLE"
         ? "Inserisci un titolo (o il titolo dell'articolo)."
-        : "Inserisci un titolo (o il nome della campagna).";
+        : kind === "WEBSITE"
+          ? "Inserisci un titolo (o l'indirizzo del sito)."
+          : "Inserisci un titolo (o il nome della campagna).";
     }
     if (!publishAt) return `Inserisci data e ora (${KIND_CONFIG[kind].dateLabel.toLowerCase()}).`;
     return {
@@ -290,7 +308,9 @@ export default function ContentEditor({
             <p className="mt-1 text-xs text-muted">
               {kind === "BLOG_ARTICLE"
                 ? "Lo vede il cliente nel portale e nelle email. Se lo lasci vuoto usiamo il titolo dell'articolo."
-                : "Lo vede il cliente nel portale e nelle email. Se lo lasci vuoto usiamo il nome della campagna."}
+                : kind === "WEBSITE"
+                  ? "Lo vede il cliente nel portale e nelle email. Se lo lasci vuoto usiamo l'indirizzo del sito."
+                  : "Lo vede il cliente nel portale e nelle email. Se lo lasci vuoto usiamo il nome della campagna."}
             </p>
           </div>
 
@@ -329,6 +349,14 @@ export default function ContentEditor({
             onBusyChange={setBusy}
             dateLabel={longDateLabel(values.date)}
           />
+        ) : kind === "WEBSITE" ? (
+          <WebsiteEditor
+            value={values.content as WebsiteContent}
+            onChange={(next) => update("content", next)}
+            disabled={disabled}
+            savedRound={(initial.content as WebsiteContent).round}
+            canStartRound={mode === "edit" && hasBeenSubmitted}
+          />
         ) : (
           <AdSetEditor
             value={values.content as AdContent}
@@ -355,7 +383,9 @@ export default function ContentEditor({
               placeholder={
                 kind === "BLOG_ARTICLE"
                   ? "Es. Abbiamo riscritto l'introduzione e accorciato il secondo paragrafo come richiesto"
-                  : "Es. Nuova foto per la variante B e CTA più diretta"
+                  : kind === "WEBSITE"
+                    ? "Es. Menu sistemato e pulsante Contatti più grande, come richiesto"
+                    : "Es. Nuova foto per la variante B e CTA più diretta"
               }
             />
             <p className="mt-1 text-xs text-muted">Il cliente la vede accanto a &quot;cosa è cambiato&quot;.</p>

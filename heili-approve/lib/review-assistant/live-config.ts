@@ -50,10 +50,17 @@ export function liveLimits() {
 
 /** Startup prompt for the speech model. Business rules remain in the delegated backend prompt. */
 export function liveConversationInstructions(
-  kind: "SOCIAL_POST" | "BLOG_ARTICLE" | "AD_CREATIVE",
+  kind: "SOCIAL_POST" | "BLOG_ARTICLE" | "AD_CREATIVE" | "WEBSITE",
   mode: AssistantMode = "decision"
 ): string {
-  const subject = kind === "BLOG_ARTICLE" ? "questo articolo" : kind === "AD_CREATIVE" ? "queste creatività" : "questo post";
+  const subject =
+    kind === "BLOG_ARTICLE"
+      ? "questo articolo"
+      : kind === "AD_CREATIVE"
+        ? "queste creatività"
+        : kind === "WEBSITE"
+          ? "questo sito"
+          : "questo post";
   const opening =
     mode === "feedback"
       ? `Inizia con una sola frase breve: «Ciao, hai già chiesto modifiche per ${subject}. Dimmi cosa vuoi aggiungere.» Il cliente ha già inviato la sua richiesta e l'agenzia sta preparando la nuova versione: stai raccogliendo feedback in più. Non parlare di approvazione e non dire né far credere che verrà creata una nuova versione o che qualcosa sia stato inviato: dì soltanto che lo segni per l'agenzia.`

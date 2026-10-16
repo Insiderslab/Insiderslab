@@ -15,7 +15,9 @@
     "test": "vitest run",
     "db:push": "prisma db push",
     "db:seed": "tsx scripts/seed.ts",
-    "test:e2e": "sh e2e/run.sh"
+    "test:e2e": "sh e2e/run.sh",
+    "build:site-script": "node scripts/build-site-script.mjs",
+    "build:wordpress-zip": "node scripts/build-wordpress-zip.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -52,8 +54,10 @@
     "@types/sanitize-html": "^2.16.2",
     "@types/ws": "^8.18.2",
     "babel-plugin-react-compiler": "1.0.0",
+    "esbuild": "0.28.0",
     "eslint": "^9",
     "eslint-config-next": "^16.4.0",
+    "happy-dom": "21.0.3",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "tsx": "^4.22.1",

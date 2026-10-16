@@ -5,7 +5,7 @@
  */
 
 import type { ContentKind } from "@/app/generated/prisma/client";
-import type { BlogAnchor } from "@/lib/content/types";
+import type { BlogAnchor, LiveAnchor } from "@/lib/content/types";
 import type { MediaItem, NetworkOptions } from "@/lib/domain";
 
 export type ActionResult<T = undefined> =
@@ -34,8 +34,8 @@ export interface PostFormInput {
  * whole article or ad set is in `content` (BlogContent / AdContent).
  */
 export interface ContentFormInput {
-  /** Create only: "BLOG_ARTICLE" | "AD_CREATIVE" (fixed afterwards). */
-  kind?: "BLOG_ARTICLE" | "AD_CREATIVE";
+  /** Create only: "BLOG_ARTICLE" | "AD_CREATIVE" | "WEBSITE" (fixed afterwards). */
+  kind?: "BLOG_ARTICLE" | "AD_CREATIVE" | "WEBSITE";
   clientId: string;
   title: string;
   /** ISO instant: planned publication (blog) or campaign start (ads). */
@@ -67,8 +67,8 @@ export interface CommentInput {
   pinY?: number;
   timeSec?: number;
   timeEndSec?: number;
-  /** Blog: the commented passage. */
-  anchor?: BlogAnchor;
+  /** Blog: the commented passage. Website: the element of the site (agency replies copy it). */
+  anchor?: BlogAnchor | LiveAnchor;
   /** Ads: the variant (mediaIndex then refers to its media). */
   variantId?: string;
 }

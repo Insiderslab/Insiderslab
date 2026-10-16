@@ -16,6 +16,7 @@
  */
 
 import type { Client, ClientReviewer, ContentKind, Post } from "@/app/generated/prisma/client";
+import { DEVICE_LABELS, pagePath, parseWebsiteAnchor } from "@/lib/content/website";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, formatTimeRange, isNetwork, type Network } from "@/lib/domain";
 import { renderEmail, sendEmail, type EmailListItem } from "@/lib/email";
@@ -158,6 +159,17 @@ const BATCH_WORDS: Record<
     cta: ["Rivedi l'annuncio", "Rivedi gli annunci"],
     reminderOne: (title) => `gli annunci "${title}" aspettano la tua revisione`,
   },
+  WEBSITE: {
+    one: "un sito",
+    many: (n) => `${n} siti`,
+    newOne: "Un sito",
+    newMany: (n) => `${n} siti`,
+    heading: "Siti da approvare",
+    howTo:
+      "Puoi aprire il sito vero, indicare un elemento e commentarlo, parlare con Heili e poi, dal portale, approvare oppure chiedere modifiche.",
+    cta: ["Rivedi il sito", "Rivedi i siti"],
+    reminderOne: (title) => `il sito "${title}" aspetta la tua revisione`,
+  },
   MIXED: {
     one: "un contenuto",
     many: (n) => `${n} contenuti`,
@@ -234,6 +246,7 @@ export function reviewEmailCopy(
 function openLabel(kind: ContentKind): string {
   if (kind === "BLOG_ARTICLE") return "Apri l'articolo";
   if (kind === "AD_CREATIVE") return "Apri le creatività";
+  if (kind === "WEBSITE") return "Apri il sito";
   return "Apri il post";
 }
 
@@ -241,6 +254,7 @@ function openLabel(kind: ContentKind): string {
 function aboutPost(kind: ContentKind, title: string): string {
   if (kind === "BLOG_ARTICLE") return `all'articolo "${title}"`;
   if (kind === "AD_CREATIVE") return `alle creatività "${title}"`;
+  if (kind === "WEBSITE") return `al sito "${title}"`;
   return `al post "${title}"`;
 }
 
@@ -486,7 +500,11 @@ export function formatClientComments(
   return sorted.map((comment) => {
     const body = comment.body.trim();
     const quote = anchorQuote(comment.anchor);
+    const site = parseWebsiteAnchor(comment.anchor);
     const where = [
+      site
+        ? `Sul sito: ${pagePath(site.pageUrl)} · ${DEVICE_LABELS[site.device]}${site.textSnippet ? ` · «${site.textSnippet.slice(0, 60)}»` : ""}`
+        : null,
       comment.variantId ? (variantNames.get(comment.variantId) ?? `Variante ${comment.variantId}`) : null,
       quote ? `Sul passaggio «${quote}»` : null,
       comment.mediaIndex !== null ? `Media ${comment.mediaIndex + 1}` : null,
@@ -602,6 +620,19 @@ export async function notifyApproved(postId: string): Promise<void> {
         paragraphs: [
           approvedLine,
           "Esporta l'articolo dal pannello e, quando è online, segnalo come pubblicato.",
+        ],
+        items: [postListItem(post, post.client.timezone)],
+        cta: { label: openLabel(post.kind), url: agencyPostUrl(post.id) },
+      });
+      return;
+    }
+
+    if (post.kind === "WEBSITE") {
+      await sendToAgency(post.workspaceId, `Approvato: ${post.title}`, {
+        heading: "Sito approvato",
+        paragraphs: [
+          approvedLine,
+          "Metti online il sito e poi segnalo come pubblicato: la chiave di revisione verrà revocata. Ricordati di togliere la riga di codice di Heili (o il plugin) dal sito.",
         ],
         items: [postListItem(post, post.client.timezone)],
         cta: { label: openLabel(post.kind), url: agencyPostUrl(post.id) },

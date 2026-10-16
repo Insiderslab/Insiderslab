@@ -20,6 +20,7 @@ import PostEditor from "@/components/posts/post-editor";
 import type { EditorClient } from "@/components/posts/types";
 import { emptyAdContent } from "@/lib/content/ads";
 import { emptyBlogContent } from "@/lib/content/blog";
+import { emptyWebsiteContent } from "@/lib/content/website";
 import { isNetwork } from "@/lib/domain";
 import { KIND_UI, enabledKinds, parseKindParam, postsHref, productName } from "@/lib/variant";
 import { getCurrentClientId } from "@/lib/current-client";
@@ -49,6 +50,7 @@ const KIND_DESCRIPTIONS: Record<ContentKind, string> = {
   SOCIAL_POST: "Testo, foto o video per i social. Dopo l'approvazione si programma su Metricool.",
   BLOG_ARTICLE: "Un articolo per il sito, con SEO. Il cliente commenta le frasi; dopo l'approvazione lo esporti.",
   AD_CREATIVE: "Varianti di una campagna (foto o video e testi). Il cliente approva o scarta ogni variante.",
+  WEBSITE: "Un sito fatto da voi: il cliente lo apre, indica un elemento e lo commenta, poi approva dal portale.",
 };
 
 function KindCards({ kinds, clientId, day }: { kinds: ContentKind[]; clientId: string | null; day: string | null }) {
@@ -190,7 +192,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
     </p>
   ) : null;
 
-  if (kind === "BLOG_ARTICLE" || kind === "AD_CREATIVE") {
+  if (kind === "BLOG_ARTICLE" || kind === "AD_CREATIVE" || kind === "WEBSITE") {
     return (
       <div className="space-y-4">
         <Link href={backHref} className="text-sm text-muted hover:text-foreground">
@@ -206,7 +208,8 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
             title: "",
             date,
             time: kind === "BLOG_ARTICLE" ? "09:00" : "10:00",
-            content: kind === "BLOG_ARTICLE" ? emptyBlogContent() : emptyAdContent(),
+            content:
+              kind === "BLOG_ARTICLE" ? emptyBlogContent() : kind === "WEBSITE" ? emptyWebsiteContent() : emptyAdContent(),
             changeNote: "",
           }}
         />

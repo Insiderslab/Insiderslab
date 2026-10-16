@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ValidationError } from "../lib/errors";
 import {
+  APP_VARIANTS,
   InvalidAppVariantError,
   assertKindEnabled,
   defaultKind,
@@ -63,13 +64,21 @@ describe("kinds per variant", () => {
     expect(enabledKinds("social")).toEqual(["SOCIAL_POST"]);
     expect(enabledKinds("blog")).toEqual(["BLOG_ARTICLE"]);
     expect(enabledKinds("ads")).toEqual(["AD_CREATIVE"]);
-    expect(enabledKinds("all")).toEqual(["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"]);
+    expect(enabledKinds("all")).toEqual(["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE", "WEBSITE"]);
     expect(defaultKind("ads")).toBe("AD_CREATIVE");
+  });
+
+  it("has websites only inside `all` (no separate `web` variant, decided on 16/10)", () => {
+    expect(APP_VARIANTS).not.toContain("web");
+    for (const variant of ["social", "blog", "ads"] as const) expect(enabledKinds(variant)).not.toContain("WEBSITE");
+    expect(isKindEnabled("WEBSITE", "all")).toBe(true);
+    expect(postsHref("WEBSITE", "all")).toBe("/posts?kind=web");
+    expect(parseKindParam("web")).toBe("WEBSITE");
   });
 
   it("returns a copy (callers cannot change the configuration)", () => {
     enabledKinds("all").pop();
-    expect(enabledKinds("all")).toHaveLength(3);
+    expect(enabledKinds("all")).toHaveLength(4);
   });
 
   it("shows Metricool only with social posts", () => {
@@ -133,6 +142,7 @@ describe("navigation", () => {
       ["Post", "/posts?kind=social"],
       ["Articoli", "/posts?kind=blog"],
       ["Creatività ads", "/posts?kind=ads"],
+      ["Siti web", "/posts?kind=web"],
     ]);
     expect(postsHref("BLOG_ARTICLE", "all")).toBe("/posts?kind=blog");
     expect(newPostHref("BLOG_ARTICLE", "all")).toBe("/posts/new?kind=blog");

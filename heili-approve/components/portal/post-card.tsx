@@ -116,7 +116,7 @@ export default function PostCard({ post, href }: { post: PortalPostCardData; hre
       <PostThumb
         cover={post.cover}
         mediaCount={post.kind === "AD_CREATIVE" ? 0 : post.mediaCount}
-        emptyLabel={post.kind === "BLOG_ARTICLE" ? "Articolo" : "Solo testo"}
+        emptyLabel={post.kind === "BLOG_ARTICLE" ? "Articolo" : post.kind === "WEBSITE" ? "Sito web" : "Solo testo"}
       />
       <div className="min-w-0 flex-1 space-y-1">
         <KindLabel kind={post.kind} />

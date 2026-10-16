@@ -43,6 +43,8 @@ import {
 import { KindBadge, KindStatusBadge } from "@/components/posts/kind-badge";
 import PostActions from "@/components/posts/post-actions";
 import PostEditor from "@/components/posts/post-editor";
+import WebsiteReview from "@/components/posts/website-review";
+import SitePanel from "@/components/website/site-panel";
 import PostReview, {
   type AssistantItemView,
   type ReviewCommentView,
@@ -60,7 +62,13 @@ import {
   validateBlogForReview,
   wordCount,
 } from "@/lib/content/blog";
-import type { AdContent, BlogContent } from "@/lib/content/types";
+import type { AdContent, BlogContent, WebsiteContent } from "@/lib/content/types";
+import {
+  anchorChip,
+  coerceWebsiteContent,
+  pagePath,
+  validateWebsiteForReview,
+} from "@/lib/content/website";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_FORMATS, NETWORK_LABELS, isNetwork, parseMediaItems } from "@/lib/domain";
 import { NotFoundError } from "@/lib/errors";
@@ -72,14 +80,21 @@ import {
   isOpenClientComment,
   parseVersionSchedule,
   readBlogAnchor,
+  readWebsiteAnchor,
   summarizeVersionDiff,
 } from "@/lib/posts";
 import { parseActionItems } from "@/lib/review-assistant/shared";
 import { isClaim } from "@/lib/scheduling";
 import { enabledKinds, postsHref, productName } from "@/lib/variant";
+import { getAgencySite } from "@/lib/website/service";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
-const PAGE_TITLES: Record<ContentKind, string> = { SOCIAL_POST: "Post", BLOG_ARTICLE: "Articolo", AD_CREATIVE: "Creatività ads" };
+const PAGE_TITLES: Record<ContentKind, string> = {
+  SOCIAL_POST: "Post",
+  BLOG_ARTICLE: "Articolo",
+  AD_CREATIVE: "Creatività ads",
+  WEBSITE: "Sito web",
+};
 
 export async function generateMetadata() {
   const kinds = enabledKinds();
@@ -100,6 +115,7 @@ const BACK_LABELS: Record<ContentKind, string> = {
   SOCIAL_POST: "Tutti i post",
   BLOG_ARTICLE: "Tutti gli articoli",
   AD_CREATIVE: "Tutte le creatività",
+  WEBSITE: "Tutti i siti web",
 };
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -158,6 +174,7 @@ export default async function PostDetailPage({
   const currentMedia = current ? parseMediaItems(current.media) : [];
   const blogContent: BlogContent | null = kind === "BLOG_ARTICLE" ? coerceBlogContent(current?.content) : null;
   const adContent: AdContent | null = kind === "AD_CREATIVE" ? coerceAdContent(current?.content) : null;
+  const websiteContent: WebsiteContent | null = kind === "WEBSITE" ? coerceWebsiteContent(current?.content) : null;
 
   // Which versions the client has been sent / has approved (from the audit log).
   const submittedNumbers = post.events
@@ -189,7 +206,9 @@ export default async function PostDetailPage({
       ? validateBlogForReview(blogContent).length
       : adContent
         ? validateAdsForReview(adContent).length
-        : validateForNetworks({
+        : websiteContent
+          ? validateWebsiteForReview(websiteContent).length
+          : validateForNetworks({
             networks: post.networks,
             networkOptions: post.networkOptions,
             text: current.text,
@@ -200,6 +219,8 @@ export default async function PostDetailPage({
           }).length;
 
   const activeReviewers = await prisma.clientReviewer.count({ where: { clientId: client.id, active: true } });
+  // «Sul sito»: the review key of the post (null while the content has no address yet).
+  const agencySite = kind === "WEBSITE" ? await getAgencySite(post.id, workspaceId) : null;
 
   const versionNumberById = new Map(versions.map((v) => [v.id, v.number]));
   const openClientComments = post.comments.filter(isOpenClientComment);
@@ -316,6 +337,25 @@ export default async function PostDetailPage({
               </dd>
             </div>
           )}
+          {websiteContent && (
+            <div>
+              <dt className="text-xs text-muted">Sito</dt>
+              <dd className="break-words">
+                {websiteContent.siteUrl ? (
+                  <a href={websiteContent.siteUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                    {websiteContent.siteUrl}
+                  </a>
+                ) : (
+                  "Indirizzo da inserire"
+                )}
+                <span className="text-muted">
+                  {" "}
+                  · Giro {websiteContent.round} ·{" "}
+                  {websiteContent.pages.length === 1 ? "1 pagina" : `${websiteContent.pages.length} pagine`}
+                </span>
+              </dd>
+            </div>
+          )}
           {post.reviewDueAt && post.status === "IN_REVIEW" && (
             <div>
               <dt className="text-xs text-muted">Risposta attesa entro</dt>
@@ -392,6 +432,12 @@ export default async function PostDetailPage({
             Scarica il pacchetto, carica le creatività nella campagna e poi usa «Segna come consegnato».
           </div>
         )}
+        {post.status === "APPROVED" && kind === "WEBSITE" && (
+          <div className="panel rounded p-4 text-sm text-muted">
+            <span className="text-success">Approvato dal cliente.</span> Metti online il sito e poi usa «Segna come
+            pubblicato». Ricordati di togliere la riga di codice di Heili dal sito.
+          </div>
+        )}
         {post.status === "SCHEDULING" && (
           <div className="panel rounded p-4 text-sm text-muted">
             Programmazione su Metricool in corso: ricarica la pagina tra qualche secondo.
@@ -409,6 +455,23 @@ export default async function PostDetailPage({
         />
         {notice && <p className="text-sm text-success">{notice}</p>}
 
+        {kind === "WEBSITE" &&
+          post.status !== "CANCELLED" &&
+          (agencySite ? (
+            <SitePanel
+              // Remounted when the server state changes (new key, revocation, status).
+              key={`${agencySite.siteKey}:${agencySite.revokedAt?.toISOString() ?? ""}:${post.status}`}
+              postId={post.id}
+              site={agencySite}
+              delivered={post.status === "DELIVERED"}
+              timezone={timezone}
+            />
+          ) : (
+            <p className="panel rounded p-4 text-sm text-muted">
+              «Sul sito»: inserisci e salva l&apos;indirizzo del sito di prova in Modifica per avere la riga di codice.
+            </p>
+          ))}
+
         {showSharePanel && (
           <PostSharePanel
             workspaceId={workspaceId}
@@ -417,7 +480,9 @@ export default async function PostDetailPage({
           />
         )}
 
-        {internal && post.status !== "CANCELLED" && (blogContent ? hasBeenSubmitted || isApproved : true) && (
+        {(kind === "BLOG_ARTICLE" || kind === "AD_CREATIVE") &&
+          post.status !== "CANCELLED" &&
+          (blogContent ? hasBeenSubmitted || isApproved : true) && (
           <section className="panel space-y-2 rounded p-4" aria-label="Esporta">
             <h3 className="text-sm font-semibold">{kind === "BLOG_ARTICLE" ? "Esporta l'articolo" : "Pacchetto per la campagna"}</h3>
             {kind === "BLOG_ARTICLE" ? (
@@ -484,7 +549,8 @@ export default async function PostDetailPage({
       timeEndSec: c.timeEndSec,
       resolvedAt: c.resolvedAt,
       createdAt: c.createdAt,
-      anchor: readBlogAnchor(c.anchor),
+      anchor: kind === "BLOG_ARTICLE" ? readBlogAnchor(c.anchor) : null,
+      siteAnchor: kind === "WEBSITE" ? readWebsiteAnchor(c.anchor) : null,
       variantId: c.variantId,
     }));
   }
@@ -554,6 +620,26 @@ export default async function PostDetailPage({
           sessions={sessions}
           dateLabel={longDate(post.publishAt, timezone)}
           canComment={canComment}
+        />
+      );
+    }
+
+    if (kind === "WEBSITE") {
+      return (
+        <WebsiteReview
+          postId={post.id}
+          timezone={timezone}
+          versions={versions.map((v) => ({
+            id: v.id,
+            number: v.number,
+            content: coerceWebsiteContent(v.content),
+            sent: sent(v.number),
+          }))}
+          initialVersionNumber={initialVersion}
+          comments={comments}
+          sessions={sessions}
+          canComment={canComment}
+          canOpenOnSite={Boolean(agencySite && !agencySite.revokedAt)}
         />
       );
     }
@@ -645,6 +731,11 @@ export default async function PostDetailPage({
 
   /** Where an open client comment points, for the list above the editor. */
   function commentPlace(c: (typeof openClientComments)[number]): string {
+    const siteAnchor = kind === "WEBSITE" ? readWebsiteAnchor(c.anchor) : null;
+    if (siteAnchor) {
+      const version = c.versionId ? ` · v${versionNumberById.get(c.versionId) ?? "?"}` : "";
+      return `${anchorChip(siteAnchor, websiteContent?.pages ?? [])}${version}`;
+    }
     const anchor = readBlogAnchor(c.anchor);
     const version = c.versionId ? ` · v${versionNumberById.get(c.versionId) ?? "?"}` : "";
     if (anchor) {
@@ -714,7 +805,7 @@ export default async function PostDetailPage({
             </ul>
           </section>
         )}
-        {kind === "BLOG_ARTICLE" || kind === "AD_CREATIVE" ? (
+        {kind === "BLOG_ARTICLE" || kind === "AD_CREATIVE" || kind === "WEBSITE" ? (
           <ContentEditor
             kind={kind}
             mode="edit"
@@ -729,7 +820,7 @@ export default async function PostDetailPage({
               title: post.title,
               date: local.date,
               time: local.time,
-              content: (blogContent ?? adContent) as BlogContent | AdContent,
+              content: (blogContent ?? adContent ?? websiteContent) as BlogContent | AdContent | WebsiteContent,
               changeNote,
             }}
           />
@@ -823,6 +914,30 @@ export default async function PostDetailPage({
                   />
                 ),
                 detailLabel: "Differenze parola per parola",
+              }
+            : {}),
+        };
+      }
+      if (kind === "WEBSITE") {
+        const after = coerceWebsiteContent(v.content);
+        const pages = after.pages.filter((p) => p.url);
+        return {
+          ...base,
+          textDiff: [],
+          summaryLabel: `Giro ${after.round} · ${pages.length === 1 ? "1 pagina" : `${pages.length} pagine`}`,
+          ...(pages.length > 0
+            ? {
+                detail: (
+                  <ul className="space-y-1 text-sm">
+                    {pages.map((page) => (
+                      <li key={page.id} className="break-words">
+                        <span className="font-medium">{page.title || pagePath(page.url)}</span>{" "}
+                        <span className="text-muted">{pagePath(page.url)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ),
+                detailLabel: "Pagine di questo giro",
               }
             : {}),
         };

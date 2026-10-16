@@ -54,7 +54,7 @@ const postFormSchema = z.object({
 
 /** Blog / ads: the content itself is validated by lib/content (parseBlogContent / parseAdContent). */
 const contentFormSchema = z.object({
-  kind: z.enum(["BLOG_ARTICLE", "AD_CREATIVE"], { error: "Tipo di contenuto non valido" }).optional(),
+  kind: z.enum(["BLOG_ARTICLE", "AD_CREATIVE", "WEBSITE"], { error: "Tipo di contenuto non valido" }).optional(),
   clientId: idSchema,
   title: z.string().max(500),
   publishAt: z.iso.datetime({ error: "Data non valida" }),
@@ -76,7 +76,8 @@ const commentSchema = z.object({
   pinY: z.number().min(0).max(1).optional(),
   timeSec: z.number().min(0).optional(),
   timeEndSec: z.number().min(0).optional(),
-  anchor: blogAnchorSchema.optional(),
+  // Blog passage or website element: lib/posts checks the shape for the post's kind.
+  anchor: z.union([blogAnchorSchema, z.record(z.string(), z.unknown())]).optional(),
   variantId: z.string().trim().min(1).max(64).optional(),
 });
 
@@ -92,6 +93,7 @@ const KIND_SUBJECT: Record<ContentKind, { one: string; many: string }> = {
   SOCIAL_POST: { one: "Post", many: "post" },
   BLOG_ARTICLE: { one: "Articolo", many: "articoli" },
   AD_CREATIVE: { one: "Set di creatività", many: "set di creatività" },
+  WEBSITE: { one: "Sito web", many: "siti web" },
 };
 
 /** "Post inviato in revisione." / "3 articoli inviati in revisione." / "4 contenuti…" when mixed. */
@@ -260,7 +262,9 @@ export async function updateContentAction(
       message +=
         before.kind === "BLOG_ARTICLE"
           ? " L'articolo è tornato in bozza: invialo di nuovo in revisione."
-          : " Il set è tornato in bozza: invialo di nuovo in revisione.";
+          : before.kind === "WEBSITE"
+            ? " Il sito è tornato in bozza: invialo di nuovo in revisione."
+            : " Il set è tornato in bozza: invialo di nuovo in revisione.";
     }
     return { ok: true, data: { status: post.status, versionNumber: post.currentVersionNumber }, message };
   });
@@ -279,7 +283,9 @@ export async function deliverPostAction(postId: string): Promise<ActionResult<{ 
       message:
         post.kind === "BLOG_ARTICLE"
           ? "Articolo segnato come pubblicato."
-          : `Set di creatività segnato come ${KIND_CONFIG[post.kind].deliveredLabel.toLowerCase()}.`,
+          : post.kind === "WEBSITE"
+            ? "Sito segnato come pubblicato: la chiave di revisione è revocata. Ricordati di togliere la riga di codice di Heili dal sito."
+            : `Set di creatività segnato come ${KIND_CONFIG[post.kind].deliveredLabel.toLowerCase()}.`,
     };
   });
 }

@@ -116,6 +116,7 @@ const KIND_WORD: Record<ContentKind, string> = {
   SOCIAL_POST: "social",
   BLOG_ARTICLE: "articoli",
   AD_CREATIVE: "creatività",
+  WEBSITE: "siti web",
 };
 
 /** Default title: "Piano social ottobre 2026". */
