@@ -18,7 +18,9 @@
 //         l'approvazione»), so it is not mistaken for the sheet's «Annulla»;
 // - K-05  one name per way of reviewing a plan: «Sfoglia» is «Sfoglia i post,
 //         uno alla volta» everywhere (button, Heili), the other button opens
-//         the first post.
+//         the first post;
+// - K-08  plain words on the post page: the way back says «Tutti i post» (not
+//         «Elenco») and the saved notes are «Commenti salvati».
 
 import { execFileSync } from "node:child_process";
 import { MOBILE, connectDb, expect, expectNoHorizontalScroll, root, seed, test, uniq } from "./helpers.mjs";
@@ -217,6 +219,22 @@ async function monthPlan() {
   ]);
   return state.month;
 }
+
+test("K-08: la pagina del post usa parole semplici (Tutti i post, Commenti salvati)", async ({ browser }) => {
+  const month = await monthPlan();
+  const { context, page } = await phone(browser, month.a.reviewUrl);
+  await page.goto(`${month.a.reviewUrl}/posts/${month.loosePosts[0].id}`);
+  const nav = page.getByRole("navigation", { name: "Navigazione della revisione" });
+  expect((await nav.getByRole("link", { name: "Tutti i post" }).innerText()).trim()).toBe("Tutti i post");
+  const back = await nav.getByRole("link", { name: "Tutti i post" }).boundingBox();
+  expect(back.height).toBeGreaterThanOrEqual(44);
+  await expect(page.getByRole("heading", { name: "Commenti salvati" })).toBeVisible();
+  const text = await page.locator("main").innerText();
+  expect(text).not.toContain("Richieste raccolte");
+  expect(text).not.toMatch(/^Elenco$/m);
+  await expectNoHorizontalScroll(page);
+  await context.close();
+});
 
 async function postStatus(id) {
   const { rows } = await db.query('select status from "Post" where id = $1', [id]);

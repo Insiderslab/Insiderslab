@@ -685,7 +685,7 @@ export default function PostReview({
             {notice && <p className="text-sm text-success" role="status">{notice}</p>}
             <div className="border-t border-border pt-4">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Richieste raccolte</h3>
+                <h3 className="text-sm font-semibold">Commenti salvati</h3>
                 <span className="text-xs text-muted">{post.comments.length}</span>
               </div>
               <CommentList comments={post.comments} media={post.media} onSeek={hasVideo ? seekTo : undefined}

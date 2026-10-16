@@ -40,7 +40,7 @@ export function ReviewNav({
         aria-label={backLabel}
         className="col-start-1 inline-flex min-h-11 min-w-0 items-center justify-start justify-self-start rounded-md border border-border bg-surface px-3 font-medium text-foreground hover:border-border-hover"
       >
-        <span className="sm:hidden">Elenco</span>
+        <span className="truncate sm:hidden">{backLabel}</span>
         <span className="hidden truncate sm:inline">{backLabel}</span>
       </Link>
       {progressLabel && showProgress && (

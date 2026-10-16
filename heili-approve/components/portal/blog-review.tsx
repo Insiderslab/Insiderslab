@@ -575,7 +575,7 @@ export default function BlogReview({
         )}
         {notice && <p className="text-sm text-success" role="status">{notice}</p>}
         <div className="border-t border-border pt-4">
-          <h3 className="mb-3 text-sm font-semibold">Richieste raccolte</h3>
+          <h3 className="mb-3 text-sm font-semibold">Commenti salvati</h3>
         <BlogCommentList
           passages={passageComments}
           general={generalComments}
