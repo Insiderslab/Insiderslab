@@ -1063,7 +1063,7 @@ function CampaignSummary({
           {rows.map((row) => (
             <div key={row.label} className="min-w-0">
               <dt className="text-xs text-muted">{row.label}</dt>
-              <dd className="whitespace-pre-wrap break-words text-sm">{row.value}</dd>
+              <dd className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{row.value}</dd>
             </div>
           ))}
         </dl>
@@ -1100,7 +1100,7 @@ function DecisionList({
             {rejected.map((item) => (
               <li key={item.name} className="break-words">
                 ✕ {item.name}
-                {item.note && <span className="block whitespace-pre-wrap pl-4 text-muted">{item.note}</span>}
+                {item.note && <span className="block whitespace-pre-wrap break-words [overflow-wrap:anywhere] pl-4 text-muted">{item.note}</span>}
               </li>
             ))}
           </ul>

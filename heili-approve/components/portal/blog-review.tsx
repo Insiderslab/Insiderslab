@@ -803,7 +803,7 @@ function BlogCommentItem({
             <p className="text-xs text-muted">Il passaggio è stato modificato: è evidenziato il testo più simile.</p>
           )}
           {missing && <p className="text-xs text-muted">Il passaggio è stato riscritto e non è più nel testo.</p>}
-          <p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p>
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{comment.body}</p>
           {onShowInText && !missing && (
             <button
               type="button"

@@ -175,7 +175,7 @@ export default function PlanReview({
         {plan.intro && (
           <div className="inset space-y-1 p-4">
             <p className="label-caps">Il messaggio dell&apos;agenzia</p>
-            <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{plan.intro}</p>
+            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed">{plan.intro}</p>
           </div>
         )}
         <PlanProgressBar progress={progress} />
@@ -245,7 +245,7 @@ export default function PlanReview({
                 <p className="text-xs text-muted">
                   {c.isMine ? "Tu" : c.authorName} · {c.createdLabel}
                 </p>
-                <p className="whitespace-pre-wrap break-words">{c.body}</p>
+                <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{c.body}</p>
               </li>
             ))}
           </ul>

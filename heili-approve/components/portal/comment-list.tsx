@@ -133,11 +133,11 @@ function CommentItem({
             </div>
           )}
           {comment.anchor && (
-            <blockquote className="line-clamp-3 border-l-2 border-warning pl-2 text-xs italic text-muted">
+            <blockquote className="line-clamp-3 break-words [overflow-wrap:anywhere] border-l-2 border-warning pl-2 text-xs italic text-muted">
               «{comment.anchor.quote}»
             </blockquote>
           )}
-          <p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p>
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{comment.body}</p>
         </div>
       </div>
     </li>
