@@ -20,6 +20,7 @@ const pageTitles: Array<[prefix: string, title: string]> = [
   ["/plans", "Piani del mese"],
   ["/clients", "Clienti"],
   ["/settings", "Impostazioni"],
+  ["/guida", "Guida"],
 ];
 
 /**
@@ -119,11 +120,15 @@ export default function TopBar({
         )}
         {showMetricool &&
           (metricoolConnected ? (
-            <span className="chip chip-fresh hidden sm:inline-flex">
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m5 12.5 4.5 4.5L19 7.5" />
-              </svg>
-              Metricool collegato
+            // The wrapper hides it on phones: .chip sets its own display, which beats Tailwind's
+            // `hidden`, and the chip used to push the page title out of the bar at 390 px.
+            <span className="hidden sm:inline-flex">
+              <span className="chip chip-fresh">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m5 12.5 4.5 4.5L19 7.5" />
+                </svg>
+                Metricool collegato
+              </span>
             </span>
           ) : (
             <Link

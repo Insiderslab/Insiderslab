@@ -14,6 +14,7 @@ import {
 import HeiliPage from "@/components/portal/heili/heili-page";
 import type { HeiliDestination } from "@/components/portal/heili/types";
 import HomeSteps from "@/components/portal/home-steps";
+import { PORTAL_INTRO_STEPS } from "@/lib/help/portal-intro";
 import KindTabs from "@/components/portal/kind-tabs";
 import PostCard, { type PortalPostCardData } from "@/components/portal/post-card";
 import { clientServices } from "@/lib/clients";
@@ -164,14 +165,7 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
           </Link>
         )}
         {groups.toReview.length > 0 && (
-          <HomeSteps
-            token={token}
-            steps={[
-              { title: "Guarda", text: `Apri ${noun.theOne} come apparirà davvero.` },
-              { title: "Commenta", text: "Tocca un punto o un secondo del video; puoi anche dettare a voce." },
-              { title: "Concludi", text: "Approva oppure invia le modifiche. Il tuo feedback fa avanzare il lavoro." },
-            ]}
-          />
+          <HomeSteps token={token} steps={PORTAL_INTRO_STEPS} />
         )}
       </section>
 

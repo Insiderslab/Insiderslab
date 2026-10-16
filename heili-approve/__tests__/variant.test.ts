@@ -114,6 +114,7 @@ describe("navigation", () => {
       ["Piani", "/plans"],
       ["Clienti", "/clients"],
       ["Impostazioni", "/settings"],
+      ["Guida", "/guida"],
     ]);
   });
 

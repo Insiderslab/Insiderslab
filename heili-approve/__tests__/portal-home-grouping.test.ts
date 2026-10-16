@@ -47,6 +47,6 @@ describe("portal plans and standalone content", () => {
     // Server and repeat visits show the compact row; the full steps appear only
     // on the real first visit, client-side.
     expect(html).toContain("Come funziona?");
-    expect(html).not.toContain("Tocca un punto o un secondo del video");
+    expect(html).not.toContain("tocca il punto da cambiare");
   });
 });

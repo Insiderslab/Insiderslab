@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // (/media/...) are deliberately not listed: they authenticate by token. So are
 // the MCP endpoint (/mcp) and its /.well-known discovery documents: they use
 // bearer tokens (OAuth or a personal key, lib/mcp) and must never get a login redirect.
-const PROTECTED_PREFIXES = ["/dashboard", "/posts", "/calendar", "/plans", "/clients", "/settings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/posts", "/calendar", "/plans", "/clients", "/settings", "/guida"];
 
 function hasSessionCookie(request: NextRequest): boolean {
   return (
@@ -56,6 +56,7 @@ export const config = {
     "/plans/:path*",
     "/clients/:path*",
     "/settings/:path*",
+    "/guida/:path*",
     "/api/auth/:path*",
   ],
 };

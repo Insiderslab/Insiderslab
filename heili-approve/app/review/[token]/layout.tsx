@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import InvalidLink from "@/components/portal/invalid-link";
 import PortalHeader from "@/components/portal/portal-header";
+import PortalIntro from "@/components/portal/portal-intro";
 import HeiliDock from "@/components/portal/heili/heili-dock";
 import { HeiliProvider } from "@/components/portal/heili/context";
 import { portalPath, portalTagline, portalTitle } from "@/components/portal/helpers";
@@ -57,7 +58,11 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
         />
         {/* pb-24 keeps the last lines clear of the floating Heili button; a page with a
             decision bar sets --portal-pb to 0 (the bar sits at the very bottom, QA-14). */}
-        <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-[var(--portal-pb,6rem)] pt-4 sm:px-6">{children}</div>
+        <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-[var(--portal-pb,6rem)] pt-4 sm:px-6">
+          {/* First visit opened on a post, plan or month: the three steps, once (the home has its own). */}
+          <PortalIntro token={token} homeHref={portalPath(token)} />
+          {children}
+        </div>
         <HeiliDock />
       </div>
     </HeiliProvider>

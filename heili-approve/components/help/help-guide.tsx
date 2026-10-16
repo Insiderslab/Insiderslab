@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { ContentKind } from "@/app/generated/prisma/client";
@@ -199,6 +200,17 @@ export default function HelpGuide({ audience, services, className = "" }: HelpGu
                     </div>
                   )}
                 </section>
+
+                {audience === "agency" && (
+                  <Link
+                    href="/guida"
+                    onClick={close}
+                    className="mt-6 flex min-h-12 items-center justify-between gap-3 rounded-lg bg-accent-soft px-3 py-2.5 font-semibold text-accent hover:underline"
+                  >
+                    Guida completa: dal primo cliente all&apos;approvazione
+                    <ChevronIcon />
+                  </Link>
+                )}
               </div>
             )}
           </div>

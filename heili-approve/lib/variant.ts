@@ -269,7 +269,8 @@ export interface NavItem {
 
 /**
  * Sidebar entries: Dashboard, one per enabled kind, Calendario, Piani (the
- * monthly social plans, only with social posts), Clienti, Impostazioni.
+ * monthly social plans, only with social posts), Clienti, Impostazioni, Guida
+ * (how to use the app, /guida).
  */
 export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
   return [
@@ -279,6 +280,7 @@ export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
     ...(VARIANT_KINDS[variant].includes("SOCIAL_POST") ? [{ label: "Piani", href: "/plans", kind: null }] : []),
     { label: "Clienti", href: "/clients", kind: null },
     { label: "Impostazioni", href: "/settings", kind: null },
+    { label: "Guida", href: "/guida", kind: null },
   ];
 }
 

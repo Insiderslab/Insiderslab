@@ -26,10 +26,13 @@ import {
   startOfDayUtc,
   startOfWeek,
 } from "@/components/posts/helpers";
+import GettingStarted from "@/components/help/getting-started";
 import { KindIcon, KindStatusBadge } from "@/components/posts/kind-badge";
 import { getCurrentClientId } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, isNetwork } from "@/lib/domain";
+import { gettingStartedSteps } from "@/lib/help/getting-started";
+import { getGettingStartedFacts } from "@/lib/help/getting-started-data";
 import { KIND_UI, enabledKinds, isMetricoolEnabled, kindParam, productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
@@ -99,7 +102,7 @@ export default async function DashboardPage() {
     attentionWhere.push({ kind: { in: internalKinds }, status: "APPROVED" });
   }
 
-  const [grouped, doneThisWeek, clientCount, currentClient, attention, upcoming] = await Promise.all([
+  const [grouped, doneThisWeek, clientCount, currentClient, attention, upcoming, startFacts] = await Promise.all([
     prisma.post.groupBy({
       by: ["kind", "status"],
       where: { workspaceId, ...scope, kind: { in: kinds }, status: { not: "CANCELLED" } },
@@ -140,7 +143,10 @@ export default async function DashboardPage() {
       take: 8,
       select: postSelect,
     }),
+    // «Per iniziare»: the whole workspace, whatever client is picked.
+    getGettingStartedFacts(workspaceId, kinds),
   ]);
+  const startSteps = gettingStartedSteps(startFacts, kinds);
 
   const count = (statuses: PostStatus[], kind?: ContentKind) =>
     grouped
@@ -221,16 +227,17 @@ export default async function DashboardPage() {
 
   if (clientCount === 0 && grouped.length === 0) {
     return (
-      <div className="panel mx-auto max-w-2xl p-8 text-center sm:p-12">
-        <h2 className="mb-2 text-2xl font-semibold">Benvenuto in {productName()}</h2>
-        <p className="mx-auto mb-6 max-w-md text-muted">
-          {metricool && !multiKind
-            ? "Aggiungi un cliente, collegalo al suo brand su Metricool e crea il link per chi approva. Poi prepara i post: il cliente li rivede dal telefono e quelli approvati partono su Metricool da soli."
-            : `Aggiungi un cliente e crea il link per chi approva. Poi prepara ${words.the}: il cliente li rivede dal telefono, commenta e approva, e tu trovi tutto pronto da consegnare.`}
-        </p>
-        <Link href="/clients/new" className="btn btn-primary">
-          Aggiungi il primo cliente
-        </Link>
+      <div className="mx-auto max-w-2xl space-y-5">
+        <div>
+          <h2 className="mb-2 text-2xl font-semibold">Benvenuto in {productName()}</h2>
+          <p className="text-muted">
+            {metricool && !multiKind
+              ? "Aggiungi un cliente, collegalo al suo brand su Metricool e crea il link per chi approva. Poi prepara i post: il cliente li rivede dal telefono e quelli approvati partono su Metricool da soli."
+              : `Aggiungi un cliente e crea il link per chi approva. Poi prepara ${words.the}: il cliente li rivede dal telefono, commenta e approva, e tu trovi tutto pronto da consegnare.`}
+          </p>
+        </div>
+        {/* The first step of «Per iniziare» is the way in: it cannot be closed here. */}
+        <GettingStarted workspaceId={workspaceId} steps={startSteps} dismissible={false} />
       </div>
     );
   }
@@ -267,6 +274,8 @@ export default async function DashboardPage() {
           {multiKind ? "Nuovo contenuto" : KIND_UI[kinds[0]].newTitle}
         </Link>
       </div>
+
+      <GettingStarted workspaceId={workspaceId} steps={startSteps} />
 
       <section
         aria-label="Riepilogo"
