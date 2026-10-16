@@ -1852,7 +1852,7 @@ export async function approvePost(
     // first one approves, the second loses the guarded write. If what won is
     // this reviewer's approval of this version, the second click is a no-op,
     // not «I dati sono cambiati» after a successful approval.
-    if (error instanceof ConflictError) {
+    if (error instanceof ConflictError && !(error instanceof BulkApprovalFeedbackConflictError)) {
       const won = await sameApprovalAlreadyRecorded(postId, reviewer, versionNumber);
       if (won) return { post: won, changed: false };
     }
