@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Workspace, WorkspaceRole } from "@/app/generated/prisma/client";
 import { getCurrentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
@@ -32,7 +33,15 @@ export function canManageBilling(role: WorkspaceRole) {
   return role === "OWNER";
 }
 
-export async function getCurrentWorkspaceContext(): Promise<WorkspaceContext | null> {
+/**
+ * The signed-in user's active workspace. Memoized per request (React cache):
+ * layout, page and metadata of one agency page read it once instead of three
+ * times (6 queries saved per page, QA 2026-10-16). Outside a request it runs
+ * every time, as before.
+ */
+export const getCurrentWorkspaceContext = cache(loadCurrentWorkspaceContext);
+
+async function loadCurrentWorkspaceContext(): Promise<WorkspaceContext | null> {
   const userId = await getCurrentUserId();
   if (!userId) return null;
 
