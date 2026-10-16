@@ -190,17 +190,8 @@ export default function PlanReview({
           </p>
         ) : (
           <div className="flex flex-col gap-2 sm:flex-row">
+            {/* «Approva tutto il piano» lives in the sticky bar below (QA-15): one invitation, not two. */}
             {quickReviewSlot}
-            {toApprove > 0 && (
-              <button
-                type="button"
-                onClick={openSheet}
-                className="btn min-h-12 order-2"
-                data-testid="plan-approve-all"
-              >
-                Approva tutto il piano ({toApprove})
-              </button>
-            )}
             {firstToReview && (
               <Link
                 href={firstToReview.href}
@@ -305,6 +296,7 @@ export default function PlanReview({
             type="button"
             onClick={openSheet}
             className="btn min-h-12 w-full"
+            data-testid="plan-approve-all"
           >
             Approva tutto il piano ({toApprove})
           </button>

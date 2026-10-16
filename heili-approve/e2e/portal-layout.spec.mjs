@@ -243,3 +243,23 @@ test("QA-12: a 768 px (e senza barra) il pulsante resta nell'angolo, sopra la ba
   expect(900 - (home.y + home.height)).toBeLessThanOrEqual(16);
   await context.close();
 });
+
+// ─── QA-15 ───────────────────────────────────────────────────────────────────
+
+test("QA-15: «Approva tutto il piano» compare una volta sola, nella barra; in evidenza resta la revisione veloce", async ({ browser }) => {
+  const plan = `${state.month.a.reviewUrl}/piani/${state.month.planId}`;
+  for (const options of [MOBILE, { viewport: { width: 1366, height: 900 } }]) {
+    const context = await browser.newContext({ ...options, locale: "it-IT" });
+    const page = await context.newPage();
+    await page.goto(plan);
+    const all = page.getByRole("button", { name: /Approva tutto il piano/ });
+    await expect(all).toHaveCount(1);
+    await expect(page.getByTestId("plan-approve-all")).toHaveCount(1);
+    // That one is the bar's: sticky at the bottom of the window.
+    expect(await all.evaluate((el) => !!el.closest(".sticky.bottom-0"))).toBe(true);
+    // Reviewing is still offered in the card: quick mode (when on) and one by one.
+    await expect(page.getByRole("link", { name: "Rivedi uno per uno" })).toBeVisible();
+    if (options === MOBILE) await viewportShot(page, "qa15-piano-390.png");
+    await context.close();
+  }
+});
