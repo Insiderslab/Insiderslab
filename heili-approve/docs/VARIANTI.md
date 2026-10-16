@@ -7,7 +7,9 @@ Richiesta del titolare: **stessa base, funzionalità diverse**, varianti **a ges
 | `social` (default) | Approve by Heili — Social | `SOCIAL_POST` | Metricool (esistente) |
 | `blog` | Approve by Heili — Blog | `BLOG_ARTICLE` | interno: export + "Segna come pubblicato" → `DELIVERED` |
 | `ads` | Approve by Heili — Ads | `AD_CREATIVE` | interno: pacchetto ZIP delle varianti approvate + "Segna come consegnato" → `DELIVERED` |
-| `all` | tutto in un'app | tutti e tre | come sopra per tipo |
+| `all` | tutto in un'app | tutti e quattro (anche `WEBSITE`) | come sopra per tipo |
+
+> **Siti web (16/10):** `WEBSITE` («Sito web», revisione «Sul sito», [SITO-WEB.md](SITO-WEB.md)) esiste solo dentro `all`, senza una variante `web` separata. È interno come blog e ads: approvato → `APPROVED`, poi «Segna come pubblicato» → `DELIVERED` (e la chiave del sito viene revocata).
 
 > **Decisione del titolare (aggiornamento):** niente domini separati. In produzione gira **una sola istanza** su `approve.heili.cloud` con `APP_VARIANT=all`, organizzata **per cliente**: `Client.services` (migrazione `client_services`) dice quali tipi l'agenzia prepara per ogni cliente; si creano solo contenuti di un servizio attivo (`createPost` → «Il servizio «…» non è attivo per questo cliente»), i contenuti di un servizio tolto restano visibili. Il portale del cliente è unico, con le schede «Tutti · Post social · Articoli · Creatività». Le istanze a tipo singolo descritte sotto restano possibili ma sono facoltative (README, «Servizi per cliente»).
 
