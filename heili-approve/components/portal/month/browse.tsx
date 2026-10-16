@@ -22,7 +22,7 @@ import Link from "next/link";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
-import { approveMonthAction, approvePlanAction, approvePostAction, undoApprovalAction } from "@/app/review/[token]/actions";
+import { approveMonthAction, approvePlanAction, approvePostAction, undoApprovalAction } from "@/components/portal/safe-actions";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { NetworkPreviewTabs } from "@/components/post-preview";
 import BottomSheet from "@/components/portal/bottom-sheet";

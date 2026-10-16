@@ -22,7 +22,7 @@ import {
   addCommentAction,
   requestChangesAction,
   undoApprovalAction,
-} from "@/app/review/[token]/actions";
+} from "@/components/portal/safe-actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
 import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
 import type { HeiliDestination } from "@/components/portal/heili/types";

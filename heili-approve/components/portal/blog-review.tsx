@@ -20,7 +20,7 @@ import {
   approvePostAction,
   requestChangesAction,
   undoApprovalAction,
-} from "@/app/review/[token]/actions";
+} from "@/components/portal/safe-actions";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
 import { useHeili, useHeiliPage } from "@/components/portal/heili/context";

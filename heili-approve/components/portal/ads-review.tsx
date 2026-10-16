@@ -30,7 +30,7 @@ import {
   finalizeDecisionsAction,
   requestChangesAction,
   undoApprovalAction,
-} from "@/app/review/[token]/actions";
+} from "@/components/portal/safe-actions";
 import AdVariantCompare from "@/components/ads/ad-variant-compare";
 import AdVariantReview, { type AdCommentRequest } from "@/components/ads/ad-variant-review";
 import AssetCommentComposer from "@/components/ads/asset-comment-composer";

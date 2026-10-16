@@ -18,7 +18,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
-import { addPlanCommentAction, approvePlanAction } from "@/app/review/[token]/actions";
+import { addPlanCommentAction, approvePlanAction } from "@/components/portal/safe-actions";
 import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
 import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
