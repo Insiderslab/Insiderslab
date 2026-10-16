@@ -109,4 +109,24 @@ describe("approvePost with the undo window", () => {
     await approvePost(post.id, reviewer, 3, { undoable: true });
     expect(mocks.scheduleApprovalFinalization).not.toHaveBeenCalled();
   });
+
+  it("answers a simultaneous second click with the approval, not «I dati sono cambiati» (QA 2026-10-16)", async () => {
+    const tx = installDb();
+    // Both clicks read "in review"; this one loses the guarded write.
+    tx.post.updateMany.mockResolvedValue({ count: 0 });
+    const approved = { ...post, status: "APPROVED", approvedAt: new Date(), approvedByReviewerId: "reviewer-1" };
+    (mocks.prisma.post as Record<string, unknown>).findUnique = vi.fn(async () => approved);
+
+    await expect(approvePost(post.id, reviewer, 3, { undoable: true })).resolves.toMatchObject({ status: "APPROVED" });
+    expect(mocks.scheduleApprovalFinalization).not.toHaveBeenCalled();
+  });
+
+  it("still reports the conflict when someone else's change won", async () => {
+    const tx = installDb();
+    tx.post.updateMany.mockResolvedValue({ count: 0 });
+    // The agency sent a new version meanwhile.
+    (mocks.prisma.post as Record<string, unknown>).findUnique = vi.fn(async () => ({ ...post, status: "DRAFT", currentVersionNumber: 4 }));
+
+    await expect(approvePost(post.id, reviewer, 3, { undoable: true })).rejects.toThrow(/cambiati|aggiornato/);
+  });
 });

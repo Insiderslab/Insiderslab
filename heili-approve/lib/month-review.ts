@@ -25,12 +25,14 @@ import {
 } from "@/lib/errors";
 import { selectApproveAll } from "@/lib/plan-rules";
 import { openClientCommentCounts, type ApprovePlanResult } from "@/lib/plans";
-import { approvePost, getPostForReviewer, type ReviewerPost, type ReviewerRef } from "@/lib/posts";
+import { approvePost, getPostsForReviewer, type ReviewerPost, type ReviewerRef } from "@/lib/posts";
 import { isKindEnabled } from "@/lib/variant";
 
-const BATCH = 8;
-/** A month never has this many posts; the cap keeps a crafted request bounded. */
-export const MAX_MONTH_POSTS = 200;
+/**
+ * Bound for a month or a plan in Sfoglia and «Approva i rimanenti», like the
+ * plan's «Approva tutto il piano» (500): a 300-post plan must fit whole.
+ */
+export const MAX_MONTH_POSTS = 500;
 
 /**
  * The posts as the client may see them (getPostForReviewer: client scope,
@@ -38,25 +40,7 @@ export const MAX_MONTH_POSTS = 200;
  * A post that disappeared meanwhile is left out.
  */
 export async function getReviewerPosts(reviewer: ReviewerRef, ids: readonly string[]): Promise<ReviewerPost[]> {
-  const wanted = ids.slice(0, MAX_MONTH_POSTS);
-  const loaded = new Map<string, ReviewerPost>();
-  for (let i = 0; i < wanted.length; i += BATCH) {
-    const results = await Promise.all(
-      wanted.slice(i, i + BATCH).map(async (id) => {
-        try {
-          return await getPostForReviewer(id, reviewer);
-        } catch (error) {
-          if (error instanceof NotFoundError) return null;
-          throw error;
-        }
-      })
-    );
-    for (const post of results) if (post) loaded.set(post.id, post);
-  }
-  return wanted.flatMap((id) => {
-    const post = loaded.get(id);
-    return post ? [post] : [];
-  });
+  return getPostsForReviewer(ids.slice(0, MAX_MONTH_POSTS), reviewer);
 }
 
 const seenSchema = z

@@ -10,6 +10,7 @@
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
 import { KIND_CONFIG, formatTimeRange, formatTimecode, parseTimecode } from "@/lib/domain";
 import { clientServicesSentence, kindParam, parseKindParam, sortKinds } from "@/lib/variant";
+import { dateTimeFormat, isValidTimeZone } from "@/lib/intl-format";
 
 const FALLBACK_TIME_ZONE = "Europe/Rome";
 
@@ -104,18 +105,12 @@ export function nextPostToReview(queue: readonly string[], currentId: string): s
 // ─── Dates ───────────────────────────────────────────────────────────────────
 
 function safeTimeZone(timeZone: string | null | undefined): string {
-  if (!timeZone) return FALLBACK_TIME_ZONE;
-  try {
-    new Intl.DateTimeFormat("it-IT", { timeZone });
-    return timeZone;
-  } catch {
-    return FALLBACK_TIME_ZONE;
-  }
+  return timeZone && isValidTimeZone(timeZone) ? timeZone : FALLBACK_TIME_ZONE;
 }
 
 function dateParts(date: Date, timeZone: string, options: Intl.DateTimeFormatOptions): Record<string, string> {
   const parts: Record<string, string> = {};
-  for (const part of new Intl.DateTimeFormat("it-IT", { ...options, timeZone }).formatToParts(date)) {
+  for (const part of dateTimeFormat("it-IT", { ...options, timeZone }).formatToParts(date)) {
     parts[part.type] = part.value;
   }
   return parts;

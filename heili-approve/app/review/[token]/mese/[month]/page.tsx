@@ -7,7 +7,7 @@ import ViewSwitch, { QuickReviewLink } from "@/components/portal/month/view-swit
 import { portalMonthPath, portalPath } from "@/components/portal/helpers";
 import HeiliPage from "@/components/portal/heili/heili-page";
 import type { HeiliDestination } from "@/components/portal/heili/types";
-import { monthRouteAllowed, parseMonthView, parsePosition, selectMonthPosts, viewPath, type MonthView } from "@/lib/month-rules";
+import { monthQueryRange, monthRouteAllowed, parseMonthView, parsePosition, selectMonthPosts, viewPath, type MonthView } from "@/lib/month-rules";
 import { isPlanMonth, planMonthName, planMonthOf, planProgress } from "@/lib/plan-rules";
 import { listPostsForReviewer, type ReviewerRef } from "@/lib/posts";
 import { isKindEnabled } from "@/lib/variant";
@@ -39,7 +39,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
   const ref: ReviewerRef = { id: reviewer.id, clientId: reviewer.clientId };
   const timeZone = reviewer.client.timezone;
   const now = new Date();
-  const posts = selectMonthPosts(await listPostsForReviewer(ref), month, timeZone);
+  const posts = selectMonthPosts(await listPostsForReviewer(ref, monthQueryRange(month)), month, timeZone);
   if (!monthRouteAllowed(month, posts.length)) notFound();
 
   const view = parseMonthView(query.vista, { allowed: MONTH_VIEWS, fallback: "griglia" });

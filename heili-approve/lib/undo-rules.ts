@@ -21,6 +21,24 @@ export const APPROVAL_FINALIZE_DELAY_MS = UNDO_WINDOW_MS;
  * a slow network never turns a visible button into «Troppo tardi».
  */
 export const UNDO_TOAST_MS = 10_000;
+/** Time kept for the «Annulla» request itself to reach a busy server. */
+export const UNDO_SAFETY_MS = 2_000;
+/** Below this the toast is not worth showing: there would be no time to press it. */
+export const UNDO_TOAST_MIN_MS = 1_500;
+
+/**
+ * How long the toast may offer «Annulla» after an approval whose request took
+ * `roundTripMs` (click → answer). The server's clock starts somewhere inside
+ * that round trip, at worst at the click: under load the answer can take 6–8 s
+ * (QA 2026-10-16), and a fixed 10-second toast then showed «Annulla» after the
+ * server window had closed. Never longer than UNDO_TOAST_MS; 0 when there is
+ * no time left (no toast).
+ */
+export function undoToastDurationMs(roundTripMs: number): number {
+  const left = UNDO_WINDOW_MS - Math.max(0, roundTripMs) - UNDO_SAFETY_MS;
+  if (left < UNDO_TOAST_MIN_MS) return 0;
+  return Math.min(UNDO_TOAST_MS, left);
+}
 /** The cron sweep never touches an approval younger than this (see sweepApprovedPosts). */
 export const SWEEP_FRESH_APPROVAL_MS = 20_000;
 

@@ -28,6 +28,7 @@
 import { z } from "zod";
 import type {
   ContentKind,
+  CreativeDecision,
   MediaAsset,
   Post,
   PostComment,
@@ -1683,6 +1684,16 @@ export async function deliverPost(postId: string, workspaceId: string, actor: Ac
 
 // ─── Client: approve / request changes ───────────────────────────────────────
 
+/** The post when it is already approved by this reviewer at this version (a concurrent click won), else null. */
+async function sameApprovalAlreadyRecorded(postId: string, reviewer: ReviewerRef, versionNumber: number) {
+  const post = await prisma.post.findUnique({ where: { id: postId }, include: { client: true } });
+  if (!post || post.clientId !== reviewer.clientId) return null;
+  const approved = ["APPROVED", "SCHEDULING", "SCHEDULED", "DELIVERED"].includes(post.status);
+  return approved && post.approvedAt && post.approvedByReviewerId === reviewer.id && post.currentVersionNumber === versionNumber
+    ? post
+    : null;
+}
+
 async function loadPostForReviewerAction(db: DbClient, postId: string, reviewer: ReviewerRef) {
   const post = await db.post.findUnique({ where: { id: postId }, include: { client: true } });
   if (!post || post.clientId !== reviewer.clientId || !isClientVisible(post.status) || !isKindEnabled(post.kind)) {
@@ -1831,8 +1842,21 @@ export async function approvePost(
     }
 
     if (opts.undoable === true) metadata = { ...(metadata ?? {}), undoable: true };
+    // «Approva tutto il piano» / «Approva i rimanenti»: the agency gets one summary,
+    // not one «Programmato» email per post (notifyScheduled reads this mark).
+    if (opts.bulkSafety === true) metadata = { ...(metadata ?? {}), bulk: true };
     await recordEvent(tx, { postId, type: "APPROVED", actor, versionNumber, ...(metadata ? { metadata } : {}) });
     return { post: { ...post, status: next, approvedAt: now, approvedByReviewerId: reviewer.id }, changed: true };
+  }).catch(async (error: unknown) => {
+    // Double tap / two tabs at the same instant: both read "in review", the
+    // first one approves, the second loses the guarded write. If what won is
+    // this reviewer's approval of this version, the second click is a no-op,
+    // not «I dati sono cambiati» after a successful approval.
+    if (error instanceof ConflictError && !(error instanceof BulkApprovalFeedbackConflictError)) {
+      const won = await sameApprovalAlreadyRecorded(postId, reviewer, versionNumber);
+      if (won) return { post: won, changed: false };
+    }
+    throw error;
   });
 
   if (!result.changed) return result.post;
@@ -2480,9 +2504,23 @@ export interface ReviewerPost {
  * is of a kind this instance does not handle.
  */
 export async function getPostForReviewer(postId: string, reviewer: ReviewerRef): Promise<ReviewerPost> {
-  const post = await prisma.post.findFirst({
+  const [post] = await getPostsForReviewer([postId], reviewer);
+  if (!post) throw new NotFoundError("Post non trovato");
+  return post;
+}
+
+/**
+ * getPostForReviewer for many posts at once, in a fixed number of queries
+ * (Sfoglia of a 300-post plan made 1.800 of them one post at a time). Same
+ * rules: client scope, visible statuses, enabled kinds, the version sent.
+ * Posts that are not visible are left out; the result follows `postIds`.
+ */
+export async function getPostsForReviewer(postIds: readonly string[], reviewer: ReviewerRef): Promise<ReviewerPost[]> {
+  const ids = [...new Set(postIds)];
+  if (ids.length === 0) return [];
+  const rows = await prisma.post.findMany({
     where: {
-      id: postId,
+      id: { in: ids },
       clientId: reviewer.clientId,
       status: { in: CLIENT_VISIBLE_STATUSES },
       kind: { in: enabledKinds() },
@@ -2501,9 +2539,57 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
       },
     },
   });
-  if (!post) throw new NotFoundError("Post non trovato");
+  if (rows.length === 0) return [];
 
-  const visible = visibleVersionNumber(post.currentVersionNumber, await lastSubmittedVersion(prisma, post));
+  const submitted = await lastSubmittedVersions(prisma, rows.map((p) => p.id));
+  const visibleOf = new Map(
+    rows.map((p) => [
+      p.id,
+      visibleVersionNumber(p.currentVersionNumber, effectiveLastSubmittedVersion(submitted.get(p.id), p.submittedAt, p.currentVersionNumber)),
+    ])
+  );
+  const ads = rows.filter((p) => p.kind === "AD_CREATIVE");
+  const allDecisions =
+    ads.length > 0
+      ? await prisma.creativeDecision.findMany({
+          where: { OR: ads.map((p) => ({ postId: p.id, versionNumber: visibleOf.get(p.id)! })) },
+          orderBy: { createdAt: "asc" },
+          include: { reviewer: { select: { name: true } } },
+        })
+      : [];
+
+  const byId = new Map(
+    rows.map((post) => [
+      post.id,
+      toReviewerPost(
+        post,
+        visibleOf.get(post.id)!,
+        allDecisions.filter((d) => d.postId === post.id),
+        reviewer
+      ),
+    ])
+  );
+  return ids.flatMap((id) => {
+    const post = byId.get(id);
+    return post ? [post] : [];
+  });
+}
+
+type ReviewerPostRow = Prisma.PostGetPayload<{
+  include: {
+    client: { select: { id: true; name: true; logoUrl: true; timezone: true } };
+    versions: true;
+    comments: { include: { user: { select: { name: true } }; reviewer: { select: { name: true } } } };
+    reviewSessions: { include: { messages: true } };
+  };
+}>;
+
+function toReviewerPost(
+  post: ReviewerPostRow,
+  visible: number,
+  decisions: Array<CreativeDecision & { reviewer: { name: string } | null }>,
+  reviewer: ReviewerRef
+): ReviewerPost {
   const versions = post.versions.filter((v) => v.number <= visible);
   const visibleVersionIds = new Set(versions.map((v) => v.id));
   const live: VersionSchedule = {
@@ -2516,15 +2602,6 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
   const scheduleOf = (v: { number: number; schedule: unknown }) =>
     v.number === post.currentVersionNumber ? live : parseVersionSchedule(v.schedule);
   const shownSchedule = scheduleOf(versions.find((v) => v.number === visible) ?? { number: -1, schedule: null }) ?? live;
-
-  const decisions =
-    post.kind === "AD_CREATIVE"
-      ? await prisma.creativeDecision.findMany({
-          where: { postId: post.id, versionNumber: visible },
-          orderBy: { createdAt: "asc" },
-          include: { reviewer: { select: { name: true } } },
-        })
-      : [];
 
   return {
     id: post.id,
@@ -2656,13 +2733,56 @@ export function summarizeVersionForList(
   return { cover: null, mediaCount: 0, variantCount: kind === "AD_CREATIVE" ? 0 : null, excerpt: "" };
 }
 
-/** Posts of the reviewer's client that the portal lists, by publish date. */
-export async function listPostsForReviewer(reviewer: ReviewerRef): Promise<ReviewerPostSummary[]> {
-  const posts = await prisma.post.findMany({
-    where: { clientId: reviewer.clientId, status: { in: CLIENT_VISIBLE_STATUSES }, kind: { in: enabledKinds() } },
-    orderBy: { publishAt: "asc" },
-    take: 500,
-  });
+/** Statuses still open for the client: always listed, however long the history is. */
+const REVIEWER_OPEN_STATUSES: PostStatus[] = ["IN_REVIEW", "CHANGES_REQUESTED"];
+/** Decided posts (approved, scheduled…) listed besides the open ones: the most recent by publish date. */
+export const REVIEWER_HISTORY_LIMIT = 300;
+/** Safety cap for one query (a plan or a month never comes close). */
+const REVIEWER_LIST_CAP = 1000;
+
+export interface ReviewerListScope {
+  /** Only this plan's posts (the plan page). */
+  planId?: string;
+  /** Only posts published in [from, to) (the month page; filter the exact month afterwards). */
+  from?: Date;
+  to?: Date;
+}
+
+/**
+ * Posts of the reviewer's client that the portal lists, by publish date.
+ *
+ * Without a scope: every post still open for the client (in review, changes
+ * requested) plus the REVIEWER_HISTORY_LIMIT most recent decided ones. A long
+ * history never hides what waits for the client (a plain `take` on the oldest
+ * first did: with 500 past posts the home said "nothing to approve").
+ */
+export async function listPostsForReviewer(reviewer: ReviewerRef, scope: ReviewerListScope = {}): Promise<ReviewerPostSummary[]> {
+  const base: Prisma.PostWhereInput = {
+    clientId: reviewer.clientId,
+    status: { in: CLIENT_VISIBLE_STATUSES },
+    kind: { in: enabledKinds() },
+    ...(scope.planId ? { planId: scope.planId } : {}),
+    ...(scope.from || scope.to ? { publishAt: { ...(scope.from ? { gte: scope.from } : {}), ...(scope.to ? { lt: scope.to } : {}) } } : {}),
+  };
+  const scoped = Boolean(scope.planId || scope.from || scope.to);
+  const posts = scoped
+    ? await prisma.post.findMany({ where: base, orderBy: { publishAt: "asc" }, take: REVIEWER_LIST_CAP })
+    : (
+        await Promise.all([
+          prisma.post.findMany({
+            where: { AND: [base, { status: { in: REVIEWER_OPEN_STATUSES } }] },
+            orderBy: { publishAt: "asc" },
+            take: REVIEWER_LIST_CAP,
+          }),
+          prisma.post.findMany({
+            where: { AND: [base, { status: { notIn: REVIEWER_OPEN_STATUSES } }] },
+            orderBy: { publishAt: "desc" },
+            take: REVIEWER_HISTORY_LIMIT,
+          }),
+        ])
+      )
+        .flat()
+        .sort((a, b) => a.publishAt.getTime() - b.publishAt.getTime());
   if (posts.length === 0) return [];
 
   const submitted = await lastSubmittedVersions(prisma, posts.map((p) => p.id));

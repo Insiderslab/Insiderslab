@@ -298,6 +298,7 @@ model Post {
   @@index([workspaceId, kind, status])
   @@index([workspaceId, status])
   @@index([clientId, status])
+  @@index([clientId, publishAt])
   @@index([publishAt])
   @@index([planId])
 }

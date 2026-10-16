@@ -60,7 +60,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
 
   const ref: ReviewerRef = { id: reviewer.id, clientId: reviewer.clientId };
   const plan = await loadPlan(planId, ref);
-  const summaries = await listPostsForReviewer(ref);
+  const summaries = await listPostsForReviewer(ref, { planId: plan.id });
   const posts = byPublishAsc(summaries.filter((p) => p.planId === plan.id && p.kind === plan.kind));
   const comments = await openClientCommentCounts(posts.filter((p) => p.canAct).map((p) => p.id));
 

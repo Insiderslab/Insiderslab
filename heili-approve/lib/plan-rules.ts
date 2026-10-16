@@ -16,6 +16,7 @@
 
 import type { ContentKind, PlanStatus, PostStatus } from "@/app/generated/prisma/client";
 import { toZonedDateTimeString, zonedDateTimeToUtc } from "@/lib/metricool/payload";
+import { isValidTimeZone } from "@/lib/intl-format";
 
 const FALLBACK_TIME_ZONE = "Europe/Rome";
 
@@ -63,13 +64,7 @@ export function addPlanMonths(month: string, delta: number): string {
 }
 
 function safeZone(timeZone: string | null | undefined): string {
-  if (!timeZone) return FALLBACK_TIME_ZONE;
-  try {
-    new Intl.DateTimeFormat("it-IT", { timeZone });
-    return timeZone;
-  } catch {
-    return FALLBACK_TIME_ZONE;
-  }
+  return timeZone && isValidTimeZone(timeZone) ? timeZone : FALLBACK_TIME_ZONE;
 }
 
 /** Month ("YYYY-MM") an instant falls in, in the given time zone. */

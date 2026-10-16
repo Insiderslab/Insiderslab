@@ -10,24 +10,32 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { UNDO_TOAST_MS } from "@/lib/undo-rules";
+import { UNDO_TOAST_MS, undoToastDurationMs } from "@/lib/undo-rules";
 
 const ERROR_VISIBLE_MS = 8_000;
 const TICK_MS = 250;
 
 export default function UndoToast({
   label = "Approvato",
-  durationMs = UNDO_TOAST_MS,
+  durationMs: fixedDurationMs = UNDO_TOAST_MS,
+  sentAt,
   onUndo,
   onClose,
 }: {
   label?: string;
   durationMs?: number;
+  /**
+   * When the approval request left the browser (Date.now()). The toast then
+   * lasts only as long as the server still accepts «Annulla» (undoToastDurationMs):
+   * a slow answer shortens it, a very slow one shows no toast.
+   */
+  sentAt?: number;
   /** Resolves with an Italian error message, or null when the approval was taken back. */
   onUndo: () => Promise<string | null>;
   /** The toast is over: expired, dismissed or undone. */
   onClose: () => void;
 }) {
+  const [durationMs] = useState(() => (sentAt === undefined ? fixedDurationMs : undoToastDurationMs(Date.now() - sentAt)));
   const [deadline] = useState(() => Date.now() + durationMs);
   const [left, setLeft] = useState(durationMs);
   const [busy, setBusy] = useState(false);
@@ -38,6 +46,11 @@ export default function UndoToast({
   useEffect(() => {
     closeRef.current = onClose;
   });
+
+  // No time left to undo (a very slow answer): no toast at all.
+  useEffect(() => {
+    if (durationMs <= 0) closeRef.current();
+  }, [durationMs]);
 
   // The clock: based on the deadline, so a throttled background tab catches up.
   useEffect(() => {
@@ -74,7 +87,9 @@ export default function UndoToast({
   }
 
   const seconds = Math.ceil(left / 1000);
-  const percent = Math.max(0, Math.min(100, Math.round((left / durationMs) * 100)));
+  const percent = durationMs > 0 ? Math.max(0, Math.min(100, Math.round((left / durationMs) * 100))) : 0;
+
+  if (durationMs <= 0) return null;
 
   return (
     <div

@@ -113,6 +113,18 @@ export function selectMonthPosts<T extends { id: string; kind: ContentKind; publ
 }
 
 /**
+ * Publish-date range to query for a "YYYY-MM" month in any time zone: the
+ * calendar month in UTC widened by two days on each side (selectMonthPosts
+ * then keeps the exact month in the client's zone).
+ */
+export function monthQueryRange(month: string): { from: Date; to: Date } | Record<string, never> {
+  if (!isPlanMonth(month)) return {};
+  const [year, m] = month.split("-").map(Number);
+  const day = 86_400_000;
+  return { from: new Date(Date.UTC(year, m - 1, 1) - 2 * day), to: new Date(Date.UTC(year, m, 1) + 2 * day) };
+}
+
+/**
  * The month route answers 404 (not an empty page) for a malformed month and
  * for a month without posts the client can see: a link to another client's
  * month, or to a month with only drafts, tells nothing.

@@ -9,6 +9,25 @@ const globalForPrisma = globalThis as unknown as {
   prismaAdapter?: PrismaPg;
 };
 
+/**
+ * Interactive transactions wait up to 10 s for a free connection (Prisma's
+ * default is 2 s) and may run 15 s. With the default, 50 comments sent at
+ * once on one post lost 5 of them with «errore imprevisto» (P2028): they
+ * queue on the post's row lock, hold the 10 pooled connections, and the
+ * others gave up after 2 s instead of waiting their turn (QA 2026-10-16).
+ */
+export const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 15_000 } as const;
+
+/** Pool size per process: DATABASE_POOL_MAX (1–100), else pg's default of 10. */
+export function poolMax(value = process.env.DATABASE_POOL_MAX): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 100 ? parsed : 10;
+}
+
+function adapterFor(databaseUrl: string): PrismaPg {
+  return new PrismaPg({ connectionString: databaseUrl, max: poolMax() });
+}
+
 function createPrismaClient() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -20,13 +39,13 @@ function createPrismaClient() {
   // pool — ending it under queries in flight was "Cannot use a pool after
   // calling end on the pool".
   if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prismaAdapter ??= new PrismaPg(databaseUrl);
-    return new PrismaClient({ adapter: globalForPrisma.prismaAdapter });
+    globalForPrisma.prismaAdapter ??= adapterFor(databaseUrl);
+    return new PrismaClient({ adapter: globalForPrisma.prismaAdapter, transactionOptions: TRANSACTION_OPTIONS });
   }
   // Production: unchanged. A build can evaluate the generated module once
   // per server chunk, so several identical PrismaClient classes coexist,
   // each with its own pool; the schema cannot change under a running build.
-  return new PrismaClient({ adapter: new PrismaPg(databaseUrl) });
+  return new PrismaClient({ adapter: adapterFor(databaseUrl), transactionOptions: TRANSACTION_OPTIONS });
 }
 
 export function getPrisma(): PrismaClient {
