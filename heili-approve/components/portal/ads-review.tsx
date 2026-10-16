@@ -58,7 +58,7 @@ import {
   portalStatusLabel,
   portalWording,
 } from "./helpers";
-import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
+import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import KindLabel from "./kind-label";
 import {
   AssistantActionButton,
@@ -912,7 +912,7 @@ export default function AdsReview({
                 {decisionError}
               </div>
             )}
-            <div className="flex gap-2">
+            <div className={DECISION_ROW_CLASS}>
               <button
                 type="button"
                 onClick={requestChangesFromBar}

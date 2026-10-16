@@ -29,7 +29,7 @@ import type { HeiliDestination } from "@/components/portal/heili/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
-import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
+import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
@@ -702,7 +702,7 @@ export default function PostReview({
                 {decisionError}
               </div>
             )}
-            <div className="flex gap-2">
+            <div className={DECISION_ROW_CLASS}>
               <button
                 type="button"
                 onClick={requestChangesFromBar}

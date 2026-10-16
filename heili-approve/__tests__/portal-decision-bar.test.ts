@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "@/components/portal/decision";
+import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "@/components/portal/decision";
 
 /**
- * U-04: a 390 px i pulsanti della barra delle decisioni restano su una riga,
- * con testo 16 px e altezza 48 px.
+ * U-04: a 390 px i pulsanti della barra delle decisioni hanno testo 16 px e
+ * altezza 48 px. QA-04: ognuno tiene almeno la larghezza del proprio testo; se i
+ * due non stanno affiancati (ads: «Invia le mie decisioni») vanno su due righe.
  *
  * D1: quale dei due è il principale dipende dal feedback. «Approva» (ads:
  * «Invia le mie decisioni») finché il cliente non ha lasciato feedback sulla
@@ -41,13 +42,25 @@ describe("barra delle decisioni su telefono", () => {
     }
   });
 
-  it("la riga usa un gap stretto e lascia respirare il pulsante lungo", () => {
+  it("QA-04: i pulsanti non si restringono sotto il loro testo, la riga va a capo invece di sovrapporli", () => {
+    // «Chiedi modifiche» (158 px) + «Invia le mie decisioni» (206 px) non stanno in 358 px: il testo
+    // usciva dal pulsante e toccava il vicino. Ora ogni pulsante tiene almeno la larghezza del testo
+    // e, se la riga non basta, il secondo va sotto a tutta larghezza.
+    for (const width of ["flex", "natural"] as const) {
+      for (const primary of [true, false]) {
+        expect(decisionButtonClass(primary, width)).toContain("min-w-fit");
+        expect(decisionButtonClass(primary, width)).not.toContain("min-w-0");
+        expect(decisionButtonClass(primary, width)).not.toContain("shrink-0");
+      }
+    }
+    expect(DECISION_ROW_CLASS).toContain("flex-wrap");
+    expect(DECISION_ROW_CLASS).toContain("gap-2");
+    for (const { name, source } of files) {
+      expect(barOf(source), name).toContain("className={DECISION_ROW_CLASS}");
+    }
     const ads = files.find((file) => file.name === "ads-review.tsx")!.source;
-    // Il pulsante lungo («Invia le mie decisioni») può restare della sua larghezza: nessun ritorno a capo.
     expect(barOf(ads)).toContain('decisionButtonClass(primary === "approve", "natural")');
-    expect(decisionButtonClass(true, "natural")).toContain("shrink-0");
     expect(decisionButtonClass(true, "flex")).toContain("flex-1");
-    expect(barOf(ads)).toContain('<div className="flex gap-2">');
   });
 
   it("l'ordine non cambia: «Chiedi modifiche» prima, «Approva» dopo", () => {

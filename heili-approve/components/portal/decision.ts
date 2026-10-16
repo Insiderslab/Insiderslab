@@ -35,11 +35,20 @@ const BUTTON_PRIMARY = "border-accent bg-accent text-white hover:bg-accent-hover
 const BUTTON_SECONDARY = "border-border bg-background text-foreground hover:border-border-hover";
 
 /**
- * Classes of a decision-bar button: 48 px tall, 16 px text, never wrapping
- * (the bar stays on one line at 390 px). `width: "flex"` shares the row,
- * `"natural"` keeps the label's own width (the long «Invia le mie decisioni»).
+ * The row that holds the bar's buttons. When the labels do not fit side by
+ * side (QA-04: «Chiedi modifiche» + «Invia le mie decisioni» need 372 px at
+ * 16 px text, the bar has 358 at 390 px) the second button drops under the
+ * first at full width instead of the text spilling over its neighbour.
+ */
+export const DECISION_ROW_CLASS = "flex flex-wrap gap-2";
+
+/**
+ * Classes of a decision-bar button: 48 px tall, 16 px text, a label that never
+ * wraps and a button that never shrinks below its label (`min-w-fit`).
+ * `width: "flex"` shares the row, `"natural"` starts from the label's own
+ * width (the long «Invia le mie decisioni») and grows into the free space.
  */
 export function decisionButtonClass(primary: boolean, width: "flex" | "natural" = "flex"): string {
-  const sizing = width === "flex" ? "min-w-0 flex-1" : "shrink-0";
+  const sizing = width === "flex" ? "min-w-fit flex-1" : "min-w-fit flex-auto";
   return `${BUTTON_BASE} ${sizing} ${primary ? BUTTON_PRIMARY : BUTTON_SECONDARY}`;
 }

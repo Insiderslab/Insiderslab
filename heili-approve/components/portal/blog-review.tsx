@@ -29,7 +29,7 @@ import { buildAnchor } from "@/lib/content/blog-text";
 import type { BlogAnchor } from "@/lib/content/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
-import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
+import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
@@ -601,7 +601,7 @@ export default function BlogReview({
                 {decisionError}
               </div>
             )}
-            <div className="flex gap-2">
+            <div className={DECISION_ROW_CLASS}>
               <button
                 type="button"
                 onClick={requestChangesFromBar}
