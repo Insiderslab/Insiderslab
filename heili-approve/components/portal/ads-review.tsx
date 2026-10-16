@@ -101,6 +101,11 @@ export interface AdsReviewProps {
 }
 
 /** Placement of a tab clicked inside AdPlacementPreviews (its id ends with "-<placement>"). */
+/** When «Invia le mie decisioni» left the browser: the undo toast lasts only while the server accepts «Annulla». */
+function approvalSentAt(): number {
+  return Date.now();
+}
+
 function placementOfTab(target: EventTarget | null): AdPlacement | null {
   if (!(target instanceof Element)) return null;
   const tab = target.closest('[role="tab"]');
@@ -138,6 +143,7 @@ export default function AdsReview({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // One «Approvate · Annulla» toast per approval (the key restarts its clock).
   const [undoKey, setUndoKey] = useState<number | null>(null);
+  const [undoSentAt, setUndoSentAt] = useState(0);
   const [draft, setDraft] = useState<VariantDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { variantId: "", draft: { kind: "general" } } : null
   );
@@ -429,6 +435,7 @@ export default function AdsReview({
     if (sheetBusy || blockUnsavedComment()) return;
     setSheetBusy(true);
     setSheetError(null);
+    const sentAt = approvalSentAt();
     const result = await finalizeDecisionsAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
     setSheetBusy(false);
     const fromAssistant = assistantSend.current;
@@ -450,7 +457,10 @@ export default function AdsReview({
       approved: result.data.approved,
       rejected: result.data.rejected,
     });
-    if (result.data.result === "APPROVED") setUndoKey((key) => (key ?? 0) + 1);
+    if (result.data.result === "APPROVED") {
+      setUndoSentAt(sentAt);
+      setUndoKey((key) => (key ?? 0) + 1);
+    }
   }
 
   // «Annulla» of the toast: the set goes back to "Da approvare" with the decisions as they were.
@@ -939,7 +949,7 @@ export default function AdsReview({
       )}
 
       {undoKey !== null && approved && (
-        <UndoToast key={undoKey} label="Approvate" onUndo={undoApprove} onClose={() => setUndoKey(null)} />
+        <UndoToast key={undoKey} sentAt={undoSentAt} label="Approvate" onUndo={undoApprove} onClose={() => setUndoKey(null)} />
       )}
 
       <BottomSheet open={sheet === "send"} title="Invii le tue decisioni?" onClose={closeSheet} busy={sheetBusy}>

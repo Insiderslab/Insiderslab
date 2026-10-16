@@ -119,6 +119,7 @@ export default function BlogReview({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // One «Approvato · Annulla» toast per approval (the key restarts its clock).
   const [undoKey, setUndoKey] = useState<number | null>(null);
+  const [undoSentAt, setUndoSentAt] = useState(0);
   const [draft, setDraft] = useState<CommentDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
   );
@@ -312,6 +313,7 @@ export default function BlogReview({
     if (sheetBusy || blockUnsavedComment()) return;
     setSheetBusy(true);
     setSheetError(null);
+    const sentAt = Date.now();
     const result = await approvePostAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
     setSheetBusy(false);
     const fromAssistant = assistantApproval.current;
@@ -328,6 +330,7 @@ export default function BlogReview({
     }
     fromAssistant?.resolve();
     finish("approved");
+    setUndoSentAt(sentAt);
     setUndoKey((key) => (key ?? 0) + 1);
   }
 
@@ -673,7 +676,7 @@ export default function BlogReview({
       </BottomSheet>
 
       {undoKey !== null && outcome === "approved" && (
-        <UndoToast key={undoKey} onUndo={undoApprove} onClose={() => setUndoKey(null)} />
+        <UndoToast key={undoKey} sentAt={undoSentAt} onUndo={undoApprove} onClose={() => setUndoKey(null)} />
       )}
 
       <BottomSheet open={sheet === "approve"} title="Approvi questo articolo?" onClose={closeSheet} busy={sheetBusy}>

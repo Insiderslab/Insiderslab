@@ -110,7 +110,7 @@ export default function Browse({
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // The last single approval, for «Approvato · Annulla» (one at a time; the key restarts the clock).
-  const [undo, setUndo] = useState<{ postId: string; key: number } | null>(null);
+  const [undo, setUndo] = useState<{ postId: string; key: number; sentAt: number } | null>(null);
 
   const items = useMemo(() => withApproved(posts.map(toItem), approvedIds), [posts, approvedIds]);
   const total = posts.length;
@@ -218,6 +218,7 @@ export default function Browse({
     setBusy(true);
     setError(null);
     try {
+      const sentAt = Date.now();
       const result = await approvePostAction(token, { postId: post.id, versionNumber: post.versionNumber });
       if (!result.ok) {
         setError(result.error);
@@ -227,7 +228,7 @@ export default function Browse({
       const nextApproved = new Set(approvedIds).add(post.id);
       setApprovedIds(nextApproved);
       setAnnounce(`Approvato: ${post.title}`);
-      setUndo((previous) => ({ postId: post.id, key: (previous?.key ?? 0) + 1 }));
+      setUndo((previous) => ({ postId: post.id, key: (previous?.key ?? 0) + 1, sentAt }));
       goTo(nextBrowseIndex(withApproved(posts.map(toItem), nextApproved), current), "next");
     } catch {
       setError("La connessione si è interrotta. Controlla lo stato del post e riprova.");
@@ -488,7 +489,7 @@ export default function Browse({
         </DecisionBar>
       )}
 
-      {undo && <UndoToast key={undo.key} onUndo={undoApproval} onClose={() => setUndo(null)} />}
+      {undo && <UndoToast key={undo.key} sentAt={undo.sentAt} onUndo={undoApproval} onClose={() => setUndo(null)} />}
 
       <BottomSheet
         open={sheetOpen}
