@@ -95,6 +95,13 @@ describe("automation draft validation", () => {
     expect(prepared.post.publishAt).toEqual(new Date("2026-10-20T10:00:00.000Z"));
   });
 
+  it("refuses a publication date in the past", async () => {
+    await expect(prepareAutomationDraft(context, body({ publishAt: "2020-01-01T00:00:00+00:00" }))).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    expect(mockPrisma.post.create).not.toHaveBeenCalled();
+  });
+
   it("scopes both client and uploaded asset lookup to the token workspace", async () => {
     const prepared = await prepareAutomationDraft(context, body());
 

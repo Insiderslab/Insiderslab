@@ -12,6 +12,11 @@ export async function prepareAutomationDraft(context: AutomationContext, body: u
   const outer = envelope.safeParse(body);
   if (!outer.success) throw new AutomationError("INVALID_INPUT", outer.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; "));
   const { post, hash } = await prepareDraft(context.workspaceId, outer.data.post);
+  // The panel importer and the MCP server both reject a date in the past;
+  // the API must agree, otherwise it creates drafts that can never be scheduled.
+  if (post.publishAt.getTime() <= Date.now()) {
+    throw new AutomationError("INVALID_INPUT", "La data di pubblicazione è nel passato");
+  }
   return { externalId: outer.data.externalId, post, hash };
 }
 
