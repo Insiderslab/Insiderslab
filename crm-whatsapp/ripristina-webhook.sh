@@ -29,7 +29,7 @@ echo "Sto per impostare: $CRM/api/webhooks/wa/<token del CRM>"
 echo "Campi: $FIELDS"
 echo "ATTENZIONE: da questo momento n8n NON riceverà più i messaggi WhatsApp di questa app."
 read -rp "Scrivi SI per procedere: " OK
-[ "$OK" = "SI" ] || { echo "Annullato, nessuna modifica."; exit 0; }
+OK=$(printf %s "$OK" | tr -d "[:space:]" | tr "[:lower:]" "[:upper:]"); [ "$OK" = "SI" ] || { echo "Annullato, nessuna modifica."; exit 0; }
 
 R=$(graph POST "$APP_ID/subscriptions" "object=whatsapp_business_account" "callback_url=$CRM/api/webhooks/wa/$VTOKEN" "verify_token=$VTOKEN" "fields=$FIELDS")
 if printf '%s' "$R" | grep -q '"success":true'; then
