@@ -3,6 +3,7 @@ import InvalidLink from "@/components/portal/invalid-link";
 import PortalHeader from "@/components/portal/portal-header";
 import HeiliDock from "@/components/portal/heili/heili-dock";
 import { HeiliProvider } from "@/components/portal/heili/context";
+import { HEILI_EARLY_TAP_SCRIPT } from "@/components/portal/heili/early-tap";
 import { portalPath, portalTagline, portalTitle } from "@/components/portal/helpers";
 import { clientServices } from "@/lib/clients";
 import { enabledKinds, productName } from "@/lib/variant";
@@ -47,6 +48,8 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
 
   return (
     <HeiliProvider token={token}>
+      {/* Before hydration a tap on Heili would do nothing: this records it (early-tap.ts). */}
+      <script dangerouslySetInnerHTML={{ __html: HEILI_EARLY_TAP_SCRIPT }} />
       <div className="flex min-h-screen flex-col bg-background">
         <PortalHeader
           clientName={reviewer.client.name}

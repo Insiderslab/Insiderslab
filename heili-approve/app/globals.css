@@ -85,6 +85,13 @@ body {
 .heili-launcher {
   bottom: calc(var(--decision-bar-h, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
 }
+/* A tap on Heili before the page is ready (components/portal/heili/early-tap.ts): the
+   control answers at once with a ring and the wait cursor, the dock opens when it can. */
+[data-heili-pending] {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+  cursor: progress;
+}
 @media (max-width: 639px) {
   html[data-decision-bar] .heili-launcher {
     right: 1rem;
