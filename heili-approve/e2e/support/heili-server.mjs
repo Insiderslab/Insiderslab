@@ -8,6 +8,7 @@
 // port is free again when this one starts.
 
 import { spawn } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import http from "node:http";
 import { root } from "../helpers.mjs";
 
@@ -81,9 +82,13 @@ function startMockProvider() {
   });
 }
 
-/** Starts the mock provider and the AI-enabled server; returns `{ stop }`. */
-export async function startHeiliServer() {
-  const { ai, port } = await startMockProvider();
+/**
+ * Starts the mock provider and the AI-enabled server; returns `{ stop }`.
+ * `providerPort`: use a provider the spec runs itself (heili-voice: chat + GPT-Live);
+ * `env`: extra variables for the server (they win over the defaults).
+ */
+export async function startHeiliServer({ providerPort, env = {} } = {}) {
+  const { ai, port } = providerPort ? { ai: null, port: providerPort } : await startMockProvider();
   let log = "";
   const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(HELI_PORT)], {
     cwd: root,
@@ -96,12 +101,18 @@ export async function startHeiliServer() {
       OPENAI_API_KEY: "sk-e2e-mock-not-a-real-key",
       OPENAI_BASE_URL: `http://127.0.0.1:${port}/v1`,
       REVIEW_ASSISTANT_ATTEMPT_COOLDOWN_MS: "1",
+      ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
-  server.stdout.on("data", (chunk) => (log += chunk));
-  server.stderr.on("data", (chunk) => (log += chunk));
+  // E2E_HELI_LOG=<file>: keep the server's output for debugging a spec.
+  const keep = (chunk) => {
+    log += chunk;
+    if (process.env.E2E_HELI_LOG) appendFileSync(process.env.E2E_HELI_LOG, chunk);
+  };
+  server.stdout.on("data", keep);
+  server.stderr.on("data", keep);
 
   const started = Date.now();
   for (;;) {
@@ -117,7 +128,7 @@ export async function startHeiliServer() {
   }
 
   async function stop() {
-    ai.close();
+    ai?.close();
     if (server.exitCode !== null) return;
     try {
       process.kill(-server.pid, "SIGTERM"); // the whole group: next start may fork
