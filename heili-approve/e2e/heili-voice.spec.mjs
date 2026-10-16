@@ -17,7 +17,9 @@
 // 2. A tap that cannot start (draft in the field) says why within 300 ms.
 // 3. Microphone denied: said at once, before any preparation request.
 // 4. The provider refuses the session: the client reads why, the microphone is off.
-// 5. The server state says voice cannot work here: explained, or no box at all.
+// 5. Dictation of the comment: no SpeechRecognition, a recognizer that never
+//    starts, a stop() that is never confirmed — each tap still answers.
+// 6. The server state says voice cannot work here: explained, or no box at all.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
