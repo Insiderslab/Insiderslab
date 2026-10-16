@@ -126,6 +126,23 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
   await context.close();
 });
 
+test("agenzia: le tre viste del piano stanno intere a 1024, 1280 e 1366 px (QA-10)", async ({ browser }) => {
+  for (const width of [1024, 1280, 1366]) {
+    const context = await agencyContext(browser, data, { options: { ...DESKTOP, viewport: { width, height: 900 } } });
+    const page = await context.newPage();
+    await page.goto(`/plans/${state.planId}`);
+    const tabs = page.getByRole("tablist", { name: "Vista del piano" });
+    await expect(tabs.getByRole("tab")).toHaveCount(3);
+    expect(await tabs.evaluate((el) => el.scrollWidth <= el.clientWidth), `a ${width} px il contenitore scorre`).toBe(true);
+    // Every tab is inside the viewport, none cut on the right.
+    for (const tab of await tabs.getByRole("tab").all()) {
+      const box = await tab.boundingBox();
+      expect(box.x + box.width, `scheda «${await tab.innerText()}» a ${width} px`).toBeLessThanOrEqual(width);
+    }
+    await context.close();
+  }
+});
+
 test("cliente (390px): rivede il piano, commenta un post e approva tutto il resto", async ({ browser }) => {
   const context = await browser.newContext(MOBILE);
   const page = await context.newPage();

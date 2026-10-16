@@ -168,7 +168,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
         )}
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_25rem]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_25rem]">
         <div className="min-w-0">
           <PlanViews
             list={
@@ -237,7 +237,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
           />
         </div>
 
-        <aside className="order-first min-w-0 space-y-6 lg:order-none">
+        <aside className="order-first min-w-0 space-y-6 xl:order-none">
           <PlanEditor
             planId={plan.id}
             title={plan.title}

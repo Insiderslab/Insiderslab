@@ -89,9 +89,9 @@ export function PlanViews({
   }
   return (
     <section className="space-y-4" aria-labelledby={`${id}-title`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div><p className="label-caps">Contenuti del piano</p><h2 id={`${id}-title`} className="mt-1 text-xl font-semibold">Scegli come controllarli</h2></div>
-        <div className="studio-view-tabs" role="tablist" aria-label="Vista del piano">
+        <div className="studio-view-tabs max-w-full" role="tablist" aria-label="Vista del piano">
           {views.map((item, index) => <button key={item.id} ref={element => { tabRefs.current[index] = element; }} id={`${id}-${item.id}-tab`} type="button" role="tab" aria-selected={view === item.id} aria-controls={`${id}-${item.id}`} tabIndex={view === item.id ? 0 : -1} onClick={() => setView(item.id)} onKeyDown={event => moveTab(event, index)} className="studio-view-tab">{item.label}</button>)}
         </div>
       </div>
