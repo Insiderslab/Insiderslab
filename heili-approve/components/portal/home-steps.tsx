@@ -1,21 +1,24 @@
 "use client";
 
 /**
- * I tre passi «Guarda · Commenta · Concludi» della home: pieni solo alla prima
- * visita (ricordata nel browser per token), poi una riga compatta «Come
- * funziona?» che apre la Guida di Heili nel dock.
+ * I tre passi «Guarda i contenuti · Approva o scrivi cosa cambiare · Fatto, ci
+ * pensiamo noi» della home: pieni solo alla prima visita del portale
+ * (ricordata nel browser per link, condivisa con portal-intro.tsx), poi una
+ * riga compatta «Come funziona?» che apre la Guida di Heili nel dock.
  */
 
 import { useEffect, useState } from "react";
 import { useHeili } from "@/components/portal/heili/context";
+import { markPortalIntroSeen, portalIntroSeen, type PortalIntroStep } from "@/lib/help/portal-intro";
 
-export interface HomeStep {
-  title: string;
-  text: string;
-}
+export type HomeStep = PortalIntroStep;
 
-function storageKey(token: string): string {
-  return `portal.howto.${token}`;
+function localStorageOrNull(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export default function HomeSteps({ token, steps }: { token: string; steps: readonly HomeStep[] }) {
@@ -23,18 +26,10 @@ export default function HomeSteps({ token, steps }: { token: string; steps: read
   const [firstVisit, setFirstVisit] = useState(false);
 
   useEffect(() => {
-    let seen = true;
-    try {
-      seen = window.localStorage.getItem(storageKey(token)) !== null;
-    } catch {
-      seen = true;
-    }
-    if (seen) return;
-    try {
-      window.localStorage.setItem(storageKey(token), "1");
-    } catch {
-      // Senza storage i passi tornano: nessun errore.
-    }
+    const storage = localStorageOrNull();
+    if (portalIntroSeen(storage, token)) return;
+    // Senza storage i passi tornano alla prossima visita: nessun errore.
+    markPortalIntroSeen(storage, token);
     const timer = window.setTimeout(() => setFirstVisit(true), 0);
     return () => window.clearTimeout(timer);
   }, [token]);

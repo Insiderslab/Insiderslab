@@ -57,7 +57,7 @@ export default async function SettingsPage() {
       <AutomationSettings tokens={tokens.map(token => ({ ...token, expiresAt: token.expiresAt.toISOString() }))} />
       <McpSettings url={mcp.resource} enabled={mcp.enabled} oauthConfigured={mcp.oauth !== null} canManage={canManage} />
       {metricool && (
-        <section className="panel rounded p-4 sm:p-6">
+        <section id="metricool" className="panel scroll-mt-4 rounded p-4 sm:p-6">
           <h2 className="mb-1 text-base font-semibold">Metricool</h2>
           <p className="mb-4 text-sm text-muted">
             Quando un cliente approva un post, lo programmiamo sul suo brand Metricool con l&apos;account
