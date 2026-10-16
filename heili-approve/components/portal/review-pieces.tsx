@@ -180,6 +180,10 @@ export function DecisionBar({ children }: { children: ReactNode }) {
       if (!frame) frame = requestAnimationFrame(update);
     };
     update();
+    // QA-14: the layout's bottom padding (clearance for the Heili button) would leave a
+    // strip under the sticky bar at the end of the page. The bar brings its own clearance
+    // (mt-14 above it) and takes the padding away.
+    document.documentElement.style.setProperty("--portal-pb", "0px");
     const observer = new ResizeObserver(schedule);
     observer.observe(element);
     window.addEventListener("scroll", schedule, { passive: true, capture: true });
@@ -190,12 +194,15 @@ export function DecisionBar({ children }: { children: ReactNode }) {
       window.removeEventListener("scroll", schedule, { capture: true });
       window.removeEventListener("resize", schedule);
       document.documentElement.style.removeProperty("--decision-bar-h");
+      document.documentElement.style.removeProperty("--portal-pb");
     };
   }, []);
   return (
     <div
       ref={ref}
-      className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur"
+      // mb-0 / mt-14: the page's space-y gap under the bar is gone (it floated the bar 24 px above
+      // the bottom) and the clearance for the floating Heili button sits above it instead.
+      className="sticky bottom-0 z-40 -mx-4 mb-0 mt-14 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       {children}

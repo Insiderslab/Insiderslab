@@ -120,3 +120,44 @@ test("QA-11: nel portale a 390 px nessun controllo sotto i 44 px", async ({ brow
   expect(failures, failures.join("\n")).toEqual([]);
   await context.close();
 });
+
+// ─── QA-14 ───────────────────────────────────────────────────────────────────
+
+test("QA-14: in fondo alla pagina la barra delle decisioni è attaccata al bordo inferiore (390 px)", async ({ browser }) => {
+  const context = await browser.newContext(MOBILE);
+  const page = await context.newPage();
+  const plan = `${state.month.a.reviewUrl}/piani/${state.month.planId}`;
+  const pages = [
+    ["post", `${state.portal.reviewUrl}/posts/${state.portal.carouselId}`],
+    ["annunci", `${state.portal.reviewUrl}/posts/${state.portal.adsId}`],
+    ["articolo", `${state.portal.reviewUrl}/posts/${state.portal.blogId}`],
+    ["piano", plan],
+    ["Sfoglia", `${plan}?vista=sfoglia`],
+  ];
+  for (const [name, url] of pages) {
+    await page.goto(url);
+    await page.waitForLoadState("networkidle");
+    const bar = page.locator(".sticky.bottom-0").last();
+    await expect(bar).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(300);
+    const { bottom, height, vh, pb, clearance } = await page.evaluate(() => {
+      const el = document.querySelector(".sticky.bottom-0");
+      const r = el.getBoundingClientRect();
+      const button = document.querySelector('[data-testid="heili-dock-button"]').getBoundingClientRect();
+      return {
+        bottom: r.bottom,
+        height: r.height,
+        vh: window.innerHeight,
+        pb: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--decision-bar-h")),
+        clearance: r.top - button.bottom,
+      };
+    });
+    expect(Math.abs(bottom - vh), `${name}: la barra sta a ${Math.round(vh - bottom)} px dal bordo inferiore`).toBeLessThanOrEqual(1);
+    // The floating button is above the bar and --decision-bar-h is exactly the bar's height now.
+    expect(Math.abs(pb - height)).toBeLessThanOrEqual(1);
+    expect(clearance, `${name}: il pulsante di Heili tocca la barra`).toBeGreaterThanOrEqual(8);
+    if (name === "post" || name === "Sfoglia") await viewportShot(page, `qa14-${name.toLowerCase()}-fondo-390.png`);
+  }
+  await context.close();
+});

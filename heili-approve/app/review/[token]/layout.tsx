@@ -55,7 +55,9 @@ export default async function ReviewLayout({ children, params }: ReviewLayoutPro
           productName={productName()}
           tagline={portalTagline(portalServices(reviewer.client))}
         />
-        <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-4 sm:px-6">{children}</div>
+        {/* pb-24 keeps the last lines clear of the floating Heili button; a page with a
+            decision bar sets --portal-pb to 0 (the bar sits at the very bottom, QA-14). */}
+        <div className="mx-auto w-full max-w-7xl flex-1 px-4 pb-[var(--portal-pb,6rem)] pt-4 sm:px-6">{children}</div>
         <HeiliDock />
       </div>
     </HeiliProvider>
