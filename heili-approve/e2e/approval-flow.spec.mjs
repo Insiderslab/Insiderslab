@@ -147,6 +147,10 @@ test("cliente (390px): commento con pin e richiesta di modifiche", async ({ brow
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("heili-dock")).not.toBeVisible();
 
+  // No feedback yet: «Approva» is the primary button of the decision bar.
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "false");
+
   const image = page.getByRole("region", { name: "Anteprima del post" }).locator("img").first();
   await image.scrollIntoViewIfNeeded();
   const box = await image.boundingBox();
@@ -154,6 +158,9 @@ test("cliente (390px): commento con pin e richiesta di modifiche", async ({ brow
   await page.getByPlaceholder("Cosa vorresti cambiare in questo punto?").fill("Qui metterei la foto della torta di mele.");
   await page.getByRole("button", { name: "Invia commento" }).click();
   await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
+  // A saved comment: «Chiedi modifiche» takes over as the primary button.
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "false");
   await shot(page, "04-cliente-post-mobile.png");
 
   // Studio: "Chiedi modifiche" sends the comments already saved, with no second text.

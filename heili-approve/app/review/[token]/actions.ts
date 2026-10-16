@@ -24,6 +24,7 @@ import {
   parseOrThrow,
   publicErrorMessage,
 } from "@/lib/errors";
+import { undoApproval } from "@/lib/approval-undo";
 import { decideVariant, finalizeCreativeReview, type DecisionEvaluation } from "@/lib/creative-decisions";
 import {
   addAssistantFeedback,
@@ -181,7 +182,25 @@ async function asReviewer<T>(
 export async function approvePostAction(token: string, input: ApproveInput): Promise<PortalActionResult> {
   const result = await asReviewer(token, async (reviewer) => {
     const { postId, versionNumber } = parseOrThrow(approveSchema, input);
-    await approvePost(postId, reviewer, versionNumber);
+    // Undoable: scheduling and the agency email wait for the «Annulla» window.
+    await approvePost(postId, reviewer, versionNumber, { undoable: true });
+    return undefined;
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+/**
+ * «Annulla» right after an approval (toast of Sfoglia and of the review pages).
+ * Succeeds only for the reviewer who approved, on the version they approved,
+ * while the post is still APPROVED and the undo window is open; the post goes
+ * back to "Da approvare". A refusal after the window reads «Troppo tardi per
+ * annullare: scrivi all'agenzia» (lib/approval-undo).
+ */
+export async function undoApprovalAction(token: string, input: ApproveInput): Promise<PortalActionResult> {
+  const result = await asReviewer(token, async (reviewer) => {
+    const { postId, versionNumber } = parseOrThrow(approveSchema, input);
+    await undoApproval(postId, reviewer, versionNumber);
     return undefined;
   });
   if (result.ok) refresh();

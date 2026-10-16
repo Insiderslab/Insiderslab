@@ -2,10 +2,13 @@ import "@/lib/load-env";
 import os from "node:os";
 import { Worker, type Job } from "bullmq";
 import {
+  APPROVAL_QUEUE_NAME,
   SCHEDULING_QUEUE_NAME,
   getRedisConnection,
+  type FinalizeApprovalJob,
   type SchedulePostJob,
 } from "@/lib/queue/client";
+import { finalizeApproval } from "@/lib/approval-undo";
 import { recordWorkerAlert, recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { processSchedulePost, sweepApprovedPosts } from "@/lib/scheduling";
 import { isMetricoolFake } from "@/lib/metricool/client";
@@ -31,6 +34,23 @@ const worker = new Worker<SchedulePostJob>(
     const result = await processSchedulePost(job);
     if (result.outcome === "skipped") {
       console.log(`[Approve Worker] Job ${job.id} skipped: ${result.reason}`);
+    }
+    return result;
+  },
+  {
+    connection: getRedisConnection(),
+    concurrency: CONCURRENCY,
+  }
+);
+
+// Delayed follow-up of client approvals: runs once the «Annulla» window is
+// closed (scheduling, agency email, plan update; lib/approval-undo).
+const approvalWorker = new Worker<FinalizeApprovalJob>(
+  APPROVAL_QUEUE_NAME,
+  async (job: Job<FinalizeApprovalJob>) => {
+    const result = await finalizeApproval(job.data);
+    if (result.outcome === "skipped") {
+      console.log(`[Approve Worker] Approval job ${job.id} skipped: ${result.reason}`);
     }
     return result;
   },
@@ -67,6 +87,24 @@ worker.on("error", (err) => {
   console.error("[Approve Worker] Worker error:", err.message);
 });
 
+approvalWorker.on("failed", (job, err) => {
+  console.error(`[Approve Worker] Approval job ${job?.id} failed (attempt ${job?.attemptsMade}):`, err.message);
+  // The undo window was still open: the retry is expected, not an alert.
+  if (err.name === "ApprovalWindowOpenError") return;
+  void recordWorkerAlert({
+    level: "error",
+    message: err.message,
+    jobId: job?.id,
+    postId: job?.data.postId,
+  }).catch((recordError) => {
+    console.error("[Approve Worker] Failed to record alert:", errorMessage(recordError));
+  });
+});
+
+approvalWorker.on("error", (err) => {
+  console.error("[Approve Worker] Approval worker error:", err.message);
+});
+
 async function heartbeat() {
   try {
     await recordWorkerHeartbeat({
@@ -94,7 +132,7 @@ async function shutdown(signal: string) {
   console.log(`[Approve Worker] ${signal} received, closing worker`);
   clearInterval(heartbeatTimer);
   clearTimeout(bootSweep);
-  await worker.close();
+  await Promise.all([worker.close(), approvalWorker.close()]);
   process.exit(0);
 }
 

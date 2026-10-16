@@ -161,6 +161,10 @@ test("blog, cliente (390px): commenta una frase selezionata e chiede modifiche",
   await sheet.getByRole("button", { name: "Invia commento" }).click();
   await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
 
+  // A saved comment: «Chiedi modifiche» is the primary button of the decision bar.
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "false");
+
   // The passage is highlighted with its number.
   const mark = article.locator("mark[data-comment-id]").first();
   await expect(mark).toContainText("perde gli aromi");
@@ -219,6 +223,26 @@ test("blog, cliente: vede le parole cambiate e approva", async ({ browser }) => 
   await expect(carried.getByText(/sulla versione 1/)).toBeVisible();
   await expect(carried.getByText(/Il passaggio è stato modificato/)).toBeVisible();
 
+  // The note of version 1 is carried over, not feedback on this version: «Approva» is the primary button.
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "true");
+
+  await page.getByRole("button", { name: "Approva", exact: true }).click();
+  await page.getByRole("button", { name: "Sì, approva" }).click();
+  await expect(page.getByText("Fatto! Articolo approvato.")).toBeVisible();
+  await waitForStatus(db, state.postId, "APPROVED", 10_000);
+
+  // «Approvato · Annulla»: an article has no scheduling, but the approval can still be taken back.
+  const toast = page.getByTestId("undo-toast");
+  await expect(toast).toBeVisible();
+  await toast.getByTestId("undo-button").click();
+  await expect(toast).toHaveCount(0);
+  await expect(page.getByText("Fatto! Articolo approvato.")).toHaveCount(0);
+  await waitForStatus(db, state.postId, "IN_REVIEW", 10_000);
+  await expect(page.getByTestId("decision-approve")).toBeVisible();
+  const { rows: undone } = await db.query('select type from "PostEvent" where "postId" = $1 order by "createdAt" desc limit 1', [state.postId]);
+  expect(undone[0].type).toBe("APPROVAL_UNDONE");
+
+  // Approved again, and this time left: the agency exports the version approved here.
   await page.getByRole("button", { name: "Approva", exact: true }).click();
   await page.getByRole("button", { name: "Sì, approva" }).click();
   await expect(page.getByText("Fatto! Articolo approvato.")).toBeVisible();

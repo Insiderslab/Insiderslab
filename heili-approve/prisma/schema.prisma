@@ -394,6 +394,7 @@ enum PostEventType {
   DELIVERED
   VARIANT_DECIDED
   ASSISTANT_SESSION_COMPLETED
+  APPROVAL_UNDONE
 }
 
 /// Registro di audit: chi ha fatto cosa e quando. Mai cancellato a mano.

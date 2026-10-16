@@ -157,6 +157,10 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
 
   const variant = (id) => page.locator(`[data-variant-id="${id}"]`);
 
+  // No feedback yet: «Invia le mie decisioni» is the primary button of the bar.
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "false");
+
   await variant("A").getByRole("button", { name: "Approva variante" }).click();
   await expect(page.getByRole("heading", { name: "1 di 3 varianti decise" })).toBeVisible();
 
@@ -171,6 +175,9 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
   await b.getByRole("button", { name: "Invia commento" }).click();
   await expect(page.getByText("Commento salvato e visibile all’agenzia")).toBeVisible();
   await expect(b.getByText(B_MOMENT)).toBeVisible();
+  // A saved comment: «Chiedi modifiche» takes over as the primary button.
+  await expect(page.getByTestId("decision-changes")).toHaveAttribute("data-primary", "true");
+  await expect(page.getByTestId("decision-approve")).toHaveAttribute("data-primary", "false");
 
   // Safe zones on the 9:16 preview (Stories/Reels).
   await b.getByRole("tab", { name: /Storie e Reels/ }).click();
@@ -194,6 +201,19 @@ test("ads, cliente (390px): approva A, scarta B con nota e commento al video, ap
   await page.getByRole("heading", { name: "3 di 3 varianti decise" }).scrollIntoViewIfNeeded();
   await viewportShot(page, "ads-cliente-decisioni-mobile.png");
 
+  await page.getByRole("button", { name: "Invia le mie decisioni" }).click();
+  await page.getByRole("button", { name: "Sì, invia" }).click();
+  await expect(page.getByText("Decisioni inviate all'agenzia.")).toBeVisible();
+  await waitForStatus(db, state.postId, "APPROVED", 10_000);
+
+  // «Approvate · Annulla»: the set goes back to "Da approvare" with its decisions as they were.
+  const toast = page.getByTestId("undo-toast");
+  await expect(toast).toBeVisible();
+  await expect(toast.getByTestId("undo-label")).toContainText("Approvate");
+  await toast.getByTestId("undo-button").click();
+  await expect(toast).toHaveCount(0);
+  await waitForStatus(db, state.postId, "IN_REVIEW", 10_000);
+  await expect(page.getByRole("heading", { name: "3 di 3 varianti decise" })).toBeVisible();
   await page.getByRole("button", { name: "Invia le mie decisioni" }).click();
   await page.getByRole("button", { name: "Sì, invia" }).click();
   await expect(page.getByText("Decisioni inviate all'agenzia.")).toBeVisible();

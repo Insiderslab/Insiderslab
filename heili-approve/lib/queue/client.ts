@@ -55,3 +55,47 @@ export function getSchedulingQueue(): Queue<SchedulePostJob> {
 export function schedulePostJobId(postId: string, versionNumber: number, attempt = 0): string {
   return `schedule_${postId}_v${versionNumber}_${attempt}`;
 }
+
+// ─── Delayed approval follow-up ──────────────────────────────────────────────
+
+/**
+ * A client approval is recorded at once, but scheduling, the agency email and
+ * the plan follow-up run APPROVAL_FINALIZE_DELAY_MS later, so «Annulla» can
+ * take the approval back first (lib/approval-undo). A separate queue keeps
+ * these delayed jobs away from the Metricool ones.
+ */
+export const APPROVAL_QUEUE_NAME = "approval-finalize";
+export const APPROVAL_FINALIZE_JOB_NAME = "finalize-approval";
+
+export interface FinalizeApprovalJob {
+  postId: string;
+  /** Version the client approved. */
+  versionNumber: number;
+  /** Exact `approvedAt` (ms) of that approval: a job of an undone approval does nothing. */
+  approvedAtMs: number;
+  reviewerId: string;
+  /** false: no "Approvato" email (plan-wide approvals send one summary instead). */
+  notify: boolean;
+}
+
+let approvalQueue: Queue<FinalizeApprovalJob> | null = null;
+
+export function getApprovalQueue(): Queue<FinalizeApprovalJob> {
+  if (!approvalQueue) {
+    approvalQueue = new Queue<FinalizeApprovalJob>(APPROVAL_QUEUE_NAME, {
+      connection: getRedisConnection(),
+      defaultJobOptions: {
+        removeOnComplete: { count: 1000 },
+        removeOnFail: { age: 7 * 24 * 3600, count: 2000 },
+        attempts: 5,
+        backoff: { type: "exponential", delay: 30_000 },
+      },
+    });
+  }
+  return approvalQueue;
+}
+
+/** One job per approval: approving again after an undo gets a new id. */
+export function approvalFinalizeJobId(postId: string, versionNumber: number, approvedAtMs: number): string {
+  return `finalize_${postId}_v${versionNumber}_${approvedAtMs}`;
+}

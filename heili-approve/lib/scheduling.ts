@@ -41,6 +41,7 @@ import {
   type SchedulePostJob,
 } from "@/lib/queue/client";
 import { MetricoolError, getWorkspaceMetricoolClient } from "@/lib/metricool/client";
+import { sweepApprovedCutoff } from "@/lib/undo-rules";
 import { SchedulerPayloadError, buildSchedulerPayload, isValidTimeZone } from "@/lib/metricool/payload";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -517,8 +518,6 @@ export async function processSchedulePost(job: ScheduleJobLike): Promise<Process
 
 // ─── Sweep ───────────────────────────────────────────────────────────────────
 
-/** approvePost schedules inline; give it this long before the sweep steps in. */
-const SWEEP_APPROVED_GRACE_MS = 2 * MINUTE_MS;
 /** A SCHEDULING post untouched for this long may have lost its job. */
 const SWEEP_SCHEDULING_STUCK_MS = 10 * MINUTE_MS;
 const SWEEP_BATCH = 100;
@@ -532,7 +531,9 @@ export interface SweepResult {
 /**
  * Safety net, run by the cron every 5 minutes: schedules APPROVED posts of
  * auto-schedule clients that never got a job, and re-enqueues SCHEDULING
- * posts whose job vanished (Redis restart, enqueue failure).
+ * posts whose job vanished (Redis restart, enqueue failure). An approval
+ * younger than SWEEP_APPROVED_GRACE_MS (lib/undo-rules) is left alone: its
+ * «Annulla» window is open or its delayed job is about to run.
  */
 export async function sweepApprovedPosts(now: Date = new Date()): Promise<SweepResult> {
   const result: SweepResult = { approvedQueued: 0, stuckRequeued: 0, errors: 0 };
@@ -541,7 +542,7 @@ export async function sweepApprovedPosts(now: Date = new Date()): Promise<SweepR
     where: {
       status: "APPROVED",
       kind: "SOCIAL_POST",
-      approvedAt: { lte: new Date(now.getTime() - SWEEP_APPROVED_GRACE_MS) },
+      approvedAt: { lte: sweepApprovedCutoff(now) },
       client: { autoSchedule: true, archivedAt: null },
     },
     select: { id: true },

@@ -159,6 +159,7 @@ export const STATUS_TONES: Record<PostStatus, "neutral" | "info" | "warning" | "
 export type PostAction =
   | "submit" //            agency → client
   | "approve" //           client
+  | "undo_approval" //     client, within the undo window right after approving
   | "request_changes" //   client
   | "edit" //              agency edits content (new version once it has been seen)
   | "schedule" //          system/agency → Metricool job
@@ -177,6 +178,8 @@ export type PostAction =
 const TRANSITIONS: Record<PostAction, Partial<Record<PostStatus, PostStatus>>> = {
   submit: { DRAFT: "IN_REVIEW", CHANGES_REQUESTED: "IN_REVIEW" },
   approve: { IN_REVIEW: "APPROVED" },
+  // Only reachable from lib/approval-undo (window, reviewer and version checks).
+  undo_approval: { APPROVED: "IN_REVIEW" },
   request_changes: { IN_REVIEW: "CHANGES_REQUESTED" },
   edit: {
     DRAFT: "DRAFT",

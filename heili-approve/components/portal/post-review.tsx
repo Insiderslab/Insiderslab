@@ -21,6 +21,7 @@ import {
   approvePostAction,
   addCommentAction,
   requestChangesAction,
+  undoApprovalAction,
 } from "@/app/review/[token]/actions";
 import { NetworkPreviewTabs, type PreviewPin, type PreviewSeek, type PreviewVideoMarker } from "@/components/post-preview";
 import { useHeili, useHeiliPage } from "@/components/portal/heili/context";
@@ -28,6 +29,7 @@ import type { HeiliDestination } from "@/components/portal/heili/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
 import CommentList from "./comment-list";
+import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
@@ -46,6 +48,7 @@ import {
 } from "./review-pieces";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import type { PortalClient, PortalComment, PortalPlanNav, PortalPost, PortalQueue } from "./types";
+import UndoToast from "./undo-toast";
 
 type Outcome = "approved" | "changes";
 
@@ -94,6 +97,8 @@ export default function PostReview({
   const heili = useHeili();
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One «Approvato · Annulla» toast per approval (the key restarts its clock).
+  const [undoKey, setUndoKey] = useState<number | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
   );
@@ -139,6 +144,14 @@ export default function PostReview({
     : baseWording;
   const mixedList = new Set(listKinds).size > 1;
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved).length;
+  // «Approva» is the primary button until there is feedback; then «Chiedi modifiche».
+  const primary = primaryDecision({
+    hasFeedback: hasDecisionFeedback({
+      savedComments: myOpenComments,
+      hasDraft: commentDirty,
+      heiliPending: heili.pendingFeedback,
+    }),
+  });
 
   // ─── Pins and markers (numbers match the comment list) ─────────────────────
 
@@ -346,6 +359,20 @@ export default function PostReview({
     }
     fromAssistant?.resolve();
     finish("approved");
+    setUndoKey((key) => (key ?? 0) + 1);
+  }
+
+  // «Annulla» of the toast: the post goes back to "Da approvare", as it was.
+  async function undoApprove(): Promise<string | null> {
+    const result = await undoApprovalAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
+    if (!result.ok) return result.error;
+    setOutcome(null);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
+    setNotice(null);
+    setDecisionError(null);
+    setStale(false);
+    return null;
   }
 
   async function requestSavedChanges() {
@@ -680,7 +707,9 @@ export default function PostReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "changes")}
+                data-testid="decision-changes"
+                data-primary={primary === "changes"}
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -688,13 +717,19 @@ export default function PostReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "approve")}
+                data-testid="decision-approve"
+                data-primary={primary === "approve"}
               >
                 Approva
               </button>
             </div>
           </div>
         </DecisionBar>
+      )}
+
+      {undoKey !== null && outcome === "approved" && (
+        <UndoToast key={undoKey} onUndo={undoApprove} onClose={() => setUndoKey(null)} />
       )}
 
       <BottomSheet open={sheet === "approve"} title="Approvi questo post?" onClose={closeSheet} busy={sheetBusy}>

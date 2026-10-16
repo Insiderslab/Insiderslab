@@ -82,6 +82,9 @@ export interface HeiliStore {
   control: RefObject<AssistantPanelHandle | null>;
   /** True dopo la prima apertura del pannello: tiene vivi bozze e conversazione. */
   panelMounted: boolean;
+  /** Heili ha un feedback che «Chiedi modifiche» invierebbe (la pagina ne ricava il pulsante principale). */
+  pendingFeedback: boolean;
+  setPendingFeedback: (pending: boolean) => void;
   openDock: (tab?: HeiliDockTab) => void;
   closeDock: () => void;
   toggleDock: () => void;
@@ -102,6 +105,8 @@ const HEILI_NOOP: HeiliStore = {
   pick: null,
   control: { current: null },
   panelMounted: false,
+  pendingFeedback: false,
+  setPendingFeedback: () => undefined,
   openDock: () => undefined,
   closeDock: () => undefined,
   toggleDock: () => undefined,
@@ -124,6 +129,7 @@ export function HeiliProvider({ token, children }: { token: string; children: Re
   const [tab, setTab] = useState<HeiliDockTab>("guide");
   const [pick, setPick] = useState<"point" | "moment" | null>(null);
   const [panelMounted, setPanelMounted] = useState(false);
+  const [pendingFeedback, setPendingFeedback] = useState(false);
   const control = useRef<AssistantPanelHandle | null>(null);
 
   const registeredContext = registration ? registration.read() : null;
@@ -186,6 +192,8 @@ export function HeiliProvider({ token, children }: { token: string; children: Re
       pick,
       control,
       panelMounted,
+      pendingFeedback,
+      setPendingFeedback,
       openDock,
       closeDock,
       toggleDock,
@@ -203,6 +211,7 @@ export function HeiliProvider({ token, children }: { token: string; children: Re
       tab,
       pick,
       panelMounted,
+      pendingFeedback,
       openDock,
       closeDock,
       toggleDock,

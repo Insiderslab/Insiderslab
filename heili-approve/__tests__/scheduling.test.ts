@@ -57,7 +57,9 @@ import {
   parseClaim,
   processSchedulePost,
   sendReviewReminders,
+  sweepApprovedPosts,
 } from "@/lib/scheduling";
+import { SWEEP_FRESH_APPROVAL_MS, UNDO_WINDOW_MS } from "@/lib/undo-rules";
 
 const HOUR = 60 * 60 * 1000;
 const NOW = new Date("2026-10-05T10:00:00Z");
@@ -452,5 +454,23 @@ describe("sendReviewReminders", () => {
 
     expect(result.sent).toBe(0);
     expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("sweepApprovedPosts and the undo window", () => {
+  it("only looks at approvals older than the undo window plus a margin", async () => {
+    mockPrisma.post.findMany.mockReset();
+    mockPrisma.post.findMany.mockResolvedValue([]);
+    await sweepApprovedPosts(NOW);
+
+    const approvedQuery = mockPrisma.post.findMany.mock.calls[0][0];
+    expect(approvedQuery.where.status).toBe("APPROVED");
+    const cutoff = approvedQuery.where.approvedAt.lte as Date;
+    const minAge = NOW.getTime() - cutoff.getTime();
+    expect(minAge).toBeGreaterThanOrEqual(SWEEP_FRESH_APPROVAL_MS);
+    expect(minAge).toBeGreaterThan(UNDO_WINDOW_MS);
+    // An approval from 19 s ago is not eligible; one from ten minutes ago is.
+    expect(NOW.getTime() - 19_000).toBeGreaterThan(cutoff.getTime());
+    expect(NOW.getTime() - 10 * 60_000).toBeLessThan(cutoff.getTime());
   });
 });

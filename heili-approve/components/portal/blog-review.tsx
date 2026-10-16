@@ -19,6 +19,7 @@ import {
   addCommentAction,
   approvePostAction,
   requestChangesAction,
+  undoApprovalAction,
 } from "@/app/review/[token]/actions";
 import type { AssistantMode } from "@/lib/review-assistant/shared";
 import BlogReader, { type BlogReaderComment } from "@/components/blog/blog-reader";
@@ -28,6 +29,7 @@ import { buildAnchor } from "@/lib/content/blog-text";
 import type { BlogAnchor } from "@/lib/content/types";
 import BottomSheet from "./bottom-sheet";
 import CommentComposer, { type CommentDraft, type CommentSubmission } from "./comment-composer";
+import { decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
 import {
@@ -45,6 +47,7 @@ import {
   newVersionNotice,
 } from "./review-pieces";
 import type { PortalBlogPost, PortalPassageComment, PortalQueue } from "./types";
+import UndoToast from "./undo-toast";
 
 type Outcome = "approved" | "changes";
 
@@ -114,6 +117,8 @@ export default function BlogReview({
   const heili = useHeili();
 
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One «Approvato · Annulla» toast per approval (the key restarts its clock).
+  const [undoKey, setUndoKey] = useState<number | null>(null);
   const [draft, setDraft] = useState<CommentDraft | null>(
     post.canAct || post.status === "CHANGES_REQUESTED" ? { kind: "general" } : null
   );
@@ -148,6 +153,14 @@ export default function BlogReview({
   const wording = portalWording(listKinds);
   // On this version (open notes carried over from earlier ones are not counted).
   const myOpenComments = post.comments.filter((c) => c.isMine && !c.resolved && c.fromVersion === null).length;
+  // «Approva» is the primary button until there is feedback; then «Chiedi modifiche».
+  const primary = primaryDecision({
+    hasFeedback: hasDecisionFeedback({
+      savedComments: myOpenComments,
+      hasDraft: commentDirty,
+      heiliPending: heili.pendingFeedback,
+    }),
+  });
 
   const passageComments = post.comments
     .filter((c): c is PortalPassageComment & { anchor: BlogAnchor; number: number } => c.anchor !== null && c.number !== null)
@@ -315,6 +328,20 @@ export default function BlogReview({
     }
     fromAssistant?.resolve();
     finish("approved");
+    setUndoKey((key) => (key ?? 0) + 1);
+  }
+
+  // «Annulla» of the toast: the article goes back to "Da approvare", as it was.
+  async function undoApprove(): Promise<string | null> {
+    const result = await undoApprovalAction(token, { postId: ref.id, versionNumber: ref.versionNumber });
+    if (!result.ok) return result.error;
+    setOutcome(null);
+    setDraft({ kind: "general" });
+    setDraftKey((key) => key + 1);
+    setNotice(null);
+    setDecisionError(null);
+    setStale(false);
+    return null;
   }
 
   async function requestSavedChanges() {
@@ -579,7 +606,9 @@ export default function BlogReview({
                 type="button"
                 onClick={requestChangesFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg bg-accent px-2 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "changes")}
+                data-testid="decision-changes"
+                data-primary={primary === "changes"}
               >
                 {sheetBusy ? "Invio…" : "Chiedi modifiche"}
               </button>
@@ -587,7 +616,9 @@ export default function BlogReview({
                 type="button"
                 onClick={approveFromBar}
                 disabled={sheetBusy}
-                className="min-h-12 min-w-0 flex-1 whitespace-nowrap rounded-lg border border-border bg-background px-2 text-base font-semibold text-foreground hover:border-border-hover disabled:opacity-50 sm:px-3"
+                className={decisionButtonClass(primary === "approve")}
+                data-testid="decision-approve"
+                data-primary={primary === "approve"}
               >
                 Approva
               </button>
@@ -640,6 +671,10 @@ export default function BlogReview({
           </>
         )}
       </BottomSheet>
+
+      {undoKey !== null && outcome === "approved" && (
+        <UndoToast key={undoKey} onUndo={undoApprove} onClose={() => setUndoKey(null)} />
+      )}
 
       <BottomSheet open={sheet === "approve"} title="Approvi questo articolo?" onClose={closeSheet} busy={sheetBusy}>
         <p className="text-base">L&apos;agenzia lo pubblicherà sul sito così com&apos;è. {publishSentence}</p>

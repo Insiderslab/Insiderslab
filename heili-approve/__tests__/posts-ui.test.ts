@@ -24,6 +24,7 @@ import {
   selectForSendLabel,
   setNetworkOption,
   sortThreadsByMoment,
+  standingApprovals,
   startOfDayUtc,
   startOfWeek,
   statusesForFilter,
@@ -277,5 +278,36 @@ describe("event timeline", () => {
     expect(describeEvent({ type: "SCHEDULE_REQUESTED", versionNumber: 1, metadata: {} }).title).toBe(
       "Programmazione su Metricool richiesta"
     );
+  });
+});
+
+describe("approval undone (D2)", () => {
+  it("the agency timeline reads «Approvazione annullata dal cliente»", () => {
+    const undone = describeEvent({
+      type: "APPROVAL_UNDONE",
+      versionNumber: 2,
+      metadata: { elapsedMs: 4000 },
+      reviewer: { name: "Giulia" },
+    });
+    expect(undone.title).toBe("Approvazione annullata dal cliente (versione 2)");
+    expect(undone.details).toEqual(["Annullata da Giulia"]);
+    expect(undone.tone).toBe("warning");
+    expect(describeEvent({ type: "APPROVAL_UNDONE", versionNumber: null, metadata: {} }).title).toBe(
+      "Approvazione annullata dal cliente"
+    );
+  });
+
+  it("an approval followed by its undo no longer counts as approved", () => {
+    const events = [
+      { type: "SUBMITTED_FOR_REVIEW", versionNumber: 1 },
+      { type: "APPROVED", versionNumber: 1 },
+      { type: "APPROVAL_UNDONE", versionNumber: 1 },
+    ];
+    expect(standingApprovals(events)).toEqual([]);
+    // Approved again afterwards: only the new approval stands.
+    const again = [...events, { type: "APPROVED", versionNumber: 1 }];
+    expect(standingApprovals(again)).toEqual([{ type: "APPROVED", versionNumber: 1 }]);
+    // An undo of another version cancels nothing here.
+    expect(standingApprovals([{ type: "APPROVED", versionNumber: 2 }, { type: "APPROVAL_UNDONE", versionNumber: 1 }])).toHaveLength(1);
   });
 });

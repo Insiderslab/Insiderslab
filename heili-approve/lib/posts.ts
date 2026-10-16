@@ -1748,7 +1748,7 @@ async function assertBulkApprovalHasNoFeedback(
  * status in sync and tells the agency once when the whole plan is decided.
  * Imported lazily (lib/plans imports this module). Never throws.
  */
-async function afterPlanDecision(planId: string | null): Promise<void> {
+export async function afterPlanDecision(planId: string | null): Promise<void> {
   if (!planId) return;
   try {
     const { afterPlanPostDecided } = await import("@/lib/plans");
@@ -1771,6 +1771,13 @@ export async function approvePost(
     notify?: boolean;
     /** Apply the plan-wide feedback guard; single-post approval stays explicit. */
     bulkSafety?: boolean;
+    /**
+     * Single approvals by the client (portal, Sfoglia, ads decisions): the
+     * approval is recorded at once but scheduling, the agency email and the
+     * plan follow-up wait for the undo window (lib/approval-undo). Plan-wide
+     * approvals leave it off and keep the immediate behaviour.
+     */
+    undoable?: boolean;
   } = {}
 ): Promise<Post> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
@@ -1823,11 +1830,25 @@ export async function approvePost(
       };
     }
 
+    if (opts.undoable === true) metadata = { ...(metadata ?? {}), undoable: true };
     await recordEvent(tx, { postId, type: "APPROVED", actor, versionNumber, ...(metadata ? { metadata } : {}) });
     return { post: { ...post, status: next, approvedAt: now, approvedByReviewerId: reviewer.id }, changed: true };
   });
 
   if (!result.changed) return result.post;
+
+  if (opts.undoable === true && result.post.approvedAt) {
+    // Imported lazily: the follow-up queue pulls in BullMQ/Redis and imports this module.
+    const { scheduleApprovalFinalization } = await import("@/lib/approval-undo");
+    await scheduleApprovalFinalization({
+      postId,
+      versionNumber,
+      approvedAtMs: result.post.approvedAt.getTime(),
+      reviewerId: reviewer.id,
+      notify: opts.notify !== false,
+    });
+    return prisma.post.findUniqueOrThrow({ where: { id: postId } });
+  }
 
   // Blog/ads have no external integration: nothing to schedule, ever.
   if (!isInternalKind(result.post.kind) && result.post.client.autoSchedule) {

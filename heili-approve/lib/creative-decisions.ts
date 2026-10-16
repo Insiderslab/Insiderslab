@@ -249,7 +249,8 @@ export async function finalizeCreativeReview(
   // Imported lazily: lib/posts imports this module for the approval check.
   const { approvePost, requestChanges } = await import("@/lib/posts");
   if (evaluation.outcome === "approve") {
-    const post = await approvePost(postId, reviewer, versionNumber);
+    // A single approval by the client: undoable for a few seconds (lib/approval-undo).
+    const post = await approvePost(postId, reviewer, versionNumber, { undoable: true });
     return { outcome: "APPROVED", post, evaluation };
   }
   const { post } = await requestChanges(postId, reviewer, versionNumber, buildRejectionMessage(evaluation, content), {
