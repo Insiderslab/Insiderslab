@@ -77,6 +77,21 @@ body {
   }
 }
 
+/* Heili's floating button. Above the page's sticky decision bar (--decision-bar-h is the
+   space the bar takes from the bottom of the window); on phones it sits INSIDE the bar's
+   right edge, level with its buttons (the bar keeps 72 px free there), so it never covers
+   the post's media or the carousel arrows (QA-12). The bar sets the variables and
+   html[data-decision-bar]; without a bar the button sits in the corner. */
+.heili-launcher {
+  bottom: calc(var(--decision-bar-h, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
+}
+@media (max-width: 639px) {
+  html[data-decision-bar] .heili-launcher {
+    right: 1rem;
+    bottom: calc(var(--decision-bar-b, 0px) + max(0.75rem, env(safe-area-inset-bottom)));
+  }
+}
+
 ::selection {
   background: var(--color-node-soft);
   color: var(--color-foreground);

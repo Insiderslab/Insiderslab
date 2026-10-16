@@ -9,8 +9,9 @@
  * delle decisioni (z-50) e con la pagina che si restringe di 400 px mentre è
  * aperto (`html[data-heili-panel="side"]` in globals.css): né il contenuto né
  * «Approva» finiscono sotto il pannello (QA-05, QA-13). Sulle pagine con la
- * barra delle decisioni il pulsante resta sopra la barra grazie alla variabile
- * CSS `--decision-bar-h`.
+ * barra delle decisioni il pulsante resta sopra la barra (variabile CSS
+ * `--decision-bar-h`); su telefono sta dentro il bordo destro della barra
+ * (`--decision-bar-b`), così non copre mai immagini e frecce del carosello (QA-12).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -149,8 +150,8 @@ export default function HeiliDock() {
           aria-haspopup="dialog"
           aria-expanded={open}
           data-testid="heili-dock-button"
-          className="fixed right-3 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-accent/40 bg-background text-foreground shadow-[var(--shadow-overlay)] hover:bg-accent-soft sm:right-4 sm:h-14 sm:w-14"
-          style={{ bottom: "calc(var(--decision-bar-h, 0px) + max(0.75rem, env(safe-area-inset-bottom)))" }}
+          // Position: .heili-launcher in globals.css (above the bar; on phones inside its right edge).
+          className="heili-launcher fixed right-3 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-accent/40 bg-background text-foreground shadow-[var(--shadow-overlay)] hover:bg-accent-soft sm:right-4 sm:h-14 sm:w-14"
         >
           <HeiliAssistantIcon className="h-8 w-8 sm:h-9 sm:w-9" />
         </button>

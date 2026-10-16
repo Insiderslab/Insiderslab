@@ -141,23 +141,105 @@ test("QA-14: in fondo alla pagina la barra delle decisioni è attaccata al bordo
     await expect(bar).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await page.waitForTimeout(300);
-    const { bottom, height, vh, pb, clearance } = await page.evaluate(() => {
+    const { bottom, height, vh, pb } = await page.evaluate(() => {
       const el = document.querySelector(".sticky.bottom-0");
       const r = el.getBoundingClientRect();
-      const button = document.querySelector('[data-testid="heili-dock-button"]').getBoundingClientRect();
       return {
         bottom: r.bottom,
         height: r.height,
         vh: window.innerHeight,
         pb: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--decision-bar-h")),
-        clearance: r.top - button.bottom,
       };
     });
     expect(Math.abs(bottom - vh), `${name}: la barra sta a ${Math.round(vh - bottom)} px dal bordo inferiore`).toBeLessThanOrEqual(1);
-    // The floating button is above the bar and --decision-bar-h is exactly the bar's height now.
+    // --decision-bar-h is exactly the bar's height now (nothing under it).
     expect(Math.abs(pb - height)).toBeLessThanOrEqual(1);
-    expect(clearance, `${name}: il pulsante di Heili tocca la barra`).toBeGreaterThanOrEqual(8);
     if (name === "post" || name === "Sfoglia") await viewportShot(page, `qa14-${name.toLowerCase()}-fondo-390.png`);
   }
+  await context.close();
+});
+
+// ─── QA-12 ───────────────────────────────────────────────────────────────────
+
+const boxOf = (page, selector) => page.evaluate((sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
+}, selector);
+
+test("QA-12: a 390 e 360 px il pulsante di Heili sta nella barra e non copre immagine né frecce del carosello", async ({ browser }) => {
+  const plan = `${state.month.a.reviewUrl}/piani/${state.month.planId}`;
+  const pages = [
+    ["post", `${state.portal.reviewUrl}/posts/${state.portal.carouselId}`],
+    ["annunci", `${state.portal.reviewUrl}/posts/${state.portal.adsId}`],
+    ["articolo", `${state.portal.reviewUrl}/posts/${state.portal.blogId}`],
+    ["piano", plan],
+    ["Sfoglia", `${plan}?vista=sfoglia`],
+  ];
+  for (const width of [360, 390]) {
+    const context = await browser.newContext({ ...MOBILE, viewport: { width, height: 844 } });
+    const page = await context.newPage();
+    for (const [name, url] of pages) {
+      await page.goto(url);
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByTestId("heili-dock-button")).toBeVisible();
+      for (const scroll of [0, 400]) {
+        await page.evaluate((y) => window.scrollTo(0, y), scroll);
+        await page.waitForTimeout(250);
+        const launcher = await boxOf(page, '[data-testid="heili-dock-button"]');
+        const bar = await boxOf(page, ".sticky.bottom-0");
+        const where = `${name} ${width}px, scroll ${scroll}`;
+        // Inside the bar: the page's content (media, arrows) is never under the button.
+        expect(launcher.y, `${where}: il pulsante esce dalla barra (sopra)`).toBeGreaterThanOrEqual(bar.y);
+        expect(launcher.y + launcher.height, `${where}: il pulsante esce dalla barra (sotto)`).toBeLessThanOrEqual(bar.y + bar.height + 1);
+        expect(launcher.x + launcher.width).toBeLessThanOrEqual(width);
+        // ... and clear of the bar's buttons.
+        const buttons = await page.evaluate(() =>
+          [...document.querySelectorAll(".sticky.bottom-0 button, .sticky.bottom-0 a")].map((el) => {
+            const r = el.getBoundingClientRect();
+            return { x: r.x, y: r.y, width: r.width, height: r.height };
+          })
+        );
+        for (const button of buttons) expect(overlap(launcher, button), `${where}: il pulsante di Heili copre un pulsante della barra`).toBe(false);
+        // The carousel arrows: the part of an arrow that is above the bar must be the one a tap reaches
+        // (the bar itself always covers what scrolls under it; the Heili button must not add to that).
+        for (const arrow of ["Contenuto successivo", "Contenuto precedente"]) {
+          const reached = await page.evaluate(
+            ({ label, barTop }) => {
+              const el = document.querySelector(`button[aria-label="${label}"]`);
+              if (!el) return "assente";
+              const r = el.getBoundingClientRect();
+              const top = Math.max(r.top, 0);
+              const bottom = Math.min(r.bottom, barTop);
+              if (bottom - top < 6) return "sotto la barra";
+              const hit = document.elementFromPoint(r.left + r.width / 2, (top + bottom) / 2);
+              return hit?.closest("button") === el ? "raggiunta" : `coperta da ${hit?.getAttribute("data-testid") ?? hit?.tagName}`;
+            },
+            { label: arrow, barTop: bar.y }
+          );
+          expect(["assente", "sotto la barra", "raggiunta"], `${where}: «${arrow}» ${reached}`).toContain(reached);
+        }
+      }
+      if (width === 390 && (name === "post" || name === "Sfoglia")) {
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await viewportShot(page, `qa12-${name.toLowerCase()}-390.png`);
+      }
+    }
+    await context.close();
+  }
+});
+
+test("QA-12: a 768 px (e senza barra) il pulsante resta nell'angolo, sopra la barra", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 768, height: 900 }, locale: "it-IT" });
+  const page = await context.newPage();
+  await page.goto(`${state.portal.reviewUrl}/posts/${state.portal.carouselId}`);
+  await expect(page.getByTestId("heili-dock-button")).toBeVisible();
+  const launcher = await boxOf(page, '[data-testid="heili-dock-button"]');
+  const bar = await boxOf(page, ".sticky.bottom-0");
+  expect(launcher.y + launcher.height).toBeLessThanOrEqual(bar.y);
+  await page.goto(state.portal.reviewUrl);
+  const home = await page.getByTestId("heili-dock-button").boundingBox();
+  expect(900 - (home.y + home.height)).toBeLessThanOrEqual(16);
   await context.close();
 });

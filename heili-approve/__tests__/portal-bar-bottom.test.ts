@@ -31,3 +31,31 @@ describe("fondo della pagina con la barra delle decisioni", () => {
     expect(bar).toContain("sticky bottom-0");
   });
 });
+
+/**
+ * QA-12: su telefono il pulsante di Heili sta dentro il bordo destro della barra
+ * delle decisioni, non sopra l'immagine. La barra misura e pubblica due distanze
+ * (--decision-bar-h: bordo alto → fondo finestra; --decision-bar-b: bordo basso →
+ * fondo finestra) e un attributo sull'<html>; il CSS del pulsante le legge.
+ */
+describe("pulsante di Heili e barra delle decisioni (telefono)", () => {
+  const css = read("app", "globals.css");
+  const pieces = read("components", "portal", "review-pieces.tsx");
+  const dock = read("components", "portal", "heili", "heili-dock.tsx");
+
+  it("la barra pubblica le due variabili e l'attributo, e li toglie quando se ne va", () => {
+    expect(pieces).toContain('setProperty("--decision-bar-h"');
+    expect(pieces).toContain('setProperty("--decision-bar-b"');
+    expect(pieces).toContain('dataset.decisionBar = ""');
+    expect(pieces).toContain('removeProperty("--decision-bar-b")');
+    expect(pieces).toContain("delete document.documentElement.dataset.decisionBar");
+  });
+
+  it("sotto 640 px il pulsante si allinea ai pulsanti della barra e la barra gli lascia 72 px a destra", () => {
+    expect(css).toMatch(/@media \(max-width: 639px\) \{\s*html\[data-decision-bar\] \.heili-launcher \{\s*right: 1rem;\s*bottom: calc\(var\(--decision-bar-b, 0px\) \+ max\(0\.75rem, env\(safe-area-inset-bottom\)\)\);/);
+    expect(pieces).toContain("max-sm:pr-[4.5rem]");
+    expect(dock).toContain('className="heili-launcher fixed');
+    // Da 640 px in su resta sopra la barra, come prima.
+    expect(css).toMatch(/\.heili-launcher \{\s*bottom: calc\(var\(--decision-bar-h, 0px\)/);
+  });
+});

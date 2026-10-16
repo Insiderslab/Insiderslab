@@ -164,9 +164,11 @@ export function newVersionNotice(hasEmail: boolean): string {
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */
 export function DecisionBar({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
-  // The floating Heili button sits above this bar. The bar is sticky, so at the
-  // end of the page it rises above the bottom edge: --decision-bar-h is the
-  // space it really takes from the bottom of the viewport, not just its height.
+  // Heili's button follows this bar: above it from 640 px up, inside its right edge on
+  // phones (QA-12: over the media it covered the carousel's «successivo»). The bar is
+  // sticky, so in a short page it floats above the bottom edge: --decision-bar-h is the
+  // space it really takes from the bottom of the viewport (top edge to the bottom) and
+  // --decision-bar-b the gap under it (bottom edge to the bottom), not just its height.
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -174,7 +176,9 @@ export function DecisionBar({ children }: { children: ReactNode }) {
     const update = () => {
       frame = 0;
       const space = Math.max(0, Math.round(window.innerHeight - element.getBoundingClientRect().top));
+      const below = Math.max(0, Math.round(window.innerHeight - element.getBoundingClientRect().bottom));
       document.documentElement.style.setProperty("--decision-bar-h", `${space}px`);
+      document.documentElement.style.setProperty("--decision-bar-b", `${below}px`);
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(update);
@@ -184,6 +188,7 @@ export function DecisionBar({ children }: { children: ReactNode }) {
     // strip under the sticky bar at the end of the page. The bar brings its own clearance
     // (mt-14 above it) and takes the padding away.
     document.documentElement.style.setProperty("--portal-pb", "0px");
+    document.documentElement.dataset.decisionBar = "";
     const observer = new ResizeObserver(schedule);
     observer.observe(element);
     window.addEventListener("scroll", schedule, { passive: true, capture: true });
@@ -194,7 +199,9 @@ export function DecisionBar({ children }: { children: ReactNode }) {
       window.removeEventListener("scroll", schedule, { capture: true });
       window.removeEventListener("resize", schedule);
       document.documentElement.style.removeProperty("--decision-bar-h");
+      document.documentElement.style.removeProperty("--decision-bar-b");
       document.documentElement.style.removeProperty("--portal-pb");
+      delete document.documentElement.dataset.decisionBar;
     };
   }, []);
   return (
@@ -202,7 +209,8 @@ export function DecisionBar({ children }: { children: ReactNode }) {
       ref={ref}
       // mb-0 / mt-14: the page's space-y gap under the bar is gone (it floated the bar 24 px above
       // the bottom) and the clearance for the floating Heili button sits above it instead.
-      className="sticky bottom-0 z-40 -mx-4 mb-0 mt-14 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur"
+      // max-sm:pr-[4.5rem]: on phones the Heili button (48 px) sits in the bar's right edge.
+      className="sticky bottom-0 z-40 -mx-4 mb-0 mt-14 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur max-sm:pr-[4.5rem]"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       {children}
