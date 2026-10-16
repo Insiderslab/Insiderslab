@@ -277,6 +277,16 @@ test("a 390 px la barra è bassa e «Prossima da correggere» mostra la riga sop
       .toBe(true);
     expect(await row.evaluate((el) => el === document.activeElement)).toBe(true);
   }
+
+  // With nothing ready the create button says «Nessuna riga da creare»: the long label wraps inside the button.
+  await rows.nth(0).getByRole("button", { name: /Togli la riga/ }).click();
+  await expect(rows).toHaveCount(7);
+  await expect(page.getByTestId("import-create")).toHaveText("Nessuna riga da creare");
+  for (const id of ["import-goto-invalid", "import-create"]) {
+    const box = await page.getByTestId(id).boundingBox();
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(await page.getByTestId(id).evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `«${id}» senza testo fuori dal pulsante`).toBe(true);
+  }
   await context.close();
 });
 

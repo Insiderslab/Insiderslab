@@ -611,7 +611,7 @@ export default function ImportWizard({ client }: Props) {
               {invalidCount > 0 && (
                 <button
                   type="button"
-                  className="btn btn-sm min-w-0 px-3"
+                  className="btn btn-sm min-w-0 flex-1 px-3 whitespace-normal! py-1 leading-tight sm:flex-none sm:whitespace-nowrap! sm:py-0 sm:leading-5"
                   onClick={gotoNextInvalid}
                   aria-label="Vai alla prossima da correggere"
                   data-testid="import-goto-invalid"
@@ -622,7 +622,8 @@ export default function ImportWizard({ client }: Props) {
               )}
               <button
                 type="button"
-                className="btn btn-primary min-w-0 flex-1 whitespace-normal sm:flex-none sm:whitespace-nowrap"
+                // «!»: .btn sets white-space: nowrap outside the utility layer, and a long label («Nessuna riga da creare») must wrap on a phone.
+                className="btn btn-primary min-w-0 flex-1 whitespace-normal! py-1 leading-tight sm:flex-none sm:whitespace-nowrap! sm:py-0 sm:leading-5"
                 disabled={busy !== null || ready.length === 0 || awaiting}
                 onClick={create}
                 data-testid="import-create"
