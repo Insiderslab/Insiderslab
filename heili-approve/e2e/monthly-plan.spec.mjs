@@ -202,9 +202,12 @@ test("cliente (390px): rivede il piano, commenta un post e approva tutto il rest
   await page.getByRole("button", { name: "Sì, approva" }).click();
   await expect(page.getByText("Fatto! Post approvato.")).toBeVisible();
   await waitForStatus(db, posts[3].id, "SCHEDULED", 60_000);
-  const plan = await planRow(state.planId);
-  expect(plan.status).toBe("APPROVED");
-  expect(plan.completedNotifiedAt).not.toBeNull();
+  // A single approval is finalized by the delayed job (D2): it queues the scheduling first and
+  // then syncs the plan and emails the agency, so the plan row follows SCHEDULED by a moment.
+  await expect
+    .poll(async () => (await planRow(state.planId)).completedNotifiedAt, { timeout: 30_000, message: "plan completion follow-up" })
+    .not.toBeNull();
+  expect((await planRow(state.planId)).status).toBe("APPROVED");
   await context.close();
 });
 
