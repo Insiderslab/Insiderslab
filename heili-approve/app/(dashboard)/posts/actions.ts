@@ -284,7 +284,7 @@ export async function deliverPostAction(postId: string): Promise<ActionResult<{ 
         post.kind === "BLOG_ARTICLE"
           ? "Articolo segnato come pubblicato."
           : post.kind === "WEBSITE"
-            ? "Sito segnato come pubblicato."
+            ? "Sito segnato come pubblicato: la chiave di revisione è revocata. Ricordati di togliere la riga di codice di Heili dal sito."
             : `Set di creatività segnato come ${KIND_CONFIG[post.kind].deliveredLabel.toLowerCase()}.`,
     };
   });

@@ -83,6 +83,7 @@ import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@
 import { loadSubmittedSessionIds } from "@/lib/review-assistant/submitted";
 import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
 import { assertKindEnabled, enabledKinds, isKindEnabled } from "@/lib/variant";
+import { attachSite, siteOrigins, siteStateOf } from "@/lib/website/sites";
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
@@ -1045,11 +1046,19 @@ function issueMessages(issues: ReadonlyArray<string | { message: string }>): str
   return issues.map((issue) => (typeof issue === "string" ? issue : issue.message));
 }
 
-/** Review checks of a blog/ads content (Italian messages, empty = ready). */
-function reviewIssuesFor(kind: ContentKind, json: unknown): string[] {
+/**
+ * Review checks of a blog/ads/website content (Italian messages, empty =
+ * ready). A website also needs its review key: registered, active, with the
+ * site's origin allowed and the installation verified (or the explicit
+ * waiver for a protected site).
+ */
+async function reviewIssuesFor(db: DbClient, kind: ContentKind, json: unknown): Promise<string[]> {
   if (kind === "BLOG_ARTICLE") return issueMessages(validateBlogForReview(parseKindContent(kind, json)));
   if (kind === "AD_CREATIVE") return issueMessages(validateAdsForReview(parseKindContent(kind, json)));
-  if (kind === "WEBSITE") return issueMessages(validateWebsiteForReview(parseKindContent(kind, json)));
+  if (kind === "WEBSITE") {
+    const content = parseKindContent(kind, json);
+    return issueMessages(validateWebsiteForReview(content, await siteStateOf(db, content.siteId)));
+  }
   return [];
 }
 
@@ -1062,7 +1071,8 @@ async function prepareKindContent(
   db: DbClient,
   workspaceId: string,
   kind: ContentKind,
-  json: unknown
+  json: unknown,
+  clientId: string
 ): Promise<KindContent> {
   if (kind === "BLOG_ARTICLE") {
     const content = parseKindContent(kind, json);
@@ -1092,8 +1102,9 @@ async function prepareKindContent(
   }
   if (kind === "WEBSITE") {
     const content = parseKindContent(kind, json);
-    // The review key (WebsiteSite) is attached by the server only.
-    return { ...content, siteId: null };
+    // The review key (WebsiteSite) is attached by the server only: a siteId
+    // of another client or workspace is dropped and found / created again.
+    return attachSite(db, workspaceId, clientId, content);
   }
   throw new ValidationError("Questo tipo di contenuto non ha un contenuto strutturato");
 }
@@ -1219,7 +1230,7 @@ async function preparePostCreation(db: DbClient, workspaceId: string, input: Pos
   if (!internal) assertNetworksAllowed(networks, client.networks);
   const media = internal ? [] : await normalizeMedia(db, workspaceId, data.media ?? []);
   const videoCoverMs = internal ? null : resolveVideoCover(media, data.videoCoverMs);
-  const content = internal ? await prepareKindContent(db, workspaceId, kind, data.content) : {};
+  const content = internal ? await prepareKindContent(db, workspaceId, kind, data.content, client.id) : {};
   return { data, kind, internal, client, networks, networkOptions, media, videoCoverMs, content };
 }
 
@@ -1385,8 +1396,15 @@ export async function updatePost(
     }
 
     const media = data.media !== undefined ? await normalizeMedia(tx, workspaceId, data.media) : undefined;
+    // A website draft moved to another client gets that client's review key.
+    const contentInput =
+      data.content !== undefined
+        ? data.content
+        : post.kind === "WEBSITE" && client.id !== post.clientId
+          ? { ...asRecord(version.content), siteId: null }
+          : undefined;
     const kindContent =
-      data.content !== undefined ? await prepareKindContent(tx, workspaceId, post.kind, data.content) : undefined;
+      contentInput !== undefined ? await prepareKindContent(tx, workspaceId, post.kind, contentInput, client.id) : undefined;
     // The Post row holds the current version's date and networks.
     const current: VersionContent = {
       ...versionContent(version),
@@ -1585,6 +1603,8 @@ export async function submitForReview(
     });
     if (posts.length !== ids.length) throw new NotFoundError("Uno o più post non sono stati trovati");
 
+    // Websites sent without a verified installation (explicit waiver): recorded in the event.
+    const verifiedOverride = new Set<string>();
     for (const post of posts) {
       if (post.client.archivedAt) throw new ValidationError(`Il cliente ${post.client.name} è archiviato`);
       assertTransition(post.status, "submit");
@@ -1592,9 +1612,13 @@ export async function submitForReview(
       if (!version) throw new NotFoundError("Versione del post non trovata");
       if (isInternalKind(post.kind)) {
         // Blog/ads: the kind's own review checks instead of Metricool's.
-        const problems = reviewIssuesFor(post.kind, version.content);
+        const problems = await reviewIssuesFor(tx, post.kind, version.content);
         if (problems.length > 0) {
           throw new ValidationError(`"${post.title}" non è pronto per la revisione: ${problems.join(" ")}`);
+        }
+        if (post.kind === "WEBSITE") {
+          const site = await siteStateOf(tx, parseKindContent("WEBSITE", version.content).siteId);
+          if (site && !site.verifiedAt && site.verifyWaivedAt) verifiedOverride.add(post.id);
         }
         continue;
       }
@@ -1643,6 +1667,7 @@ export async function submitForReview(
         metadata: {
           fromStatus: post.status,
           ...(opts.reviewDueAt ? { reviewDueAt: opts.reviewDueAt.toISOString() } : {}),
+          ...(verifiedOverride.has(post.id) ? { verifiedOverride: true } : {}),
         },
       });
     }
@@ -1695,12 +1720,30 @@ export async function deliverPost(postId: string, workspaceId: string, actor: Ac
       { id: postId, status: post.status, currentVersionNumber: post.currentVersionNumber },
       { status: next }
     );
+    // Website online: the review key is revoked (the script stops answering)
+    // and the agency is reminded to remove the line (decided on 16/10).
+    let siteRevoked = false;
+    if (post.kind === "WEBSITE") {
+      const version = await tx.postVersion.findUnique({
+        where: { postId_number: { postId, number: post.currentVersionNumber } },
+        select: { content: true },
+      });
+      const siteId = (readKindContent("WEBSITE", version?.content) as WebsiteContent | null)?.siteId ?? null;
+      if (siteId) {
+        const { count } = await tx.websiteSite.updateMany({
+          where: { id: siteId, workspaceId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        siteRevoked = count > 0;
+        await tx.websiteSession.deleteMany({ where: { siteId } });
+      }
+    }
     await recordEvent(tx, {
       postId,
       type: "DELIVERED",
       actor,
       versionNumber: post.currentVersionNumber,
-      metadata: { fromStatus: post.status, kind: post.kind },
+      metadata: { fromStatus: post.status, kind: post.kind, ...(siteRevoked ? { siteRevoked: true } : {}) },
     });
     return tx.post.findUniqueOrThrow({ where: { id: postId } });
   });
@@ -2303,7 +2346,7 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
         anchor = parseOrThrow(blogAnchorSchema, data.anchor);
       } else if (post.kind === "WEBSITE") {
         const content = parseKindContent("WEBSITE", version.content);
-        anchor = parseLiveAnchorForSite(data.anchor, commentOriginsFor(content, await siteOriginsOf(tx, content.siteId)));
+        anchor = parseLiveAnchorForSite(data.anchor, commentOriginsFor(content, await siteOrigins(tx, content.siteId)));
       } else {
         throw new ValidationError("Il passaggio del testo si può indicare solo sugli articoli");
       }
@@ -2442,15 +2485,6 @@ export function readWebsiteAnchor(value: unknown): LiveAnchor | null {
   return parseWebsiteAnchor(value);
 }
 
-/**
- * Origins registered for a website review key (none in Fase 1: the comment
- * may then only point at the site's own origin, commentOriginsFor).
- */
-async function siteOriginsOf(_db: DbClient, siteId: string | null): Promise<string[] | null> {
-  void _db;
-  void siteId;
-  return null;
-}
 
 export interface ReviewerPostVersion {
   id: string;

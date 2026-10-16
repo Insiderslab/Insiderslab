@@ -102,6 +102,7 @@ model Workspace {
   automationTokens AutomationToken[]
   automationUploads AutomationUploadReservation[]
   mediaAnalysisAttempts MediaAnalysisAttempt[]
+  websiteSites WebsiteSite[]
 
   @@index([ownerId])
 }
@@ -186,6 +187,7 @@ model Client {
   reviewers ClientReviewer[]
   posts     Post[]
   plans     ContentPlan[]
+  websiteSites WebsiteSite[]
 
   @@index([workspaceId])
 }
@@ -294,6 +296,7 @@ model Post {
   events            PostEvent[]
   reviewSessions    ReviewSession[]
   creativeDecisions CreativeDecision[]
+  websiteSessions   WebsiteSession[]
   plan              ContentPlan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, kind, status])
@@ -749,4 +752,78 @@ model ContentPlanComment {
   user     User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([planId, createdAt])
+}
+
+// ─── Siti web «Sul sito» (docs/SITO-WEB.md, Fase 2) ──────────────────────────
+
+/// Sito registrato per la revisione «Sul sito»: chiave pubblica (non segreta,
+/// sta nel tag dello script) e origini esatte su cui lo script può lavorare.
+/// La versione del contenuto (WebsiteContent.siteId) punta qui.
+model WebsiteSite {
+  id          String    @id @default(cuid())
+  workspaceId String
+  clientId    String
+  /// "hs_" + 16 byte base64url: va nel tag (data-site). Una nuova chiave la sostituisce.
+  siteKey     String    @unique
+  label       String
+  /// Origini esatte, es. "https://prova.cliente.it": mai caratteri jolly.
+  origins     String[]  @default([])
+  /// Sottoinsieme di origins segnato dall'agenzia come «sito di prova»: l'unico
+  /// modo per registrare un http:// che non sia localhost.
+  testOrigins String[]  @default([])
+  /// Ultima «Verifica installazione» riuscita (tag trovato nella home).
+  verifiedAt  DateTime?
+  /// Esito leggibile dell'ultima verifica (riuscita o no).
+  verifyMessage String?
+  /// L'agenzia ha confermato che la verifica è impossibile (sito protetto).
+  verifyWaivedAt DateTime?
+  /// Ultimo scambio di sessione riuscito.
+  lastSeenAt  DateTime?
+  /// Revocata (anche a «Segna come pubblicato»): lo script non fa più nulla.
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client    Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sessions  WebsiteSession[]
+
+  @@index([workspaceId, clientId])
+}
+
+enum WebsiteSessionRole {
+  REVIEWER
+  AGENCY
+}
+
+/// Una riga = un codice di avvio monouso (10 minuti, nel frammento
+/// #heili-review=) + la sessione nata dal suo scambio. Codice e sessione sono
+/// salvati solo come hash.
+model WebsiteSession {
+  id                String             @id @default(cuid())
+  siteId            String
+  postId            String
+  versionNumber     Int
+  role              WebsiteSessionRole
+  reviewerId        String?
+  userId            String?
+  /// «Apri nel punto» (agenzia): il commento da mostrare sul sito.
+  focusCommentId    String?
+  launchHash        String             @unique
+  launchExpiresAt   DateTime
+  launchUsedAt      DateTime?
+  sessionHash       String?            @unique
+  /// Origine della pagina che ha scambiato il codice.
+  origin            String?
+  /// Scadenza scorrevole (2 h) e assoluta (8 h).
+  expiresAt         DateTime?
+  absoluteExpiresAt DateTime?
+  lastUsedAt        DateTime?
+  createdAt         DateTime           @default(now())
+
+  site WebsiteSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  post Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([launchExpiresAt])
 }
