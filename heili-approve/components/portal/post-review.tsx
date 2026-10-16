@@ -448,12 +448,6 @@ export default function PostReview({
     setNotice("Il riepilogo di Heili è stato aggiunto al tuo feedback: l’agenzia lo vedrà insieme alla richiesta già inviata.");
   }
 
-  // «?heili=1» (from Sfoglia): open the dock on arrival.
-  const openDock = heili.openDock;
-  useEffect(() => {
-    if (openedOnArrival) openDock("feedback");
-  }, [openDock, openedOnArrival]);
-
   function openHeili() {
     if (commentListening) {
       setDecisionError("Ferma la dettatura del commento prima di aprire Heili.");
@@ -502,6 +496,15 @@ export default function PostReview({
         }
       : undefined,
   });
+
+  // «?heili=1» (from Sfoglia's «Parla con Heili»): open the dock on the conversation on arrival.
+  // After useHeiliPage on purpose: its effect registers this page's context, and the dock
+  // picks the Feedback tab from the registered context; before it, the dock still saw the
+  // previous page (Guida only) and opened on the Guida (QA-16).
+  const openDock = heili.openDock;
+  useEffect(() => {
+    if (openedOnArrival) openDock("feedback");
+  }, [openDock, openedOnArrival]);
 
   function reload() {
     setStale(false);

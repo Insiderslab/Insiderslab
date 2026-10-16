@@ -19,7 +19,7 @@ import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import AssistantPanel from "@/components/review/assistant-panel";
 import { useHeili } from "./context";
 import HeiliGuide from "./heili-guide";
-import { DOCK_SIDE_MIN_WIDTH, dockTabs, introStorageKey } from "./rules";
+import { DOCK_SIDE_MIN_WIDTH, LAUNCHER_LABELS, dockTabs, introStorageKey, launcherKind } from "./rules";
 
 const INTRO_MS = 6000;
 
@@ -134,7 +134,8 @@ export default function HeiliDock() {
     wasOpen.current = open;
   }, [open]);
 
-  const buttonLabel = review ? "Parla con Heili" : "Apri la Guida di Heili";
+  const kind = launcherKind(context);
+  const buttonLabel = LAUNCHER_LABELS[kind];
 
   return (
     <>
@@ -150,10 +151,21 @@ export default function HeiliDock() {
           aria-haspopup="dialog"
           aria-expanded={open}
           data-testid="heili-dock-button"
+          data-kind={kind}
           // Position: .heili-launcher in globals.css (above the bar; on phones inside its right edge).
           className="heili-launcher fixed right-3 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-accent/40 bg-background text-foreground shadow-[var(--shadow-overlay)] hover:bg-accent-soft sm:right-4 sm:h-14 sm:w-14"
         >
           <HeiliAssistantIcon className="h-8 w-8 sm:h-9 sm:w-9" />
+          {kind === "guide" && (
+            // «?» on the icon: this one opens the Guida, not the conversation (QA-16).
+            <span
+              aria-hidden="true"
+              data-testid="heili-guide-badge"
+              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-accent text-[11px] font-bold leading-none text-white"
+            >
+              ?
+            </span>
+          )}
         </button>
       )}
 

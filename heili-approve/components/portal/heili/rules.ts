@@ -62,6 +62,26 @@ export function dockLayout(viewportWidth: number): HeiliDockLayout {
   return viewportWidth >= DOCK_SIDE_MIN_WIDTH ? "side" : "sheet";
 }
 
+// ─── Che cosa apre il pulsante ───────────────────────────────────────────────
+
+export type HeiliLauncherKind = "chat" | "guide";
+
+/**
+ * Un solo significato per l'icona di Heili (QA-16): dove si può commentare (una
+ * pagina contenuto con la conversazione attiva) il pulsante galleggiante e
+ * «Parla con Heili» aprono la stessa cosa, la scheda Feedback; ovunque altro
+ * (home, piano, griglia, Sfoglia, pagine senza conversazione) apre la Guida e lo
+ * dice, con l'etichetta «Guida di Heili» e il punto interrogativo sull'icona.
+ */
+export function launcherKind(context: Pick<HeiliPageContext, "review"> | null): HeiliLauncherKind {
+  return context?.review ? "chat" : "guide";
+}
+
+export const LAUNCHER_LABELS: Record<HeiliLauncherKind, string> = {
+  chat: "Parla con Heili",
+  guide: "Apri la Guida di Heili",
+};
+
 // ─── Schede del dock ─────────────────────────────────────────────────────────
 
 export type HeiliDockTab = "feedback" | "guide";

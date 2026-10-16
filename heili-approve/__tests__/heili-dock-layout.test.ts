@@ -38,3 +38,37 @@ describe("disposizione del dock di Heili (desktop)", () => {
     expect(dock).not.toMatch(/\blg:/);
   });
 });
+
+describe("che cosa apre il pulsante di Heili (QA-16)", () => {
+  const withReview = { review: {} as never };
+
+  it("dove si può commentare è la conversazione, altrove la Guida", async () => {
+    const { launcherKind, LAUNCHER_LABELS, dockTabs, resolveDockTab } = await import("@/components/portal/heili/rules");
+    expect(launcherKind(withReview)).toBe("chat");
+    expect(launcherKind({})).toBe("guide");
+    expect(launcherKind(null)).toBe("guide");
+    // ... e apre davvero quello: la prima scheda è Feedback con la chat, Guida senza.
+    expect(resolveDockTab(dockTabs(withReview), null)).toBe("feedback");
+    expect(resolveDockTab(dockTabs({}), null)).toBe("guide");
+    expect(LAUNCHER_LABELS.chat).toBe("Parla con Heili");
+    expect(LAUNCHER_LABELS.guide).not.toBe(LAUNCHER_LABELS.chat);
+  });
+
+  it("il pulsante galleggiante mostra il «?» solo quando apre la Guida", () => {
+    const dock = read("components", "portal", "heili", "heili-dock.tsx");
+    expect(dock).toContain('data-kind={kind}');
+    expect(dock).toContain('kind === "guide" && (');
+    expect(dock).toContain('data-testid="heili-guide-badge"');
+  });
+});
+
+describe("«Parla con Heili» da Sfoglia apre la conversazione (QA-16)", () => {
+  it("l'apertura all'arrivo (?heili=1) viene dopo la registrazione della pagina nel dock", () => {
+    const source = read("components", "portal", "post-review.tsx");
+    const register = source.indexOf("useHeiliPage({");
+    const open = source.indexOf('if (openedOnArrival) openDock("feedback")');
+    expect(register).toBeGreaterThan(0);
+    // Prima della registrazione il dock vede ancora la pagina precedente (solo Guida) e si apre sulla Guida.
+    expect(open).toBeGreaterThan(register);
+  });
+});

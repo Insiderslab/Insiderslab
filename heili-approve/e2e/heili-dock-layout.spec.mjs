@@ -16,6 +16,15 @@ const state = {};
 
 test.describe.configure({ mode: "serial" });
 
+function monthInRome(delta) {
+  const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit" })
+    .format(new Date())
+    .split("-")
+    .map(Number);
+  const index = y * 12 + (m - 1) + delta;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+}
+
 test.beforeAll(async () => {
   data = seed();
   db = await connectDb();
@@ -27,11 +36,28 @@ test.beforeAll(async () => {
   const line = out.split("\n").find((l) => l.startsWith("RESULT "));
   if (!line) throw new Error(`Fixture senza RESULT:\n${out}`);
   state.fixture = JSON.parse(line.slice("RESULT ".length));
+  const month = execFileSync(
+    process.execPath,
+    [
+      "node_modules/tsx/dist/cli.mjs",
+      "e2e/support/create-month-fixture.ts",
+      data.workspaceId,
+      data.userId,
+      monthInRome(1),
+      monthInRome(2),
+      monthInRome(3),
+      uniq(),
+    ],
+    { cwd: root, env: { ...process.env, APP_VARIANT: "all" }, encoding: "utf8" }
+  );
+  state.month = JSON.parse(month.split("\n").find((l) => l.startsWith("RESULT ")).slice("RESULT ".length));
   heili = await startHeiliServer();
 });
 
 test.afterAll(async () => {
-  await db?.query('update "Client" set "archivedAt" = now() where id = $1', [state.fixture?.clientId]);
+  await db?.query('update "Client" set "archivedAt" = now() where id = any($1)', [
+    [state.fixture?.clientId, state.month?.a.clientId, state.month?.b.clientId].filter(Boolean),
+  ]);
   await db?.end();
   await heili?.stop();
 });
@@ -180,5 +206,48 @@ test("QA-11: i controlli del foglio di Heili (Feedback e Guida) sono da 44 px a 
   await page.getByRole("tab", { name: "Guida" }).click();
   for (const found of await smallControls(page, '[data-testid="heili-dock"]')) failures.push(`Guida: ${found}`);
   expect(failures, failures.join("\n")).toEqual([]);
+  await ctx.close();
+});
+
+// ─── QA-16 ───────────────────────────────────────────────────────────────────
+
+test("QA-16: l'icona di Heili ha un solo significato: dove si commenta apre la chat, altrove la Guida (e lo dice)", async ({ browser }) => {
+  const ctx = await context(browser, MOBILE);
+  const page = await ctx.newPage();
+  const planUrl = `${HELI_BASE}${new URL(state.month.a.reviewUrl).pathname}/piani/${state.month.planId}`;
+
+  // Sfoglia is not a content page: the icon opens the Guida, says so, and differs from «Parla con Heili».
+  await page.goto(`${planUrl}?vista=sfoglia`);
+  const icon = page.getByTestId("heili-dock-button");
+  await expect(icon).toHaveAttribute("data-kind", "guide");
+  await expect(icon).toHaveAttribute("aria-label", "Apri la Guida di Heili");
+  await expect(icon.getByTestId("heili-guide-badge")).toBeVisible();
+  const chat = page.getByTestId("browse-heili");
+  await expect(chat).toHaveText("Parla con Heili");
+  expect(await icon.getAttribute("aria-label")).not.toBe((await chat.textContent()).trim());
+  await icon.click();
+  const dock = page.getByTestId("heili-dock");
+  await expect(dock).toBeVisible();
+  await expect(dock.getByTestId("heili-guide-status")).toBeVisible();
+  await expect(dock.getByRole("tab")).toHaveCount(0);
+  await page.getByRole("button", { name: "Chiudi Heili" }).click();
+
+  // «Parla con Heili» takes the card to its conversation: the same Feedback tab the icon opens on a content page.
+  await chat.click();
+  await page.waitForURL(/\/posts\/.+heili=1/);
+  await expect(dock).toBeVisible();
+  await expect(dock.getByRole("tab", { name: "Feedback" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Chiudi Heili" }).click();
+
+  // On the content page the icon is the conversation: same label as «Parla con Heili», same tab, no «?».
+  const content = page.getByTestId("heili-dock-button");
+  await expect(content).toHaveAttribute("data-kind", "chat");
+  await expect(content).toHaveAttribute("aria-label", "Parla con Heili");
+  await expect(content.getByTestId("heili-guide-badge")).toHaveCount(0);
+  await content.click();
+  await expect(dock.getByRole("tab", { name: "Feedback" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Chiudi Heili" }).click();
+  await page.getByRole("button", { name: "Parla con Heili" }).first().click();
+  await expect(dock.getByRole("tab", { name: "Feedback" })).toHaveAttribute("aria-selected", "true");
   await ctx.close();
 });
