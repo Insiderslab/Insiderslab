@@ -42,6 +42,26 @@ export function shortcutDestinations(
   return destinations.filter((destination) => destination !== nextStep);
 }
 
+// ─── Disposizione del dock ───────────────────────────────────────────────────
+
+/** Larghezza del pannello laterale (px): la pagina la riserva a destra quando è aperto. */
+export const DOCK_PANEL_WIDTH = 400;
+/** Da questa larghezza il pannello è laterale e la pagina gli lascia spazio; sotto è un foglio modale. */
+export const DOCK_SIDE_MIN_WIDTH = 1280;
+
+export type HeiliDockLayout = "side" | "sheet";
+
+/**
+ * Da 1280 px: pannello laterale non modale, con la pagina che si restringe di
+ * 400 px (QA-05/QA-13: niente contenuto né barra «Approva» sotto il pannello).
+ * Sotto: foglio modale con sfondo scuro, che chiude con la X, con Esc o con un
+ * tocco fuori. A 1024 px la pagina ridotta di 400 px non avrebbe più spazio per
+ * l'anteprima e per il feedback uno accanto all'altro.
+ */
+export function dockLayout(viewportWidth: number): HeiliDockLayout {
+  return viewportWidth >= DOCK_SIDE_MIN_WIDTH ? "side" : "sheet";
+}
+
 // ─── Schede del dock ─────────────────────────────────────────────────────────
 
 export type HeiliDockTab = "feedback" | "guide";

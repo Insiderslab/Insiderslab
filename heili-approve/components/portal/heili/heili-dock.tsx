@@ -3,11 +3,14 @@
 /**
  * HeiliDock: il pulsante galleggiante e il pannello di Heili nel portale.
  *
- * Telefono: bottom sheet modale a tutta larghezza (fino all'85% dell'altezza),
- * con Esc, focus intrappolato dal <dialog> nativo e focus restituito al
- * pulsante. Desktop (≥1024 px): pannello laterale destro di 400 px, non
- * modale. Sulle pagine con la barra delle decisioni il pulsante resta sopra la
- * barra grazie alla variabile CSS `--decision-bar-h`.
+ * Sotto 1280 px: bottom sheet modale (fino all'85% dell'altezza), con Esc,
+ * focus intrappolato dal <dialog> nativo e focus restituito al pulsante.
+ * Da 1280 px: pannello laterale destro di 400 px, non modale, sopra la barra
+ * delle decisioni (z-50) e con la pagina che si restringe di 400 px mentre è
+ * aperto (`html[data-heili-panel="side"]` in globals.css): né il contenuto né
+ * «Approva» finiscono sotto il pannello (QA-05, QA-13). Sulle pagine con la
+ * barra delle decisioni il pulsante resta sopra la barra grazie alla variabile
+ * CSS `--decision-bar-h`.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,7 +18,7 @@ import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import AssistantPanel from "@/components/review/assistant-panel";
 import { useHeili } from "./context";
 import HeiliGuide from "./heili-guide";
-import { dockTabs, introStorageKey } from "./rules";
+import { DOCK_SIDE_MIN_WIDTH, dockTabs, introStorageKey } from "./rules";
 
 const INTRO_MS = 6000;
 
@@ -31,9 +34,9 @@ export default function HeiliDock() {
   const [desktop, setDesktop] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
 
-  // Desktop: pannello laterale non modale (il contenuto resta usabile).
+  // Desktop largo: pannello laterale non modale, la pagina gli lascia lo spazio.
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px)");
+    const query = window.matchMedia(`(min-width: ${DOCK_SIDE_MIN_WIDTH}px)`);
     const update = () => setDesktop(query.matches);
     update();
     query.addEventListener("change", update);
@@ -78,16 +81,35 @@ export default function HeiliDock() {
     return () => window.clearTimeout(timer);
   }, [dismissIntro, open, showIntro]);
 
-  // Apertura: modale su telefono, non modale su desktop; Esc chiude sempre.
+  // Apertura: modale sotto 1280 px, laterale non modale da lì in su; Esc chiude sempre.
+  // Se la finestra cambia disposizione mentre è aperto il <dialog> si riapre nell'altra.
+  const openedAs = useRef<boolean | null>(null);
+  const ignoreClose = useRef(false);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+    if (open && dialog.open && openedAs.current !== desktop) {
+      ignoreClose.current = true;
+      dialog.close();
+    }
     if (open && !dialog.open) {
       if (desktop) dialog.show();
       else if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.show();
+      openedAs.current = desktop;
     }
     if (!open && dialog.open) dialog.close();
+    if (!open) openedAs.current = null;
+  }, [desktop, open]);
+
+  // La pagina riserva lo spazio del pannello laterale (CSS in globals.css).
+  useEffect(() => {
+    const root = document.documentElement;
+    if (open && desktop) root.dataset.heiliPanel = "side";
+    else delete root.dataset.heiliPanel;
+    return () => {
+      delete root.dataset.heiliPanel;
+    };
   }, [desktop, open]);
 
   useEffect(() => {
@@ -154,14 +176,18 @@ export default function HeiliDock() {
         aria-label="Heili"
         data-testid="heili-dock"
         onClose={() => {
+          if (ignoreClose.current) {
+            ignoreClose.current = false;
+            return;
+          }
           if (heili.open) heili.closeDock();
         }}
         onClick={(event) => {
           if (event.target === event.currentTarget) heili.closeDock();
         }}
-        className="m-0 mt-auto max-h-[85dvh] w-full max-w-full overflow-hidden rounded-t-2xl border border-border bg-background p-0 text-foreground backdrop:bg-black/50 lg:fixed lg:inset-auto lg:right-0 lg:top-0 lg:m-0 lg:h-dvh lg:max-h-none lg:w-[400px] lg:max-w-[400px] lg:rounded-none lg:border-l"
+        className="m-0 mt-auto max-h-[85dvh] w-full max-w-full overflow-hidden rounded-t-2xl border border-border bg-background p-0 text-foreground backdrop:bg-black/50 sm:mx-auto sm:max-w-[640px] xl:fixed xl:inset-auto xl:right-0 xl:top-0 xl:z-50 xl:m-0 xl:h-dvh xl:max-h-none xl:w-[400px] xl:max-w-[400px] xl:rounded-none xl:border-l"
       >
-        <div className="flex h-full max-h-[85dvh] flex-col lg:max-h-none">
+        <div className="flex h-full max-h-[85dvh] flex-col xl:max-h-none">
           <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <HeiliAssistantIcon className="h-7 w-7" />

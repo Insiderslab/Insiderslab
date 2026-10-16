@@ -68,6 +68,15 @@ body {
   line-height: 22px;
 }
 
+/* Heili's side panel (≥1280 px, see components/portal/heili/rules.ts) is fixed
+   to the right edge: while it is open the page keeps its 400 px clear, so
+   neither the content nor the «Chiedi modifiche / Approva» bar sit under it. */
+@media (min-width: 1280px) {
+  html[data-heili-panel="side"] body {
+    padding-right: 400px;
+  }
+}
+
 ::selection {
   background: var(--color-node-soft);
   color: var(--color-foreground);

@@ -547,7 +547,7 @@ export default function PostReview({
         </SuccessPanel>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,640px)_minmax(300px,1fr)] lg:grid-rows-[auto_1fr] lg:items-start">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,640px)_minmax(340px,1fr)] lg:grid-rows-[auto_1fr] lg:items-start">
         <div className="space-y-4 lg:col-start-2 lg:row-start-1">
           <header className="space-y-2">
             {mixedList && <KindLabel kind="SOCIAL_POST" />}
