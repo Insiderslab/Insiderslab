@@ -263,3 +263,31 @@ test("QA-15: «Approva tutto il piano» compare una volta sola, nella barra; in 
     await context.close();
   }
 });
+
+// ─── QA-18 ───────────────────────────────────────────────────────────────────
+
+test("QA-18: la riga «Elenco · Successivo» ha la stessa disposizione con e senza contatore (390 px)", async ({ browser }) => {
+  const context = await browser.newContext(MOBILE);
+  const page = await context.newPage();
+  const rows = {};
+  for (const [name, id] of [["da approvare", state.portal.carouselId], ["modifiche richieste", state.portal.askedId]]) {
+    await page.goto(`${state.portal.reviewUrl}/posts/${id}`);
+    const nav = page.getByRole("navigation", { name: "Navigazione della revisione" });
+    await expect(nav).toBeVisible();
+    const back = await nav.getByRole("link").first().boundingBox();
+    const next = await nav.getByRole("link", { name: /Prossimo/ }).boundingBox();
+    rows[name] = { back, next, counter: await nav.getByText(/^\d+\/\d+$/).count() };
+    if (name === "modifiche richieste") await viewportShot(page, "qa18-modifiche-richieste-390.png");
+  }
+  expect(rows["da approvare"].counter).toBe(1);
+  expect(rows["modifiche richieste"].counter).toBe(0);
+  for (const row of Object.values(rows)) {
+    expect(row.back.x).toBeCloseTo(16, 0);
+    expect(row.next.x + row.next.width, "«Successivo» non è sul bordo destro").toBeCloseTo(374, 0);
+  }
+  expect(rows["modifiche richieste"].next.x + rows["modifiche richieste"].next.width).toBeCloseTo(
+    rows["da approvare"].next.x + rows["da approvare"].next.width,
+    0
+  );
+  await context.close();
+});

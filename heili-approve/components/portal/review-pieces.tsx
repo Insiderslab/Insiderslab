@@ -38,13 +38,13 @@ export function ReviewNav({
       <Link
         href={homeHref}
         aria-label={backLabel}
-        className="inline-flex min-h-11 min-w-0 items-center justify-start justify-self-start rounded-md border border-border bg-surface px-3 font-medium text-foreground hover:border-border-hover"
+        className="col-start-1 inline-flex min-h-11 min-w-0 items-center justify-start justify-self-start rounded-md border border-border bg-surface px-3 font-medium text-foreground hover:border-border-hover"
       >
         <span className="sm:hidden">Elenco</span>
         <span className="hidden truncate sm:inline">{backLabel}</span>
       </Link>
       {progressLabel && showProgress && (
-        <span className="text-center text-muted" aria-label={progressLabel}>
+        <span className="col-start-2 text-center text-muted" aria-label={progressLabel}>
           <span className="tabular-nums sm:hidden" aria-hidden="true">
             {queue.position}/{queue.toReviewCount}
           </span>
@@ -55,7 +55,8 @@ export function ReviewNav({
         <Link
           href={nextHref}
           aria-label={nextLabel}
-          className="inline-flex min-h-11 min-w-0 items-center justify-end justify-self-end rounded-md bg-accent px-3 text-right font-semibold text-white hover:bg-accent-hover"
+          // col-start-3: «Successivo» stays on the right whether or not the counter (middle column) is there (QA-18).
+          className="col-start-3 inline-flex min-h-11 min-w-0 items-center justify-end justify-self-end rounded-md bg-accent px-3 text-right font-semibold text-white hover:bg-accent-hover"
         >
           <span className="sm:hidden">Successivo</span>
           <span className="hidden truncate sm:inline">{nextLabel}</span>
