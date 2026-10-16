@@ -16,7 +16,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx scripts/seed.ts",
     "test:e2e": "sh e2e/run.sh",
-    "build:site-script": "node scripts/build-site-script.mjs"
+    "build:site-script": "node scripts/build-site-script.mjs",
+    "build:wordpress-zip": "node scripts/build-wordpress-zip.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

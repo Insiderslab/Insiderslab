@@ -51,6 +51,8 @@ function start2(base: string, siteKey: string, code: string | null) {
   let ready = false;
   let markers: Array<{ n: number; selector: string; pageUrl: string; resolved: boolean }> = [];
   let focusTarget: Element | null = null;
+  /** «Apri nel punto»: the outcome stays readable on the host (data-heili-state="focus:…"). */
+  let focused: string | null = null;
   const picks: number[] = [];
 
   const send = (type: string, data: Record<string, unknown> = {}) => {
@@ -71,10 +73,20 @@ function start2(base: string, siteKey: string, code: string | null) {
     frame.className = `f ${shape}`;
     bar.style.display = next === "picking" ? "flex" : "none";
     if (next !== "picking") hover.style.display = "none";
-    host.setAttribute("data-heili-state", label ?? shape);
+    host.setAttribute("data-heili-state", label ?? (focused && next !== "picking" ? focused : shape));
   };
 
-  frame.addEventListener("load", () => send("hello", { siteKey, launchCode: code, page: page() }));
+  // The iframe may start listening a moment after its load event: say hello
+  // until it answers (at most 15 s), always to Approve's exact origin.
+  frame.addEventListener("load", () => {
+    let tries = 0;
+    const hello = () => {
+      if (ready || tries++ > 30) return;
+      send("hello", { siteKey, launchCode: code, page: page() });
+      setTimeout(hello, 500);
+    };
+    hello();
+  });
 
   addEventListener("message", (event: MessageEvent) => {
     if (event.source !== frame.contentWindow || event.origin !== base) return;
@@ -119,7 +131,8 @@ function start2(base: string, siteKey: string, code: string | null) {
           else if (typeof data.scrollY === "number" && Number.isFinite(data.scrollY)) scrollTo(0, Math.max(0, data.scrollY));
           else method = "none";
           drawFocus();
-          setState(state === "picking" ? "open" : state, `focus:${method}`);
+          focused = `focus:${method}`;
+          setState(state === "picking" ? "open" : state);
           send("focus:result", { method });
         }
         break;

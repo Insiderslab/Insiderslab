@@ -458,7 +458,14 @@ export default async function PostDetailPage({
         {kind === "WEBSITE" &&
           post.status !== "CANCELLED" &&
           (agencySite ? (
-            <SitePanel postId={post.id} site={agencySite} delivered={post.status === "DELIVERED"} />
+            <SitePanel
+              // Remounted when the server state changes (new key, revocation, status).
+              key={`${agencySite.siteKey}:${agencySite.revokedAt?.toISOString() ?? ""}:${post.status}`}
+              postId={post.id}
+              site={agencySite}
+              delivered={post.status === "DELIVERED"}
+              timezone={timezone}
+            />
           ) : (
             <p className="panel rounded p-4 text-sm text-muted">
               «Sul sito»: inserisci e salva l&apos;indirizzo del sito di prova in Modifica per avere la riga di codice.

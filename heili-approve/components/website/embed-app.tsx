@@ -136,6 +136,10 @@ export default function EmbedApp() {
   const [error, setError] = useState<string | null>(null);
   const [focusMethod, setFocusMethod] = useState<string | null>(null);
   const hostRef = useRef<{ origin: string; channel: string } | null>(null);
+  /** The site is in «Tocca l'elemento» mode (this iframe still has the keyboard focus). */
+  const pickingRef = useRef(false);
+  /** Heili was tapped before the handshake ended: open as soon as it does. */
+  const openPending = useRef(false);
   const pageRef = useRef<PageInfo | null>(null);
   const assistant = useRef<AssistantPanelHandle | null>(null);
 
@@ -229,6 +233,7 @@ export default function EmbedApp() {
         setPhase("ready");
         post("ready");
         showMarkers(context.markers);
+        if (openPending.current) setUi(true);
         if (context.focus) {
           post("focus", {
             selector: context.focus.selector,
@@ -267,6 +272,7 @@ export default function EmbedApp() {
           setPage(next);
         }
       } else if (data.type === "pick:result") {
+        pickingRef.current = false;
         const picked = readPick(data, pageRef.current);
         if (picked) {
           setPick(picked);
@@ -275,12 +281,21 @@ export default function EmbedApp() {
           setNotice(picked.field ? "Questo campo non si può commentare: ho scelto il riquadro che lo contiene." : null);
         }
       } else if (data.type === "pick:cancel") {
+        pickingRef.current = false;
         setOpen(true);
       } else if (data.type === "focus:result" && str(data.method, 20)) {
         setFocusMethod(data.method);
       }
     };
 
+    // Esc cancels «Indica un punto» also when the keyboard focus stayed in this iframe.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !pickingRef.current) return;
+      pickingRef.current = false;
+      post("pick:cancel");
+      setOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
     window.addEventListener("message", onMessage);
     api<{ origins: string[] }>(`/api/site/v1/site?key=${encodeURIComponent(siteKey)}`)
       .then((result) => {
@@ -288,7 +303,10 @@ export default function EmbedApp() {
         for (const event of pending.splice(0)) onMessage(event);
       })
       .catch(() => fail("Questo sito non è collegato ad Approve.", false));
-    return () => window.removeEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [post, setUi, showMarkers]);
 
   // ─── Comments ──────────────────────────────────────────────────────────────
@@ -353,7 +371,10 @@ export default function EmbedApp() {
       <div className="flex h-screen w-screen items-center justify-center bg-transparent">
         <button
           type="button"
-          onClick={() => phase === "ready" && setUi(true)}
+          onClick={() => {
+            if (phase === "ready") setUi(true);
+            else openPending.current = true;
+          }}
           aria-label={phase === "ready" ? "Apri Heili" : "Heili"}
           title={message ?? "Heili"}
           className="flex h-16 w-16 items-center justify-center rounded-full shadow-lg focus-visible:outline-2"
@@ -422,6 +443,7 @@ export default function EmbedApp() {
                   onClick={() => {
                     setNotice(null);
                     setOpen(false);
+                    pickingRef.current = true;
                     post("pick:start");
                   }}
                   className="btn w-full"

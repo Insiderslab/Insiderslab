@@ -13,12 +13,24 @@ import type { AgencySiteView } from "@/lib/website/service";
 import InstallSnippet from "./install-snippet";
 import OriginsEditor from "./origins-editor";
 
-function when(value: Date | string | null): string {
-  if (!value) return "";
-  return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-}
-
-export default function SitePanel({ postId, site: initial, delivered }: { postId: string; site: AgencySiteView; delivered: boolean }) {
+export default function SitePanel({
+  postId,
+  site: initial,
+  delivered,
+  timezone,
+}: {
+  postId: string;
+  site: AgencySiteView;
+  delivered: boolean;
+  /** The client's time zone (same text on server and browser). */
+  timezone: string;
+}) {
+  const when = (value: Date | string | null): string =>
+    value
+      ? new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(
+          new Date(value)
+        )
+      : "";
   const [site, setSite] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
