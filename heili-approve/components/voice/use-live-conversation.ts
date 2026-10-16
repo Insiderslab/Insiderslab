@@ -57,6 +57,38 @@ async function request<T>(url: string, method: string, body: unknown, keepalive 
   return result.data as T;
 }
 
+/**
+ * The offer goes out with the candidates gathered so far. Gathering may never
+ * reach "complete" (several network interfaces, a VPN, some containers): it used
+ * to wait 10 s and then fail with «Impossibile connettere il microfono». Host
+ * candidates come within milliseconds; the provider also learns the client's
+ * address from its connectivity checks, so a short settle is enough.
+ */
+export function settleIceCandidates(peer: RTCPeerConnection, idleMs = 600, maxMs = 2_500): Promise<void> {
+  if (peer.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      clearTimeout(idle);
+      clearTimeout(cap);
+      peer.removeEventListener("icecandidate", onCandidate);
+      peer.removeEventListener("icegatheringstatechange", onState);
+      resolve();
+    };
+    const cap = setTimeout(done, maxMs);
+    const onCandidate = (event: RTCPeerConnectionIceEvent) => {
+      if (!event.candidate) return done();
+      clearTimeout(idle);
+      idle = setTimeout(done, idleMs);
+    };
+    const onState = () => {
+      if (peer.iceGatheringState === "complete") done();
+    };
+    peer.addEventListener("icecandidate", onCandidate);
+    peer.addEventListener("icegatheringstatechange", onState);
+  });
+}
+
 function release(connection: Connection) {
   connection.preparationAbort.abort();
   clearTimeout(connection.timer);
@@ -274,16 +306,7 @@ export function useLiveConversation(input: {
         peer.addTrack(track, stream);
       });
       await peer.setLocalDescription(await peer.createOffer());
-      if (peer.iceGatheringState !== "complete") {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => { peer.removeEventListener("icegatheringstatechange", check); reject(new Error("Impossibile connettere il microfono. Controlla la rete e riprova.")); }, 10_000);
-          function check() {
-            if (peer.iceGatheringState !== "complete") return;
-            clearTimeout(timer); peer.removeEventListener("icegatheringstatechange", check); resolve();
-          }
-          peer.addEventListener("icegatheringstatechange", check); check();
-        });
-      }
+      await settleIceCandidates(peer);
       if (!alive()) return;
       const sdp = peer.localDescription?.sdp;
       if (!sdp) throw new Error("Impossibile avviare la connessione audio.");
