@@ -248,7 +248,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
       {pages > 1 && (
         <nav className="flex items-center justify-between text-sm" aria-label="Pagine">
           {page > 1 ? (
-            <Link href={buildPostsHref({ ...filterValues, pagina: page - 1 })} className="text-accent hover:underline">
+            <Link href={buildPostsHref({ ...filterValues, pagina: page - 1 })} className="inline-flex min-h-11 items-center text-accent hover:underline">
               ← Precedenti
             </Link>
           ) : (
@@ -258,7 +258,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
             Pagina {page} di {pages}
           </span>
           {page < pages ? (
-            <Link href={buildPostsHref({ ...filterValues, pagina: page + 1 })} className="text-accent hover:underline">
+            <Link href={buildPostsHref({ ...filterValues, pagina: page + 1 })} className="inline-flex min-h-11 items-center text-accent hover:underline">
               Successivi →
             </Link>
           ) : (
