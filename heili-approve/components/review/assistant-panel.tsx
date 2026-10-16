@@ -37,12 +37,14 @@ import { formatTimecode } from "@/lib/domain";
 import {
   ACTION_AREA_LABELS,
   ACTION_PRIORITY_LABELS,
+  ASSISTANT_BAR_HINT,
   ASSISTANT_BUTTONS,
   ASSISTANT_FEEDBACK_COPY,
   ASSISTANT_KIND_COPY,
   MAX_CLIENT_MESSAGE_LENGTH,
   VERDICT_LABELS,
   actionItemPlaceTags,
+  barHintText,
   passageMarker,
   pointMarker,
   shortQuote,
@@ -116,6 +118,12 @@ export interface AssistantPanelProps {
    * button of the decision bar is the primary one.
    */
   onPendingFeedbackChange?: (pending: boolean) => void;
+  /**
+   * Set when the panel covers the page's decision bar (the modal sheet on a
+   * phone): the hint under the summary then asks to close Heili first and
+   * offers this way back to the bar (QA-06).
+   */
+  onBackToPage?: () => void;
 }
 
 export interface AssistantPanelHandle {
@@ -291,6 +299,7 @@ export function AssistantPanel({
   onPickPoint,
   onPickMoment,
   onPendingFeedbackChange,
+  onBackToPage,
 }: AssistantPanelProps) {
   const copy = ASSISTANT_KIND_COPY[kind];
   const feedbackMode = mode === "feedback";
@@ -1060,7 +1069,16 @@ export function AssistantPanel({
           {(hasClientMessages || completed || live.clientText) && (
             <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:flex-wrap">
               {completed && barDrives ? (
-                <p className="text-sm text-muted">Controlla il riepilogo, poi premi «Chiedi modifiche» nella barra in basso per inviarlo all’agenzia.</p>
+                <div className="flex basis-full flex-col gap-2">
+                  <p className="text-sm text-muted" data-testid="assistant-bar-hint">
+                    {barHintText(Boolean(onBackToPage))}
+                  </p>
+                  {onBackToPage && (
+                    <ActionButton onClick={onBackToPage} disabled={busy !== null} primary>
+                      {ASSISTANT_BAR_HINT.back}
+                    </ActionButton>
+                  )}
+                </div>
               ) : completed ? (
                 <ActionButton onClick={submitChanges} disabled={busy !== null || voiceBusy} primary={feedbackMode || sendHighlighted}>
                   {busy === "submit"

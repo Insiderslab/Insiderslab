@@ -542,6 +542,24 @@ export const ASSISTANT_BUTTONS = {
   addToFeedback: "Aggiungi al feedback",
 } as const;
 
+/**
+ * What the panel tells the client after the summary while the page's
+ * «Chiedi modifiche» bar sends it. On a phone the panel is a modal sheet that
+ * covers the bar (QA-06): the wording asks to close Heili first and the panel
+ * offers the way back; where the bar stays visible beside the panel it points at it.
+ */
+export const ASSISTANT_BAR_HINT = {
+  visible: "Controlla il riepilogo, poi premi «Chiedi modifiche» nella barra in basso per inviarlo all’agenzia.",
+  covered:
+    "Controlla il riepilogo. Poi chiudi Heili e premi «Chiedi modifiche» nella barra in basso per inviarlo all’agenzia.",
+  back: "Torna alla pagina",
+} as const;
+
+/** The sentence under the summary: `barCovered` when the panel hides the decision bar. */
+export function barHintText(barCovered: boolean): string {
+  return barCovered ? ASSISTANT_BAR_HINT.covered : ASSISTANT_BAR_HINT.visible;
+}
+
 /** Wording of the conversation in "feedback" mode (changes already requested). */
 export const ASSISTANT_FEEDBACK_COPY = {
   header: "Hai già chiesto modifiche: quello che aggiungi qui si somma al tuo feedback. Non approva e non invia nulla al posto tuo.",

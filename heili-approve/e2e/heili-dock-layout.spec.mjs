@@ -5,7 +5,7 @@
 // Data: a fresh client (create-portal-fixture.ts) with a carousel post in review.
 
 import { execFileSync } from "node:child_process";
-import { DESKTOP, connectDb, expect, root, seed, test, uniq, viewportShot } from "./helpers.mjs";
+import { DESKTOP, MOBILE, connectDb, expect, root, seed, test, uniq, viewportShot, waitForStatus } from "./helpers.mjs";
 import { HELI_BASE, startHeiliServer } from "./support/heili-server.mjs";
 
 let db;
@@ -123,5 +123,44 @@ test("QA-13: sotto i 1280 px il pannello è un foglio modale che si chiude con u
   expect(await page.evaluate(() => document.documentElement.dataset.heiliPanel ?? "")).toBe("");
   await page.mouse.click(40, 100);
   await expect(dock).not.toBeVisible();
+  await ctx.close();
+});
+
+// ─── QA-06 ───────────────────────────────────────────────────────────────────
+
+test("QA-06: su telefono il riepilogo dice di chiudere Heili e il foglio riporta alla barra", async ({ browser }) => {
+  const ctx = await context(browser, MOBILE);
+  const page = await ctx.newPage();
+  await page.goto(postUrl(state.fixture.secondId));
+  await expect(page.getByTestId("decision-changes")).toBeVisible();
+
+  await page.getByTestId("heili-dock-button").click();
+  const dock = page.getByTestId("heili-dock");
+  await expect(dock).toBeVisible();
+  const panel = await chatToSummary(page);
+
+  // The sheet is modal: the bar below it cannot be seen or tapped, so the text must not send the client there.
+  expect(await dock.evaluate((el) => el.matches(":modal"))).toBe(true);
+  const hint = panel.getByTestId("assistant-bar-hint");
+  await expect(hint).toContainText("chiudi Heili");
+  await expect(hint).toContainText("«Chiedi modifiche»");
+  const back = panel.getByRole("button", { name: "Torna alla pagina" });
+  await back.scrollIntoViewIfNeeded();
+  await viewportShot(page, "qa06-riepilogo-390.png");
+
+  // One tap to the page: the bar is there, on top, and «Chiedi modifiche» sends the summary.
+  await back.click();
+  await expect(dock).not.toBeVisible();
+  const changes = page.getByTestId("decision-changes");
+  await expect(changes).toBeVisible();
+  const box = await changes.boundingBox();
+  const onTop = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-testid="decision-changes"]') !== null,
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  );
+  expect(onTop).toBe(true);
+  await changes.click();
+  await expect(page.getByText("Modifiche inviate all'agenzia.", { exact: true })).toBeVisible();
+  await waitForStatus(db, state.fixture.secondId, "CHANGES_REQUESTED", 15_000);
   await ctx.close();
 });

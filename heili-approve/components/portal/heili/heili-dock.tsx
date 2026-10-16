@@ -248,6 +248,8 @@ export default function HeiliDock() {
                   mode={review.mode}
                   kind={review.kind}
                   showHeader={false}
+                  // The sheet covers the decision bar: the panel asks to close Heili first.
+                  onBackToPage={desktop ? undefined : heili.closeDock}
                   onSubmitChanges={review.onSubmitChanges}
                   onApprove={review.onApprove}
                   onRequestSavedChanges={review.onRequestSavedChanges}

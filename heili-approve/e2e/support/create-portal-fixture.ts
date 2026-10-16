@@ -4,6 +4,7 @@
  * layout checks do not depend on what other specs did to the seed.
  *
  * - a social post in review with a two-image carousel (media stage, chevrons)
+ * - a second social post in review with one image (for specs that send a decision)
  * - a social post that already has «Chiedi modifiche» (CHANGES_REQUESTED)
  * - a Meta ads set in review with two variants (decision bar with the long
  *   «Invia le mie decisioni» label)
@@ -88,7 +89,8 @@ async function main() {
     await upload("barra-2.png", image, "Seconda immagine"),
   ]);
   const asked = await social("Modifiche già chieste", [await upload("barra-3.png", image, "Immagine")]);
-  await submitForReview([carousel.id, asked.id], workspaceId, actor, { notify: false });
+  const second = await social("Secondo post barra", [await upload("barra-4.png", image, "Immagine")]);
+  await submitForReview([carousel.id, asked.id, second.id], workspaceId, actor, { notify: false });
   await requestChanges(asked.id, { id: reviewer.id, clientId: client.id }, 1, "Il colore è troppo scuro.");
 
   const url = "https://www.example.com/prova";
@@ -156,6 +158,7 @@ async function main() {
       carouselId: carousel.id,
       carouselTitle: carousel.title,
       askedId: asked.id,
+      secondId: second.id,
       adsId: ads.id,
       blogId: blog.id,
     })}`
