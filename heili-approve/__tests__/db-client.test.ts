@@ -53,6 +53,26 @@ beforeEach(() => {
   state.nextAdapterId = 0;
 });
 
+describe("pool and transactions under load (QA 2026-10-16)", () => {
+  it("waits up to 10 s for a connection instead of Prisma's 2 s", async () => {
+    const { TRANSACTION_OPTIONS, getPrisma } = await loadModule(ClientGen1);
+    expect(TRANSACTION_OPTIONS.maxWait).toBeGreaterThanOrEqual(10_000);
+    getPrisma();
+    expect((state.clients[0] as unknown as { options: { transactionOptions?: unknown } }).options.transactionOptions).toEqual(
+      TRANSACTION_OPTIONS
+    );
+  });
+
+  it("reads the pool size from DATABASE_POOL_MAX within 1–100, else 10", async () => {
+    const { poolMax } = await loadModule(ClientGen1);
+    expect(poolMax(undefined)).toBe(10);
+    expect(poolMax("25")).toBe(25);
+    expect(poolMax("0")).toBe(10);
+    expect(poolMax("500")).toBe(10);
+    expect(poolMax("molti")).toBe(10);
+  });
+});
+
 describe("the development Prisma client (K-11)", () => {
   it("keeps one client and one pool across reads", async () => {
     const { getPrisma } = await loadModule(ClientGen1);
