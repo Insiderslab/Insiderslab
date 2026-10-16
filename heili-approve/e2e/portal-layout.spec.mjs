@@ -10,6 +10,7 @@
 
 import { execFileSync } from "node:child_process";
 import { MOBILE, connectDb, expect, root, seed, test, uniq, viewportShot } from "./helpers.mjs";
+import { smallControls } from "./support/touch.mjs";
 
 let db;
 let data;
@@ -91,4 +92,31 @@ test("QA-04: la barra delle decisioni (post, annunci, articolo) tiene ogni etich
     }
     await context.close();
   }
+});
+
+// ─── QA-11 ───────────────────────────────────────────────────────────────────
+
+test("QA-11: nel portale a 390 px nessun controllo sotto i 44 px", async ({ browser }) => {
+  const context = await browser.newContext(MOBILE);
+  const page = await context.newPage();
+  const aurora = state.portal.reviewUrl;
+  const plan = `${state.month.a.reviewUrl}/piani/${state.month.planId}`;
+  const pages = [
+    ["home", aurora],
+    ["post", `${aurora}/posts/${state.portal.carouselId}`],
+    ["post con modifiche", `${aurora}/posts/${state.portal.askedId}`],
+    ["annunci", `${aurora}/posts/${state.portal.adsId}`],
+    ["articolo", `${aurora}/posts/${state.portal.blogId}`],
+    ["piano", plan],
+    ["piano · Sfoglia", `${plan}?vista=sfoglia`],
+    ["piano · Griglia", `${plan}?vista=griglia`],
+  ];
+  const failures = [];
+  for (const [name, url] of pages) {
+    await page.goto(url);
+    await page.waitForLoadState("networkidle");
+    for (const found of await smallControls(page)) failures.push(`${name}: ${found}`);
+  }
+  expect(failures, failures.join("\n")).toEqual([]);
+  await context.close();
 });

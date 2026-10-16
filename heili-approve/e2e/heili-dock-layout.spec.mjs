@@ -7,6 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { DESKTOP, MOBILE, connectDb, expect, root, seed, test, uniq, viewportShot, waitForStatus } from "./helpers.mjs";
 import { HELI_BASE, startHeiliServer } from "./support/heili-server.mjs";
+import { smallControls } from "./support/touch.mjs";
 
 let db;
 let data;
@@ -162,5 +163,22 @@ test("QA-06: su telefono il riepilogo dice di chiudere Heili e il foglio riporta
   await changes.click();
   await expect(page.getByText("Modifiche inviate all'agenzia.", { exact: true })).toBeVisible();
   await waitForStatus(db, state.fixture.secondId, "CHANGES_REQUESTED", 15_000);
+  await ctx.close();
+});
+
+// ─── QA-11 (Heili's sheet) ───────────────────────────────────────────────────
+
+test("QA-11: i controlli del foglio di Heili (Feedback e Guida) sono da 44 px a 390 px", async ({ browser }) => {
+  const ctx = await context(browser, MOBILE);
+  const page = await ctx.newPage();
+  await page.goto(postUrl(state.fixture.carouselId));
+  await page.getByTestId("heili-dock-button").click();
+  const dock = page.getByTestId("heili-dock");
+  await expect(dock).toBeVisible();
+  const failures = [];
+  for (const found of await smallControls(page, '[data-testid="heili-dock"]')) failures.push(`Feedback: ${found}`);
+  await page.getByRole("tab", { name: "Guida" }).click();
+  for (const found of await smallControls(page, '[data-testid="heili-dock"]')) failures.push(`Guida: ${found}`);
+  expect(failures, failures.join("\n")).toEqual([]);
   await ctx.close();
 });

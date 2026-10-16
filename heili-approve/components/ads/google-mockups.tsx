@@ -276,7 +276,7 @@ export function GooglePMaxAd(p: AdMockupProps) {
             type="button"
             aria-pressed={surface === s.id}
             onClick={() => setSurface(s.id)}
-            className={`min-h-9 shrink-0 rounded-full border px-3 text-[13px] font-medium ${
+            className={`min-h-9 shrink-0 rounded-full border px-3 text-[13px] font-medium max-sm:min-h-11 ${
               surface === s.id ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface text-muted hover:text-foreground"
             }`}
           >

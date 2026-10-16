@@ -114,7 +114,7 @@ function CommentItem({
                   <button
                     type="button"
                     onClick={() => onSeek(comment)}
-                    className="inline-flex min-h-9 items-center gap-1 rounded-full border border-accent px-3 text-sm font-medium text-accent hover:bg-accent hover:text-white"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-full border border-accent px-3 text-sm font-medium text-accent hover:bg-accent hover:text-white"
                     aria-label={`Vai al momento ${formatMoment(comment.timeSec, comment.timeEndSec)} del video`}
                   >
                     <span aria-hidden="true">▶</span>

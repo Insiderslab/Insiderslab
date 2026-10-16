@@ -808,7 +808,7 @@ function BlogCommentItem({
             <button
               type="button"
               onClick={() => onShowInText(comment.id)}
-              className="min-h-9 text-sm font-medium text-accent underline underline-offset-2"
+              className="min-h-11 text-sm font-medium text-accent underline underline-offset-2"
             >
               Mostra nel testo
             </button>

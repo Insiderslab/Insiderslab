@@ -913,7 +913,7 @@ export function AssistantPanel({
         <div className="flex items-center justify-between gap-3 border-l-2 border-error pl-2 text-sm text-error" role="alert">
           <span className="min-w-0 flex-1">{error}</span>
           {canRetry && (
-            <button type="button" onClick={() => sendMessage(true)} className="min-h-9 shrink-0 font-medium underline underline-offset-2">
+            <button type="button" onClick={() => sendMessage(true)} className="min-h-11 shrink-0 font-medium underline underline-offset-2">
               Riprova
             </button>
           )}

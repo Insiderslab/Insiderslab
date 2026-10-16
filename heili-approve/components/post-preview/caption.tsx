@@ -50,7 +50,8 @@ export default function Caption({
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            className={`pointer-events-auto inline cursor-pointer ${moreClassName}`}
+            // The word is tiny: an invisible 56 × 47 px area around it makes it a 44 px touch target.
+            className={`pointer-events-auto relative inline cursor-pointer after:absolute after:-inset-x-3 after:-inset-y-3.5 after:content-[''] ${moreClassName}`}
             aria-label={`${moreLabel}: mostra tutto il testo`}
           >
             {moreLabel}
