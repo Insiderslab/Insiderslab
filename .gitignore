@@ -15,3 +15,6 @@ Thumbs.db
 
 # Temporary git worktrees used by agents
 .claude/worktrees/
+
+# Redis snapshots written by local test servers
+dump.rdb
