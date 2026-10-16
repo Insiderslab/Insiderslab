@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Built from site-script/src by scripts/build-site-script.mjs (minified).
+    "public/heili-review*.js",
   ]),
 ]);
 

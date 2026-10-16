@@ -13,6 +13,7 @@
 import { useState, useTransition } from "react";
 import { addCommentAction } from "@/app/(dashboard)/posts/actions";
 import AssistantTranscript from "@/components/review/assistant-transcript";
+import OpenOnSite from "@/components/website/open-on-site";
 import { anchorChip, DEVICE_LABELS, pagePath, type WebsiteContent } from "@/lib/content/website";
 import ThreadCard, { type ReviewCommentView } from "./comment-thread";
 import { buildCommentThreads } from "./helpers";
@@ -213,7 +214,7 @@ export default function WebsiteReview({
                     canComment={canComment}
                     multipleMedia={false}
                     siteLabel={anchorChip(anchor, content.pages)}
-                    siteAction={canOpenOnSite ? null : null}
+                    siteAction={canOpenOnSite ? <OpenOnSite commentId={thread.root.id} /> : null}
                   />
                 );
               })}

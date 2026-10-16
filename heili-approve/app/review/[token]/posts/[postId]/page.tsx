@@ -38,6 +38,7 @@ import { PlanProgressBar } from "@/components/plans/plan-bits";
 import { coerceAdContent } from "@/lib/content/ads";
 import { coerceBlogContent, locateAnchors, renderMarkdownSafe } from "@/lib/content/blog";
 import { coerceWebsiteContent } from "@/lib/content/website";
+import { portalLiveReady } from "@/lib/website/service";
 import type { BlogContent } from "@/lib/content/types";
 import { prisma } from "@/lib/db/client";
 import { NotFoundError } from "@/lib/errors";
@@ -350,7 +351,12 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
 
   if (post.kind === "WEBSITE") {
     const content = coerceWebsiteContent(current.content);
-    const websitePost: PortalWebsitePost = { ...base, kind: "WEBSITE", content, liveReady: false };
+    const websitePost: PortalWebsitePost = {
+      ...base,
+      kind: "WEBSITE",
+      content,
+      liveReady: post.versions[0]?.number === current.number && (await portalLiveReady(content)),
+    };
     let changesSlot: React.ReactNode;
     if (found) {
       const summary = summarizeVersionDiff(diffVersions(found.from, current, "WEBSITE")).map((line) =>

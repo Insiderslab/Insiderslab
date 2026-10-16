@@ -44,6 +44,7 @@ import { KindBadge, KindStatusBadge } from "@/components/posts/kind-badge";
 import PostActions from "@/components/posts/post-actions";
 import PostEditor from "@/components/posts/post-editor";
 import WebsiteReview from "@/components/posts/website-review";
+import SitePanel from "@/components/website/site-panel";
 import PostReview, {
   type AssistantItemView,
   type ReviewCommentView,
@@ -85,6 +86,7 @@ import {
 import { parseActionItems } from "@/lib/review-assistant/shared";
 import { isClaim } from "@/lib/scheduling";
 import { enabledKinds, postsHref, productName } from "@/lib/variant";
+import { getAgencySite } from "@/lib/website/service";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 const PAGE_TITLES: Record<ContentKind, string> = {
@@ -217,6 +219,8 @@ export default async function PostDetailPage({
           }).length;
 
   const activeReviewers = await prisma.clientReviewer.count({ where: { clientId: client.id, active: true } });
+  // «Sul sito»: the review key of the post (null while the content has no address yet).
+  const agencySite = kind === "WEBSITE" ? await getAgencySite(post.id, workspaceId) : null;
 
   const versionNumberById = new Map(versions.map((v) => [v.id, v.number]));
   const openClientComments = post.comments.filter(isOpenClientComment);
@@ -451,6 +455,16 @@ export default async function PostDetailPage({
         />
         {notice && <p className="text-sm text-success">{notice}</p>}
 
+        {kind === "WEBSITE" &&
+          post.status !== "CANCELLED" &&
+          (agencySite ? (
+            <SitePanel postId={post.id} site={agencySite} delivered={post.status === "DELIVERED"} />
+          ) : (
+            <p className="panel rounded p-4 text-sm text-muted">
+              «Sul sito»: inserisci e salva l&apos;indirizzo del sito di prova in Modifica per avere la riga di codice.
+            </p>
+          ))}
+
         {showSharePanel && (
           <PostSharePanel
             workspaceId={workspaceId}
@@ -618,6 +632,7 @@ export default async function PostDetailPage({
           comments={comments}
           sessions={sessions}
           canComment={canComment}
+          canOpenOnSite={Boolean(agencySite && !agencySite.revokedAt)}
         />
       );
     }

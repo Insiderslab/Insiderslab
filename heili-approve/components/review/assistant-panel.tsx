@@ -65,7 +65,20 @@ import {
 } from "@/lib/review-assistant/shared";
 
 export interface AssistantPanelProps {
-  token: string;
+  /** The reviewer's link token: the panel talks to /api/review/<token>/assistant. */
+  token?: string;
+  /**
+   * Inside the «Sul sito» iframe: the same API under another base URL, with
+   * the site session as Bearer header (lib/website). Overrides `token`.
+   */
+  transport?: { baseUrl: string; headers?: Record<string, string> };
+  /** False hides «Parla a voce» (the live voice call); dictation stays. Default true. */
+  liveVoice?: boolean;
+  /**
+   * The decision is taken elsewhere (the site iframe: only in the portal): the
+   * completed summary shows this text instead of the send / approve buttons.
+   */
+  decisionsElsewhere?: string;
   postId: string;
   versionNumber: number;
   /**
@@ -257,13 +270,13 @@ function adsContextLabel(context: AssistantAdsContext): string {
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
-async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
+async function callApi<T>(url: string, init?: RequestInit, headers?: Record<string, string>): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, {
       ...init,
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(headers ?? {}) },
     });
   } catch {
     throw new Error("Connessione non riuscita. Controlla la rete e riprova.");
@@ -282,6 +295,9 @@ async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function AssistantPanel({
   token,
+  transport,
+  liveVoice = true,
+  decisionsElsewhere,
   postId,
   versionNumber,
   onSubmitChanges,
@@ -306,7 +322,8 @@ export function AssistantPanel({
   // The portal's sticky «Chiedi modifiche» / «Approva» bar drives the panel only while the client decides.
   const barDrives = Boolean(controlRef) && !feedbackMode;
   const labels: ActionItemLabels = { variantNames };
-  const baseUrl = `/api/review/${encodeURIComponent(token)}/assistant`;
+  const baseUrl = transport?.baseUrl ?? `/api/review/${encodeURIComponent(token ?? "")}/assistant`;
+  const apiHeaders = transport?.headers;
 
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<AssistantSessionView | null>(null);
@@ -365,10 +382,10 @@ export function AssistantPanel({
   const stateUrl = `${baseUrl}?postId=${encodeURIComponent(postId)}&versionNumber=${versionNumber}`;
 
   const reload = useCallback(async () => {
-    const state = await callApi<AssistantStateResponse>(stateUrl);
+    const state = await callApi<AssistantStateResponse>(stateUrl, undefined, apiHeaders);
     applyState(state);
     return state;
-  }, [applyState, stateUrl]);
+  }, [applyState, stateUrl, apiHeaders]);
 
   const reloadAfterVoice = useCallback(async () => {
     const state = await reload();
@@ -384,7 +401,7 @@ export function AssistantPanel({
   // Resume the conversation for this version, if any.
   useEffect(() => {
     let cancelled = false;
-    callApi<AssistantStateResponse>(stateUrl)
+    callApi<AssistantStateResponse>(stateUrl, undefined, apiHeaders)
       .then((state) => {
         if (!cancelled) applyState(state);
       })
@@ -397,7 +414,7 @@ export function AssistantPanel({
     return () => {
       cancelled = true;
     };
-  }, [applyState, stateUrl]);
+  }, [applyState, stateUrl, apiHeaders]);
 
   // Follow the video player so the chip shows the current moment.
   useEffect(() => {
@@ -576,7 +593,7 @@ export function AssistantPanel({
         body: JSON.stringify(
           retry ? { postId, versionNumber, inputMode: "TEXT", retry: true } : { postId, versionNumber, message, inputMode }
         ),
-      });
+      }, apiHeaders);
       // The server's copy replaces the optimistic bubble in the same update.
       setPendingMessage(null);
       setSession(turn.session);
@@ -612,7 +629,7 @@ export function AssistantPanel({
     const result = await callApi<AssistantFinalizeResponse>(`${baseUrl}/finalize`, {
       method: "POST",
       body: JSON.stringify({ postId, versionNumber }),
-    });
+    }, apiHeaders);
     setSession(result.session);
     setChangesDraft(result.changesMessage);
     return result;
@@ -776,7 +793,7 @@ export function AssistantPanel({
         </header>
       )}
 
-      {!loading && done === null && canChat && (
+      {liveVoice && !loading && done === null && canChat && (
         <div className="space-y-2 rounded-lg border border-border bg-surface p-3" aria-label="Parla a voce">
           {!live.supported ? (
             <div className="space-y-1">
@@ -1068,7 +1085,11 @@ export function AssistantPanel({
 
           {(hasClientMessages || completed || live.clientText) && (
             <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:flex-wrap">
-              {completed && barDrives ? (
+              {completed && decisionsElsewhere ? (
+                <p className="basis-full text-sm text-muted" data-testid="assistant-decide-elsewhere">
+                  {decisionsElsewhere}
+                </p>
+              ) : completed && barDrives ? (
                 <div className="flex basis-full flex-col gap-2">
                   <p className="text-sm text-muted" data-testid="assistant-bar-hint">
                     {barHintText(Boolean(onBackToPage))}
@@ -1098,7 +1119,7 @@ export function AssistantPanel({
                   {busy === "finalize" ? "Preparo il riepilogo…" : ASSISTANT_BUTTONS.prepareSummary}
                 </ActionButton>
               )}
-              {!controlRef && !feedbackMode && onApprove && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
+              {!controlRef && !feedbackMode && !decisionsElsewhere && onApprove && <ActionButton onClick={approve} disabled={busy !== null || voiceBusy} primary={approveHighlighted} success>
                 {busy === "approve" ? (kind === "AD_CREATIVE" ? "Invio…" : "Approvazione…") : copy.approveLabel}
               </ActionButton>}
               {(voiceBusy || draft.trim() || speechInput.listening) && (
