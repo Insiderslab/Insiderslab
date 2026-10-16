@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { prisma } from "@/lib/db/client";
 import type { Workspace, WorkspaceRole } from "@/app/generated/prisma/client";
 import { getWorkspaceMembership } from "@/lib/workspace";
@@ -27,7 +28,14 @@ export async function listUserWorkspaces(userId: string) {
   });
 }
 
-export async function getActiveWorkspaceForUser(
+/**
+ * Memoized per request (React cache): the agency layout, the page and
+ * getCurrentWorkspaceContext all ask for it (3 × 2 queries per page before,
+ * QA 2026-10-16). Outside rendering (route handlers, actions) it runs each time.
+ */
+export const getActiveWorkspaceForUser = cache(loadActiveWorkspaceForUser);
+
+async function loadActiveWorkspaceForUser(
   userId: string
 ): Promise<ActiveWorkspace | null> {
   const cookieStore = await cookies();
