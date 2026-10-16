@@ -475,7 +475,7 @@ export default function BlogReview({
     <div className="space-y-6">
       <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato questo articolo nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="Questo articolo è cambiato nel frattempo: l'ha aggiornato l'agenzia, oppure lo hai già rivisto da un altro dispositivo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel

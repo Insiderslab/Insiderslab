@@ -619,7 +619,7 @@ export default function AdsReview({
     <div className="space-y-6">
       <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato questi annunci nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="Questi annunci sono cambiati nel frattempo: li ha aggiornati l'agenzia, oppure li hai già rivisti da un altro dispositivo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel

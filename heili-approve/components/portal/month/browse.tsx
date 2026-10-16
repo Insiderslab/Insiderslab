@@ -325,7 +325,7 @@ export default function Browse({
 
       {stale && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning bg-surface p-3 text-sm" role="alert">
-          <span>L&apos;agenzia ha aggiornato qualcosa nel frattempo.</span>
+          <span>Qualcosa è cambiato nel frattempo: l&apos;ha aggiornato l&apos;agenzia, oppure lo hai già rivisto da un altro dispositivo.</span>
           <button
             type="button"
             onClick={() => {

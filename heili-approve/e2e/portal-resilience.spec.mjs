@@ -11,7 +11,9 @@
 // - K-02  a comment made of one very long word (a link) does not widen the page
 //         at 390 px;
 // - K-03  the client never reads «Metricool» (the sheet and the done panel say
-//         «programmato per <data>»).
+//         «programmato per <data>»);
+// - K-04  the same link open on two devices: after approving on one, the other
+//         does not blame the agency for the change.
 
 import { execFileSync } from "node:child_process";
 import { MOBILE, connectDb, expect, expectNoHorizontalScroll, root, seed, test, uniq } from "./helpers.mjs";
@@ -38,11 +40,12 @@ test.beforeAll(async () => {
   db = await connectDb();
   state.a = runFixture("e2e/support/create-portal-fixture.ts", [data.workspaceId, data.userId, uniq()]);
   state.b = runFixture("e2e/support/create-portal-fixture.ts", [data.workspaceId, data.userId, uniq() + "b"]);
+  state.c = runFixture("e2e/support/create-portal-fixture.ts", [data.workspaceId, data.userId, uniq() + "c"]);
 });
 
 test.afterAll(async () => {
   await db?.query('update "Client" set "archivedAt" = now() where id = any($1)', [
-    [state.a?.clientId, state.b?.clientId].filter(Boolean),
+    [state.a?.clientId, state.b?.clientId, state.c?.clientId].filter(Boolean),
   ]);
   await db?.end();
 });
@@ -125,6 +128,27 @@ test("K-03: il cliente non legge mai «Metricool» nel foglio di conferma né do
   await expect(page.getByText("Fatto! Post approvato.")).toBeVisible();
   expect(await page.locator("body").innerText()).not.toContain("Metricool");
   await context.close();
+});
+
+test("K-04: lo stesso link su due dispositivi: l'altra scheda non dà la colpa all'agenzia", async ({ browser }) => {
+  const one = await phone(browser, state.c.reviewUrl);
+  const two = await phone(browser, state.c.reviewUrl);
+  const url = `${state.c.reviewUrl}/posts/${state.c.secondId}`;
+  await one.page.goto(url);
+  await two.page.goto(url);
+
+  await one.page.getByTestId("decision-approve").click();
+  await one.page.locator("dialog[open]").getByRole("button", { name: "Sì, approva" }).click();
+  await expect(one.page.getByText("Fatto! Post approvato.")).toBeVisible();
+
+  await two.page.locator("textarea").first().fill("Cambiate il titolo");
+  await two.page.getByRole("button", { name: "Invia commento" }).click();
+  const banner = two.page.getByRole("alert").filter({ hasText: "cambiato nel frattempo" });
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("già rivisto da un altro dispositivo");
+  await expect(banner.getByRole("button", { name: "Mostra la versione aggiornata" })).toBeVisible();
+  await one.context.close();
+  await two.context.close();
 });
 
 async function postStatus(id) {

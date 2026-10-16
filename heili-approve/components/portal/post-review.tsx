@@ -532,7 +532,7 @@ export default function PostReview({
         <ReviewNav homeHref={homeHref} nextHref={nextHref} queue={queue} wording={wording} showProgress={outcome === null} />
       )}
 
-      {stale && <StaleBanner text="L'agenzia ha aggiornato questo post nel frattempo." onReload={reload} />}
+      {stale && <StaleBanner text="Questo post è cambiato nel frattempo: l'ha aggiornato l'agenzia, oppure lo hai già rivisto da un altro dispositivo." onReload={reload} />}
 
       {outcome && (
         <SuccessPanel
