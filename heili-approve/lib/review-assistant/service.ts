@@ -36,7 +36,9 @@ import { getPostForReviewer, type ReviewerPost } from "@/lib/posts";
 import { itemLabelsFor, itemTargetFor } from "./content";
 import { AssistantError, getAssistantProvider, runAssistantFinalize, runAssistantTurn } from "./provider";
 import { buildPostContext } from "./prompt";
-import { attachMediaEvidence } from "@/lib/media-analysis/context";
+import { attachMediaEvidence, contextMedia } from "@/lib/media-analysis/context";
+import { mediaAnalysisEnabled } from "@/lib/media-analysis/spec";
+import { liveVoiceConfigured, voiceAvailability } from "./live-config";
 import { assertNoActiveLiveCall } from "./live-service";
 import { loadSubmittedSessionIds } from "./submitted";
 import {
@@ -298,7 +300,18 @@ export async function getAssistantState(
     sessionsLeft: sessionsLeft(post.reviewSessions.length),
     canChat: access.ok,
     mode: access.ok ? access.mode : null,
+    voice: stateVoice(post, reviewer, versionNumber, access.ok),
   };
+}
+
+/** «Parla a voce» on this content: known from the configuration, before any tap. */
+function stateVoice(post: ReviewerPost, reviewer: AssistantReviewer, versionNumber: number, open: boolean) {
+  const configured = liveVoiceConfigured();
+  const analysis = mediaAnalysisEnabled();
+  // The media count matters only when the analysis the voice needs is off.
+  const mediaCount =
+    configured && !analysis && open ? contextMedia(buildPostContext(post, reviewer.name, versionNumber)).length : 0;
+  return voiceAvailability({ configured, mediaCount, mediaAnalysisEnabled: analysis });
 }
 
 // ─── Chat turn ───────────────────────────────────────────────────────────────

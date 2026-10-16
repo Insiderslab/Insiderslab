@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import AssistantPanel from "@/components/review/assistant-panel";
 import { useHeili } from "./context";
+import { releaseEarlyHeiliTap, takeEarlyHeiliTap, type HeiliEarlyWindow } from "./early-tap";
 import HeiliGuide from "./heili-guide";
 import { DOCK_SIDE_MIN_WIDTH, LAUNCHER_LABELS, dockSubtitle, dockTabs, introStorageKey, launcherKind } from "./rules";
 
@@ -43,6 +44,15 @@ export default function HeiliDock() {
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
+
+  // A tap that came before hydration (early-tap.ts): open now that the dock can.
+  const { openDock } = heili;
+  useEffect(() => {
+    const win = window as Window & HeiliEarlyWindow;
+    const request = takeEarlyHeiliTap(win, document);
+    if (request) openDock(request === "auto" ? undefined : request);
+    return () => releaseEarlyHeiliTap(win);
+  }, [openDock]);
 
   const dismissIntro = useCallback(() => {
     setShowIntro(false);
@@ -150,6 +160,8 @@ export default function HeiliDock() {
           aria-label={buttonLabel}
           aria-haspopup="dialog"
           aria-expanded={open}
+          // A tap before hydration is recorded by the layout's inline script (early-tap.ts).
+          data-heili-open="auto"
           data-testid="heili-dock-button"
           data-kind={kind}
           // Position: .heili-launcher in globals.css (above the bar; on phones inside its right edge).

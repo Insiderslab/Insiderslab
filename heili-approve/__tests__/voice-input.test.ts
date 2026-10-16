@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { mergeSpeechText, shouldSubmitSpeechTurn, speechErrorMessage } from "@/components/voice/use-speech-input";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import {
+  SPEECH_NO_START_MESSAGE,
+  SPEECH_PROMPT_TIMEOUT_MS,
+  SPEECH_START_TIMEOUT_MS,
+  SPEECH_UNSUPPORTED_MESSAGE,
+  mergeSpeechText,
+  shouldSubmitSpeechTurn,
+  speechErrorMessage,
+  speechStartTimeout,
+} from "@/components/voice/use-speech-input";
 
 describe("voice input helpers", () => {
   it("appends speech without discarding an existing draft", () => {
@@ -31,5 +42,29 @@ describe("voice input helpers", () => {
     expect(shouldSubmitSpeechTurn({ cancelled: false, submitOnEnd: false, spoken: "solo dettatura" })).toBe(false);
     expect(shouldSubmitSpeechTurn({ cancelled: true, submitOnEnd: true, spoken: "bozza da conservare" })).toBe(false);
     expect(shouldSubmitSpeechTurn({ cancelled: false, submitOnEnd: true, spoken: "   " })).toBe(false);
+  });
+});
+
+describe("dettatura: un tocco ha sempre una risposta", () => {
+  it("senza riconoscimento vocale o se non parte, la frase dice cosa fare", () => {
+    expect(SPEECH_UNSUPPORTED_MESSAGE).toContain("non è disponibile in questo browser");
+    expect(SPEECH_UNSUPPORTED_MESSAGE).toContain("microfono della tastiera");
+    expect(SPEECH_NO_START_MESSAGE).toContain("non risponde");
+    expect(SPEECH_NO_START_MESSAGE).toMatch(/scrivi il messaggio/);
+  });
+
+  it("aspetta poco se il microfono è già consentito, a lungo mentre il browser chiede il permesso", () => {
+    expect(speechStartTimeout("granted")).toBe(SPEECH_START_TIMEOUT_MS);
+    expect(speechStartTimeout("prompt")).toBe(SPEECH_PROMPT_TIMEOUT_MS);
+    expect(speechStartTimeout(null)).toBe(SPEECH_PROMPT_TIMEOUT_MS);
+    expect(SPEECH_START_TIMEOUT_MS).toBeLessThan(SPEECH_PROMPT_TIMEOUT_MS);
+  });
+
+  it("il microfono senza dettatura non è un'icona disabilitata e muta", () => {
+    const source = readFileSync(path.join(process.cwd(), "components/voice/dictation-button.tsx"), "utf8");
+    const start = source.indexOf("if (!speech.supported)");
+    const unsupported = source.slice(start, source.indexOf("La dettatura non è supportata", start));
+    expect(unsupported).toContain("onClick={() => speech.start()}");
+    expect(unsupported).not.toMatch(/\sdisabled\s*\n/);
   });
 });

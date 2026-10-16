@@ -30,7 +30,16 @@ import {
   type Ref,
 } from "react";
 import { useSpeechInput } from "@/components/voice/use-speech-input";
-import { useLiveConversation } from "@/components/voice/use-live-conversation";
+import { useLiveConversation, type PreparingStep } from "@/components/voice/use-live-conversation";
+import {
+  PLAYBACK_BLOCKED_MESSAGE,
+  SLOW_PREPARATION_MESSAGE,
+  VOICE_STEP_LABELS,
+  VOICE_SUPPORT_MESSAGES,
+  preparationLabel,
+  voiceStartBlocker,
+  type VoicePreparation,
+} from "@/components/voice/voice-rules";
 import HeiliAssistantIcon from "@/components/heili-assistant-icon";
 import type { BlogAnchor } from "@/lib/content/types";
 import { formatTimecode } from "@/lib/domain";
@@ -60,8 +69,10 @@ import {
   type AssistantSessionView,
   type AssistantStateResponse,
   type AssistantTurnResponse,
+  type AssistantVoiceAvailability,
   type Readiness,
   type ReviewInputModeValue,
+  voiceUnavailableMessage,
 } from "@/lib/review-assistant/shared";
 
 export interface AssistantPanelProps {
@@ -196,11 +207,16 @@ export type LiveTone = "waiting" | "listening" | "speaking" | "paused";
 
 export function liveStatus(
   phase: "preparing" | "connecting" | "active" | "closing",
-  state: { muted: boolean; speaking: boolean }
+  state: { muted: boolean; speaking: boolean; step?: PreparingStep | null; preparation?: VoicePreparation | null }
 ): { label: string; tone: LiveTone } {
-  if (phase === "preparing") return { label: "Preparo il contesto di immagini e video…", tone: "waiting" };
-  if (phase === "connecting") return { label: "Collegamento al microfono…", tone: "waiting" };
-  if (phase === "closing") return { label: "Salvo la conversazione…", tone: "waiting" };
+  if (phase === "preparing") {
+    return {
+      label: state.step === "microphone" ? VOICE_STEP_LABELS.microphone : preparationLabel(state.preparation ?? null),
+      tone: "waiting",
+    };
+  }
+  if (phase === "connecting") return { label: VOICE_STEP_LABELS.connecting, tone: "waiting" };
+  if (phase === "closing") return { label: VOICE_STEP_LABELS.closing, tone: "waiting" };
   if (state.muted) return { label: "In pausa", tone: "paused" };
   if (state.speaking) return { label: "Heili sta parlando", tone: "speaking" };
   return { label: "In ascolto", tone: "listening" };
@@ -312,6 +328,9 @@ export function AssistantPanel({
   const [session, setSession] = useState<AssistantSessionView | null>(null);
   const [sessionsLeft, setSessionsLeft] = useState<number | null>(null);
   const [canChat, setCanChat] = useState(true);
+  const [voice, setVoice] = useState<AssistantVoiceAvailability>({ available: true, reason: null });
+  /** True after a tap on «Parla a voce» that could not start: the reason stays in view. */
+  const [voiceTapRefused, setVoiceTapRefused] = useState(false);
   const [readiness, setReadiness] = useState<Readiness | null>(null);
 
   const [draft, setDraft] = useState("");
@@ -360,6 +379,8 @@ export function AssistantPanel({
     setSession(state.session);
     setSessionsLeft(state.sessionsLeft);
     setCanChat(state.canChat);
+    // An older server without the field: let the tap try (it explains on failure).
+    setVoice(state.voice ?? { available: true, reason: null });
   }, []);
 
   const stateUrl = `${baseUrl}?postId=${encodeURIComponent(postId)}&versionNumber=${versionNumber}`;
@@ -505,13 +526,26 @@ export function AssistantPanel({
     return () => window.clearTimeout(timer);
   }, [live.phase, selectedContextMarker, updateVoiceContext]);
 
+  // Why a tap on «Parla a voce» cannot start now (null: it can). Never a silent,
+  // disabled button: the tap shows this sentence (rule: an answer within 300 ms).
+  const voiceBlocker = voiceStartBlocker({
+    loading,
+    busy,
+    outOfSessions,
+    messagesLeft,
+    draft,
+    dictating: speechInput.listening,
+  });
+  const voiceNotice = voiceTapRefused ? voiceBlocker : null;
+
   function startConversation() {
-    if (composerDisabled) return;
-    if (draft.trim()) {
-      setError("Invia prima il messaggio scritto oppure svuotalo, poi avvia la conversazione vocale.");
-      textareaRef.current?.focus();
+    if (voiceBusy) return;
+    if (voiceBlocker) {
+      setVoiceTapRefused(true);
+      if (draft.trim()) textareaRef.current?.focus();
       return;
     }
+    setVoiceTapRefused(false);
     speechInput.cancel();
     setError(null);
     setReadiness(null);
@@ -758,6 +792,8 @@ export function AssistantPanel({
   const callStatus = liveStatus(voiceBusy && live.phase !== "idle" ? live.phase : "connecting", {
     muted: live.muted,
     speaking: assistantSpeaking,
+    step: live.step,
+    preparation: live.preparation,
   });
 
   return (
@@ -776,13 +812,21 @@ export function AssistantPanel({
         </header>
       )}
 
-      {!loading && done === null && canChat && (
-        <div className="space-y-2 rounded-lg border border-border bg-surface p-3" aria-label="Parla a voce">
-          {!live.supported ? (
+      {/* No voice on this instance at all: nothing to offer, nothing to explain. */}
+      {!loading && done === null && canChat && voice.reason !== "not-configured" && (
+        <div className="space-y-2 rounded-lg border border-border bg-surface p-3" aria-label="Parla a voce" data-testid="voice-box">
+          {!voice.available && voice.reason ? (
             <div className="space-y-1">
               <p className="text-sm font-semibold">Parla a voce</p>
-              <p className="text-xs text-muted">
-                La voce richiede un browser con microfono e una connessione sicura. Puoi scrivere il tuo messaggio qui sotto.
+              <p className="text-xs text-muted" data-testid="voice-unavailable">
+                {voiceUnavailableMessage(voice.reason)}
+              </p>
+            </div>
+          ) : live.supportProblem ? (
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Parla a voce</p>
+              <p className="text-xs text-muted" data-testid="voice-unsupported">
+                {VOICE_SUPPORT_MESSAGES[live.supportProblem]}
               </p>
             </div>
           ) : !voiceBusy ? (
@@ -790,15 +834,26 @@ export function AssistantPanel({
               <button
                 type="button"
                 onClick={startConversation}
-                disabled={composerDisabled}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-base font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+                // Not `disabled`: a tap must always answer, here with the reason below.
+                aria-disabled={voiceBlocker ? true : undefined}
+                aria-describedby={voiceNotice ? "voice-notice" : undefined}
+                data-testid="voice-start"
+                className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-base font-semibold text-white hover:bg-accent-hover ${
+                  voiceBlocker ? "opacity-50" : ""
+                }`}
               >
                 <MicrophoneIcon />
                 Parla a voce
               </button>
-              <p className="text-xs text-muted">
-                Oppure scrivi: Heili risponde qui sotto. La voce è generata dall&apos;AI e la decisione resta sempre tua.
-              </p>
+              {voiceNotice ? (
+                <p id="voice-notice" className="text-sm text-warning" role="alert" data-testid="voice-notice">
+                  {voiceNotice}
+                </p>
+              ) : (
+                <p className="text-xs text-muted">
+                  Oppure scrivi: Heili risponde qui sotto. La voce è generata dall&apos;AI e la decisione resta sempre tua.
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -806,6 +861,16 @@ export function AssistantPanel({
                 <LiveToneDot tone={callStatus.tone} />
                 {callStatus.label}
               </p>
+              {live.phase === "preparing" && live.slow && (
+                <p className="text-xs text-muted" data-testid="live-slow">
+                  {SLOW_PREPARATION_MESSAGE}
+                </p>
+              )}
+              {live.playbackBlocked && (
+                <p className="text-sm text-warning" role="alert">
+                  {PLAYBACK_BLOCKED_MESSAGE}
+                </p>
+              )}
               {live.phase === "active" && live.remainingSeconds !== null && (
                 <p className="text-xs text-muted" role="timer" aria-live="off">
                   Tempo rimasto: {formatCountdown(live.remainingSeconds)}

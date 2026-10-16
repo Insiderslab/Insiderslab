@@ -158,6 +158,37 @@ export interface AssistantStateResponse {
   canChat: boolean;
   /** What the conversation leads to; null when the assistant is closed for this post. */
   mode: AssistantMode | null;
+  /** Whether «Parla a voce» can work here (server configuration, not the browser). */
+  voice: AssistantVoiceAvailability;
+}
+
+// ─── Voice availability ──────────────────────────────────────────────────────
+
+/**
+ * Why the voice conversation cannot start on this content, known before any tap:
+ * - "not-configured": no voice on this instance (no OpenAI key, or switched off);
+ * - "media-analysis-off": the content has images or videos and the private media
+ *   analysis the voice relies on is disabled (MEDIA_ANALYSIS_ENABLED).
+ */
+export type VoiceUnavailableReason = "not-configured" | "media-analysis-off";
+
+export interface AssistantVoiceAvailability {
+  available: boolean;
+  reason: VoiceUnavailableReason | null;
+}
+
+export const VOICE_COPY = {
+  notConfigured:
+    "La conversazione a voce non è attiva su questo servizio. Puoi scrivere o dettare il messaggio qui sotto.",
+  mediaAnalysisOff:
+    "Per i contenuti con immagini o video la conversazione a voce non è attiva su questo servizio. Puoi scrivere o dettare il messaggio qui sotto.",
+  analysisFailed:
+    "Non riesco ad analizzare le immagini o i video di questo contenuto, quindi la voce non può partire. Puoi scrivere o dettare il messaggio; l’agenzia può verificare i file caricati.",
+} as const;
+
+/** The sentence that explains a reason to the client. */
+export function voiceUnavailableMessage(reason: VoiceUnavailableReason): string {
+  return reason === "media-analysis-off" ? VOICE_COPY.mediaAnalysisOff : VOICE_COPY.notConfigured;
 }
 
 /** POST /api/review/[token]/assistant */

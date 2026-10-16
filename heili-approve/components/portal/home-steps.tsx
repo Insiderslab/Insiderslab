@@ -40,6 +40,7 @@ export default function HomeSteps({ token, steps }: { token: string; steps: read
         <button
           type="button"
           onClick={() => heili.openDock("guide")}
+          data-heili-open="guide"
           className="min-h-11 font-semibold text-accent underline underline-offset-2"
         >
           Come funziona?

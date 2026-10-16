@@ -295,3 +295,41 @@ test("QA-17: la Guida rafforza il percorso della pagina: stesso prossimo passo, 
   await expect(dock.getByTestId("assistant-steps")).not.toContainText("3 Invia");
   await ctx.close();
 });
+
+// ─── Tocco prima che la pagina sia pronta ────────────────────────────────────
+
+test("Heili: un tocco prima che la pagina sia pronta risponde subito e apre il dock appena può", async ({ browser }) => {
+  for (const options of [MOBILE, DESKTOP]) {
+    const ctx = await context(browser, options);
+    const page = await ctx.newPage();
+    // A slow phone: the page's JavaScript is held back until the tap has happened.
+    let release;
+    const held = new Promise((resolve) => (release = resolve));
+    // Scripts only: the stylesheets live under chunks/ too and must arrive.
+    await page.route(/\/_next\/static\/chunks\/.*\.js(\?.*)?$/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    // "commit": the held scripts would delay DOMContentLoaded; the HTML is enough.
+    await page.goto(postUrl(state.fixture.carouselId), { waitUntil: "commit" });
+    const button = page.getByTestId("heili-dock-button");
+    await expect(button).toBeVisible();
+    await button.click({ noWaitAfter: true });
+    // Feedback at once (no React yet): the button is marked as waiting.
+    await expect(button).toHaveAttribute("data-heili-pending", "", { timeout: 300 });
+    await expect(button).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByTestId("heili-dock")).not.toBeVisible();
+    release();
+    // Hydrated: the tap is honoured, on the conversation (a content page).
+    const dock = page.getByTestId("heili-dock");
+    await expect(dock).toBeVisible();
+    await expect(dock.getByRole("tab", { name: "Feedback" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("button", { name: "Chiudi Heili" }).click();
+    await expect(dock).not.toBeVisible();
+    // After hydration the button works as always and carries no leftover mark.
+    await expect(button).not.toHaveAttribute("data-heili-pending", "");
+    await button.click();
+    await expect(dock).toBeVisible();
+    await ctx.close();
+  }
+});

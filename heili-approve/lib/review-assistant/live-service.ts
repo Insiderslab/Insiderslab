@@ -1,6 +1,7 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/client";
 import { attachMediaEvidence, contextMedia } from "@/lib/media-analysis/context";
+import { mediaAnalysisEnabled } from "@/lib/media-analysis/spec";
 import { getPostForReviewer, type ReviewerPost } from "@/lib/posts";
 import { adContentOf, articleTextModel, blogContentOf } from "./content";
 import {
@@ -9,6 +10,7 @@ import {
   liveBackendInstructions,
   liveConversationInstructions,
   liveLimits,
+  liveVoiceConfigured,
 } from "./live-config";
 import { buildLiveStartupInput, formatLiveMediaEvidence } from "./live-context";
 import {
@@ -29,9 +31,11 @@ import {
   passageMarker,
   pointMarker,
   splitMessageMarkers,
+  VOICE_COPY,
   variantMarker,
   videoMomentMarker,
   type AssistantMode,
+  type VoiceUnavailableReason,
 } from "./shared";
 import type { AssistantReviewer } from "./service";
 
@@ -59,6 +63,18 @@ export interface LiveCallPreparation {
   status: "ready" | "pending" | "unavailable";
   total: number;
   ready: number;
+  /** How many of `total` are videos (the progress line names images or videos). */
+  videos: number;
+  /** With "unavailable": switched off by configuration rather than a failed analysis. */
+  reason: VoiceUnavailableReason | null;
+}
+
+/**
+ * Voice off on this instance: said at once (prepare and start), instead of
+ * after the media preparation and the microphone prompt.
+ */
+export function assertLiveVoiceConfigured(): void {
+  if (!liveVoiceConfigured()) throw new AssistantError(VOICE_COPY.notConfigured, 503);
 }
 
 export interface LiveCallResponse {
@@ -177,9 +193,12 @@ async function loadLiveCallPreparation(
   });
   if (!workspace) throw new AssistantError("Post non trovato", 404);
   const context = buildPostContext(post, reviewer.name, input.versionNumber);
+  const videos = contextMedia(context).filter((ref) => ref.item.type === "video").length;
   let preparation: LiveCallPreparation;
   try {
-    preparation = await attachMediaEvidence(context, workspace.workspaceId);
+    const evidence = await attachMediaEvidence(context, workspace.workspaceId);
+    const disabled = evidence.status === "unavailable" && evidence.total > 0 && !mediaAnalysisEnabled();
+    preparation = { ...evidence, videos, reason: disabled ? "media-analysis-off" : null };
   } catch {
     console.error("[review-assistant-live] Media context preparation failed");
     throw new AssistantError(
@@ -195,8 +214,9 @@ export async function prepareLiveCall(
   reviewer: AssistantReviewer,
   input: PrepareLiveCallInput
 ): Promise<LiveCallPreparation> {
-  const { status, total, ready } = await loadLiveCallPreparation(reviewer, input);
-  return { status, total, ready };
+  assertLiveVoiceConfigured();
+  const { status, total, ready, videos, reason } = await loadLiveCallPreparation(reviewer, input);
+  return { status, total, ready, videos, reason };
 }
 
 function assertLiveContextReady(preparation: LiveCallPreparation): void {
@@ -205,7 +225,9 @@ function assertLiveContextReady(preparation: LiveCallPreparation): void {
   }
   if (preparation.status === "unavailable") {
     throw new AssistantError(
-      "Il contesto visivo non è disponibile in questo momento. Puoi usare i commenti scritti e riprovare più tardi.",
+      preparation.reason === "media-analysis-off"
+        ? VOICE_COPY.mediaAnalysisOff
+        : "Il contesto visivo non è disponibile in questo momento. Puoi usare i commenti scritti e riprovare più tardi.",
       503
     );
   }
@@ -269,7 +291,7 @@ export async function startLiveCall(
   reviewer: AssistantReviewer,
   input: StartLiveCallInput
 ): Promise<LiveCallResponse> {
-  if (!process.env.OPENAI_API_KEY?.trim()) throw new AssistantError("Conversazione vocale non disponibile", 404);
+  assertLiveVoiceConfigured();
   const preparation = await loadLiveCallPreparation(reviewer, input);
   const { post, context, mode } = preparation;
   // Validate client-provided selection against the authorized current version
@@ -404,12 +426,18 @@ export async function startLiveCall(
       },
       transport: { type: "webrtc", sdp: input.sdp },
     });
-  } catch {
+  } catch (error) {
     await prisma.reviewVoiceCall.updateMany({
       where: { id: claim.callId, status: "STARTING" },
       data: { status: "FAILED", failureCode: "provider_create_uncertain" },
     });
-    console.error("[review-assistant-live] Provider session creation failed");
+    // Status and code only (never the message or headers): 401/403 key or model
+    // access, 404 model, 429 quota — enough for the operator to fix the config.
+    const status = (error as { status?: unknown })?.status;
+    const code = (error as { code?: unknown })?.code;
+    console.error(
+      `[review-assistant-live] Provider session creation failed (status ${typeof status === "number" ? status : "n/a"}, code ${typeof code === "string" ? code.slice(0, 60) : "n/a"})`
+    );
     throw new AssistantError("La conversazione vocale non è disponibile in questo momento. Riprova tra poco.", 503);
   }
 

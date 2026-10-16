@@ -269,6 +269,21 @@ describe("assistant chat while the post waits for a decision (IN_REVIEW)", () =>
     expect(mocks.runTurn).toHaveBeenCalledTimes(1);
     expect(await getAssistantState(reviewer, "post-1", 1)).toMatchObject({ canChat: true, mode: "decision" });
   });
+
+  it("tells the panel up front whether the voice can work (no OpenAI key here: it cannot)", async () => {
+    const saved = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      expect((await getAssistantState(reviewer, "post-1", 1)).voice).toEqual({ available: false, reason: "not-configured" });
+      process.env.OPENAI_API_KEY = "sk-test";
+      process.env.MEDIA_ANALYSIS_ENABLED = "true";
+      expect((await getAssistantState(reviewer, "post-1", 1)).voice).toEqual({ available: true, reason: null });
+    } finally {
+      if (saved === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = saved;
+      delete process.env.MEDIA_ANALYSIS_ENABLED;
+    }
+  });
 });
 
 describe("assistant chat after «Chiedi modifiche» (CHANGES_REQUESTED)", () => {
