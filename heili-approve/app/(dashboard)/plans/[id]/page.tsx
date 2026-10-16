@@ -300,7 +300,7 @@ function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: st
         ) : null}
       </span>
       <span className="min-w-0 flex-1 space-y-0.5">
-        <Link href={`/posts/${post.id}`} className="block truncate font-semibold hover:underline">
+        <Link href={`/posts/${post.id}`} className="block truncate py-3 font-semibold hover:underline sm:py-0">
           {post.title}
         </Link>
         <span className="block truncate text-sm text-muted">

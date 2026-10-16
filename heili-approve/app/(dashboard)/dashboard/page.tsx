@@ -298,7 +298,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center justify-between gap-2">
                   <Link
                     href={buildPostsHref({ kind: kindParam(kind) })}
-                    className="inline-flex min-w-0 items-center gap-2 font-display text-base font-semibold hover:underline"
+                    className="inline-flex min-h-11 sm:min-h-0 min-w-0 items-center gap-2 font-display text-base font-semibold hover:underline"
                   >
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
                       <KindIcon kind={kind} />
@@ -320,7 +320,7 @@ export default async function DashboardPage() {
                             ? buildPostsHref({ kind: kindParam(kind), status: stage.statuses[0] })
                             : buildPostsHref({ kind: kindParam(kind) })
                         }
-                        className="flex items-baseline justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-surface"
+                        className="flex min-h-11 items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-surface sm:min-h-0 sm:items-baseline"
                       >
                         <dt className="text-sm text-muted">
                           {stage.label === "Fatti" && kind !== "SOCIAL_POST" ? KIND_CONFIG[kind].deliveredLabel : stage.label}
@@ -344,7 +344,7 @@ export default async function DashboardPage() {
             <h2 id="attention" className="text-lg font-semibold">
               Da gestire
             </h2>
-            <Link href="/posts?status=attention" className="text-sm font-semibold text-accent hover:underline">
+            <Link href="/posts?status=attention" className="inline-flex min-h-11 sm:min-h-0 items-center text-sm font-semibold text-accent hover:underline">
               Vedi tutti
             </Link>
           </div>
@@ -373,7 +373,7 @@ export default async function DashboardPage() {
             <h2 id="upcoming" className="text-lg font-semibold">
               {social && !multiKind ? "Prossime pubblicazioni" : "In arrivo"}
             </h2>
-            <Link href="/calendar" className="text-sm font-semibold text-accent hover:underline">
+            <Link href="/calendar" className="inline-flex min-h-11 sm:min-h-0 items-center text-sm font-semibold text-accent hover:underline">
               Calendario
             </Link>
           </div>

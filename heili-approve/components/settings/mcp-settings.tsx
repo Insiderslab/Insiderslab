@@ -71,7 +71,7 @@ export default function McpSettings({
           <div className="divide-y divide-border">
             {oauthConfigured && (
               <>
-              <details className="py-3" open>
+              <details className="py-0 sm:py-3" open>
                 <summary className="cursor-pointer text-sm font-semibold">Claude</summary>
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
                   <li>Apri Claude → Impostazioni → <strong>Connettori</strong>.</li>
@@ -81,7 +81,7 @@ export default function McpSettings({
                 </ol>
               </details>
 
-              <details className="py-3">
+              <details className="py-0 sm:py-3">
                 <summary className="cursor-pointer text-sm font-semibold">ChatGPT</summary>
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
                   <li>Impostazioni → Connettori → <strong>Impostazioni avanzate</strong> → attiva la <strong>modalità sviluppatore</strong>.</li>
@@ -93,7 +93,7 @@ export default function McpSettings({
               </>
             )}
 
-            <details className="py-3" open={!oauthConfigured}>
+            <details className="py-0 sm:py-3" open={!oauthConfigured}>
               <summary className="cursor-pointer text-sm font-semibold">Codex e Claude Code</summary>
               <div className="mt-2 space-y-2">
                 {oauthConfigured ? (

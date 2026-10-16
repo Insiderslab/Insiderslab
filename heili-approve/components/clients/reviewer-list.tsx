@@ -362,7 +362,7 @@ export default function ReviewerList({
               <span className="block text-xs text-muted">Facoltativa: serve solo per le notifiche via email.</span>
             </label>
           </div>
-          <label className={`flex items-center gap-2 text-sm ${hasEmail ? "" : "text-muted"}`}>
+          <label className={`flex min-h-11 sm:min-h-0 items-center gap-2 text-sm ${hasEmail ? "" : "text-muted"}`}>
             <input
               type="checkbox"
               checked={hasEmail && sendInvite}

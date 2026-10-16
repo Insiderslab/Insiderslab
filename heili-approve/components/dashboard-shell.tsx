@@ -74,7 +74,7 @@ export default function DashboardShell({
           currentClientName={currentClient?.name ?? null}
         />
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
+        <main className="agency-main flex-1 overflow-y-auto overflow-x-hidden scroll-smooth">
           <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-7 lg:px-10 lg:py-8">
             <div className="mb-5 flex justify-end">
               <HelpGuide

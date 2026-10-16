@@ -264,7 +264,7 @@ export default function AdReview({
             type="button"
             onClick={submitComment}
             disabled={pending || !draft.trim()}
-            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="min-h-11 sm:min-h-0 rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {pending ? "Invio…" : "Aggiungi commento"}
           </button>
@@ -322,7 +322,7 @@ export default function AdReview({
               return (
                 <li key={variant.id} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:gap-4">
                   <div className="flex min-w-0 items-center gap-2 sm:w-56 sm:shrink-0">
-                    <a href={`#${sectionId(variant.id)}`} className="truncate text-sm font-medium hover:underline">
+                    <a href={`#${sectionId(variant.id)}`} className="truncate py-3 text-sm font-medium hover:underline sm:py-0">
                       {variantDisplayName(variant)}
                     </a>
                   </div>
@@ -413,7 +413,7 @@ export default function AdReview({
             <button
               type="button"
               onClick={() => openComposer({ variantId: null })}
-              className="rounded border border-border bg-background px-3 py-1.5 text-sm hover:border-border-hover"
+              className="min-h-11 sm:min-h-0 rounded border border-border bg-background px-3 py-1.5 text-sm hover:border-border-hover"
             >
               Commenta il set
             </button>
@@ -641,7 +641,7 @@ function VariantCard({
                 <button
                   type="button"
                   onClick={() => onRequestComment({})}
-                  className="rounded border border-border bg-background px-3 py-1.5 text-xs hover:border-border-hover"
+                  className="min-h-11 sm:min-h-0 rounded border border-border bg-background px-3 py-1.5 text-xs hover:border-border-hover"
                 >
                   Commenta la variante
                 </button>

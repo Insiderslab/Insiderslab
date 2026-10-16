@@ -96,7 +96,7 @@ export default async function ClientsPage({
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href={showArchived ? "/clients" : "/clients?archiviati=1"}
-            className="flex-1 rounded border border-border px-4 py-2 text-center text-sm font-medium text-muted hover:text-foreground sm:flex-none"
+            className="flex flex-1 min-h-11 sm:min-h-0 items-center justify-center rounded border border-border px-4 py-2 text-center text-sm font-medium text-muted hover:text-foreground sm:flex-none"
           >
             {showArchived ? "Nascondi archiviati" : "Mostra archiviati"}
           </Link>
@@ -107,7 +107,7 @@ export default async function ClientsPage({
           )}
           <Link
             href="/clients/new"
-            className="flex-1 rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover sm:flex-none"
+            className="flex flex-1 min-h-11 sm:min-h-0 items-center justify-center rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover sm:flex-none"
           >
             Nuovo cliente
           </Link>
@@ -145,7 +145,7 @@ export default async function ClientsPage({
               className={
                 showImport && !showArchived
                   ? "btn"
-                  : "inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                  : "inline-flex min-h-11 sm:min-h-0 items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
               }
             >
               Aggiungi cliente
@@ -187,7 +187,7 @@ export default async function ClientsPage({
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <Link
                       href={`/clients/${client.id}`}
-                      className="truncate text-base font-semibold text-foreground hover:underline"
+                      className="truncate py-2.5 text-base font-semibold text-foreground hover:underline sm:py-0"
                     >
                       {client.name}
                     </Link>
@@ -238,7 +238,7 @@ export default async function ClientsPage({
                         <Link
                           key={entry.status}
                           href={`/posts?clientId=${client.id}&status=${entry.status}`}
-                          className={`whitespace-nowrap hover:underline ${toneClass[STATUS_TONES[entry.status]]}`}
+                          className={`inline-flex min-h-11 sm:min-h-0 items-center whitespace-nowrap hover:underline ${toneClass[STATUS_TONES[entry.status]]}`}
                         >
                           {entry.count} {entry.label.toLowerCase()}
                         </Link>

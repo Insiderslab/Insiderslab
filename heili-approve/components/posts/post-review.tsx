@@ -349,7 +349,7 @@ export default function PostReview({
                 type="button"
                 onClick={submitComment}
                 disabled={pending || !draft.trim()}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                className="min-h-11 sm:min-h-0 rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {pending ? "Invio…" : "Aggiungi commento"}
               </button>

@@ -46,8 +46,8 @@ export default function ArchiveButton({ clientId, clientName, archived }: Archiv
         disabled={pending}
         className={
           archived
-            ? "rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-            : "rounded border border-error/20 px-4 py-2 text-sm font-medium text-error transition-colors hover:border-error/40 hover:bg-error/10 disabled:opacity-50"
+            ? "min-h-11 sm:min-h-0 rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            : "min-h-11 sm:min-h-0 rounded border border-error/20 px-4 py-2 text-sm font-medium text-error transition-colors hover:border-error/40 hover:bg-error/10 disabled:opacity-50"
         }
       >
         {pending

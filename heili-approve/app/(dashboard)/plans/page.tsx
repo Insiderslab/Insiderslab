@@ -133,7 +133,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                 >
                     <div className="min-w-0 space-y-1">
                       <span className="label-caps block">{planMonthTitle(plan.month)}</span>
-                      <Link href={`/plans/${plan.id}`} className="block truncate text-base font-semibold hover:underline">
+                      <Link href={`/plans/${plan.id}`} className="block truncate py-2.5 text-base font-semibold hover:underline sm:py-0">
                         {plan.title}
                       </Link>
                       <span className="flex flex-wrap items-center gap-2 text-sm text-muted">

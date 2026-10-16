@@ -235,7 +235,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
           {!filtered && (
             <Link
               href={clients.length === 0 ? "/clients/new" : newHref}
-              className="inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+              className="inline-flex min-h-11 sm:min-h-0 items-center rounded bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
             >
               {clients.length === 0 ? "Aggiungi cliente" : newLabel}
             </Link>

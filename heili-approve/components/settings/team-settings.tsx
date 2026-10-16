@@ -263,7 +263,7 @@ export default function TeamSettings({
           <button
             type="submit"
             disabled={busy === "invite"}
-            className="rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            className="min-h-11 sm:min-h-0 rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
           >
             {busy === "invite" ? "Invito…" : "Invita"}
           </button>

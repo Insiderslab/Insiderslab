@@ -253,6 +253,22 @@ select:focus-visible {
   }
 }
 
+/* Agency panel on phones: the form controls and disclosure rows that are not
+   .btn/.field (editor, client form, settings, calendar filters) still get a 44px
+   touch target and 16px text (no iOS zoom). Scoped to the agency <main>: the client
+   portal sets its own sizes. */
+@media (max-width: 640px) {
+  .agency-main
+    :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="hidden"], [type="range"]), select, textarea) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .agency-main summary {
+    /* Pads a one-line summary up to 44px (1lh = its own line height); taller ones are left alone. */
+    padding-block: max(0px, calc((44px - 1lh) / 2));
+  }
+}
+
 /* Status chip — tone soft background, tone text, always with a word. */
 .chip {
   display: inline-flex;
@@ -343,6 +359,11 @@ select:focus-visible {
   color: var(--color-muted);
   font-size: 14px;
   font-weight: 650;
+}
+@media (max-width: 640px) {
+  .studio-view-tab {
+    min-height: 44px;
+  }
 }
 .studio-view-tab[aria-selected="true"],
 .studio-view-tab[aria-current="page"] {

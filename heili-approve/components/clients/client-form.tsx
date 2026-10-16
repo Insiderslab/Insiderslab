@@ -519,14 +519,14 @@ export default function ClientForm({
           <button
             type="submit"
             disabled={pending || zoneInvalid}
-            className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="min-h-11 sm:min-h-0 rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {pending ? "Salvataggio…" : mode === "create" ? "Crea cliente" : "Salva modifiche"}
           </button>
           {mode === "create" && (
             <Link
               href="/clients"
-              className="rounded border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground"
+              className="min-h-11 sm:min-h-0 rounded border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground"
             >
               Annulla
             </Link>

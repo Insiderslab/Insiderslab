@@ -285,7 +285,7 @@ export default function PostList({
             <div className="pt-0.5">{checkbox(row)}</div>
             <Thumbnail media={row.thumbnail} kind={row.kind} />
             <div className="min-w-0 flex-1">
-              <Link href={`/posts/${row.id}`} className="block min-w-0 break-words font-semibold hover:underline">
+              <Link href={`/posts/${row.id}`} className="flex min-h-11 sm:min-h-0 min-w-0 items-center break-words font-semibold hover:underline">
                 {row.title}
               </Link>
               <div className="mt-1">
