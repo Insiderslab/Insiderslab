@@ -5,7 +5,9 @@
  *   social (default) → SOCIAL_POST (Metricool)
  *   blog             → BLOG_ARTICLE (internal: export + "Segna come pubblicato")
  *   ads              → AD_CREATIVE (internal: ZIP of the approved variants)
- *   all              → every kind in one app
+ *   all              → every kind in one app, websites included (WEBSITE,
+ *                      «Sul sito», docs/SITO-WEB.md: there is no separate
+ *                      `web` variant, decided on 16/10)
  *
  * Pages never show a kind that is not enabled, services refuse to create one,
  * and Metricool UI only appears when SOCIAL_POST is enabled.
@@ -71,7 +73,8 @@ const VARIANT_KINDS: Record<AppVariant, readonly ContentKind[]> = {
   social: ["SOCIAL_POST"],
   blog: ["BLOG_ARTICLE"],
   ads: ["AD_CREATIVE"],
-  all: ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"],
+  // WEBSITE lives only here (no APP_VARIANT=web, decided on 16/10).
+  all: ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE", "WEBSITE"],
 };
 
 /** Content kinds this instance handles, in menu order. */
@@ -121,7 +124,7 @@ const DESCRIPTIONS: Record<AppVariant, string> = {
     "Revisione e approvazione dei post social dei clienti, con programmazione automatica su Metricool.",
   blog: "Revisione e approvazione degli articoli di blog dei clienti: commenti sulle frasi, SEO ed export.",
   ads: "Revisione e approvazione delle creatività ads dei clienti: decisione per variante e pacchetto finale.",
-  all: "Revisione e approvazione di post social, articoli di blog e creatività ads dei clienti.",
+  all: "Revisione e approvazione di post social, articoli di blog, creatività ads e siti web dei clienti.",
 };
 
 /** "Approve by Heili", "Approve by Heili — Blog", "Approve by Heili — Ads". */
@@ -140,7 +143,7 @@ export function productDescription(variant: AppVariant = getAppVariant()): strin
 
 // ─── URLs and navigation ─────────────────────────────────────────────────────
 
-export type KindSlug = "social" | "blog" | "ads";
+export type KindSlug = "social" | "blog" | "ads" | "web";
 
 /** UI words per kind (KIND_CONFIG in lib/domain.ts holds the domain labels). */
 export const KIND_UI: Record<
@@ -174,6 +177,13 @@ export const KIND_UI: Record<
     newTitle: "Nuova creatività ads",
     pluralTitle: "Le creatività ads",
     serviceLabel: "Creatività ads",
+  },
+  WEBSITE: {
+    slug: "web",
+    navLabel: "Siti web",
+    newTitle: "Nuovo sito web",
+    pluralTitle: "I siti web",
+    serviceLabel: "Siti web",
   },
 };
 
@@ -209,6 +219,8 @@ const CLIENT_SERVICE_WORDS: Record<ContentKind, string> = {
   SOCIAL_POST: "post social",
   BLOG_ARTICLE: "articoli",
   AD_CREATIVE: "annunci",
+  // The portal says «Sul sito», never "live" or "snapshot".
+  WEBSITE: "siti web",
 };
 
 /** "post social, articoli e annunci" (client side, menu order). */
@@ -216,7 +228,7 @@ export function clientServicesSentence(kinds: readonly ContentKind[]): string {
   return joinItalian(sortKinds(kinds).map((kind) => CLIENT_SERVICE_WORDS[kind]));
 }
 
-/** Value of the `?kind=` query parameter for a kind ("social" | "blog" | "ads"). */
+/** Value of the `?kind=` query parameter for a kind ("social" | "blog" | "ads" | "web"). */
 export function kindParam(kind: ContentKind): KindSlug {
   return KIND_UI[kind].slug;
 }
@@ -289,6 +301,7 @@ const COUNT_WORDS: Record<ContentKind, [one: string, many: string]> = {
   BLOG_ARTICLE: ["articolo", "articoli"],
   // Client side (glossary): "annunci", never "ads".
   AD_CREATIVE: ["annuncio", "annunci"],
+  WEBSITE: ["sito web", "siti web"],
 };
 
 /**

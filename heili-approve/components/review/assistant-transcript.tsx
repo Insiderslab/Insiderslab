@@ -207,6 +207,13 @@ export function AssistantTranscript({
                       </span>
                     );
                   }
+                  if (segment.type === "element") {
+                    return (
+                      <span key={i} className="mx-0.5 inline-block rounded-full border border-border px-2 text-xs">
+                        Sul sito: {segment.label}
+                      </span>
+                    );
+                  }
                   if (segment.type === "point") {
                     const pointName = segment.variantId
                       ? (variantNames?.[segment.variantId] ?? `Variante ${segment.variantId}`)

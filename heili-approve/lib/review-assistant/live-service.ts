@@ -232,6 +232,10 @@ export function normalizeLiveContextMarker(post: ReviewerPost, versionNumber: nu
     if (!article.text.includes(marker.quote)) throw new AssistantError("Passaggio non trovato nell'articolo", 400);
     return passageMarker(marker.quote);
   }
+  if (marker.type === "element") {
+    // Voice calls are not offered inside the site iframe.
+    throw new AssistantError("Contesto visivo non valido", 400);
+  }
   if (marker.type === "variant") {
     if (post.kind !== "AD_CREATIVE") throw new AssistantError("Variante non valida", 400);
     const variant = adContentOf(version.content).variants.find((item) => item.id === marker.variantId);

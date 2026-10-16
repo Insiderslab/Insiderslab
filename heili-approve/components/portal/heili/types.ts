@@ -20,7 +20,8 @@ export type HeiliPageKind =
   | "month"
   | "post"
   | "article"
-  | "ads";
+  | "ads"
+  | "website";
 
 /** Destinazione proposta da Heili: solo id, etichetta e href scelti dal server. */
 export interface HeiliDestination {

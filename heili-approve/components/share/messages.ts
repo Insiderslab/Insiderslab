@@ -43,6 +43,7 @@ const POST_WORDS: Record<ContentKind, { fresh: string; here: string; the: string
   BLOG_ARTICLE: { fresh: "c'è un nuovo articolo da approvare", here: "Lo trovi qui", the: "l'articolo" },
   // Client side (glossary): "annunci", never "ads".
   AD_CREATIVE: { fresh: "ci sono nuovi annunci da approvare", here: "Li trovi qui", the: "gli annunci" },
+  WEBSITE: { fresh: "c'è un sito da approvare", here: "Lo trovi qui", the: "il sito" },
 };
 
 /**

@@ -36,6 +36,7 @@ const CANCEL_LABELS: Record<ContentKind, string> = {
   SOCIAL_POST: "Annulla post",
   BLOG_ARTICLE: "Annulla articolo",
   AD_CREATIVE: "Annulla set",
+  WEBSITE: "Annulla revisione del sito",
 };
 
 export default function PostActions({

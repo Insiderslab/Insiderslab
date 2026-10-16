@@ -5,7 +5,7 @@
  */
 
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
-import type { BlogAnchor } from "@/lib/content/types";
+import type { BlogAnchor, LiveAnchor } from "@/lib/content/types";
 import {
   KIND_CONFIG,
   NETWORK_LABELS,
@@ -190,6 +190,7 @@ export const KIND_NOUNS: Record<
     It: "Il set di creatività",
     plural: "set di creatività",
   },
+  WEBSITE: { the: "il sito", a: "un sito", It: "Il sito", plural: "siti web" },
 };
 
 /**
@@ -210,6 +211,8 @@ export function contentWords(kinds: readonly ContentKind[]): {
       return { plural: "articoli", the: "gli articoli", Plural: "Articoli", all: "Tutti gli articoli" };
     case "AD_CREATIVE":
       return { plural: "creatività", the: "le creatività", Plural: "Creatività ads", all: "Tutte le creatività ads" };
+    case "WEBSITE":
+      return { plural: "siti web", the: "i siti web", Plural: "Siti web", all: "Tutti i siti web" };
     default:
       return { plural: "post", the: "i post", Plural: "Post", all: "Tutti i post" };
   }
@@ -583,6 +586,8 @@ export interface CommentLike {
   anchor?: BlogAnchor | null;
   /** Ads: the variant the comment is about (mediaIndex then refers to its media). */
   variantId?: string | null;
+  /** Website: the element of the real site the comment points at. */
+  siteAnchor?: LiveAnchor | null;
 }
 
 /**
@@ -592,6 +597,10 @@ export interface CommentLike {
  * general ones on a variant) have no anchor and stand alone.
  */
 export function commentAnchorKey(comment: CommentLike): string | null {
+  if (comment.siteAnchor) {
+    const { pageUrl, selector, scrollY } = comment.siteAnchor;
+    return [comment.versionId ?? "", "site", pageUrl, selector, scrollY].join("|");
+  }
   if (comment.anchor) {
     const { quote, prefix, suffix } = comment.anchor;
     return [comment.versionId ?? "", "passage", quote, prefix, suffix].join("|");

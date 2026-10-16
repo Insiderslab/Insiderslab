@@ -39,7 +39,15 @@ import type { Prisma } from "@/app/generated/prisma/client";
 import { actorColumns, type Actor } from "@/lib/actor";
 import { parseAdContent, validateAdsForReview } from "@/lib/content/ads";
 import { blogAnchorSchema, parseBlogAnchor, parseBlogContent, validateBlogForReview } from "@/lib/content/blog";
-import type { AdContent, BlogAnchor, BlogContent } from "@/lib/content/types";
+import type { AdContent, BlogAnchor, BlogContent, LiveAnchor, WebsiteContent } from "@/lib/content/types";
+import {
+  commentOriginsFor,
+  parseLiveAnchorForSite,
+  parseWebsiteAnchor,
+  parseWebsiteContent,
+  validateWebsiteForReview,
+  websiteContentChanges,
+} from "@/lib/content/website";
 import {
   approvalBlocker,
   buildRejectionMessage,
@@ -143,7 +151,7 @@ export const mediaItemSchema = z.object({
   height: z.number().int().positive().max(100_000).optional(),
 });
 
-const CONTENT_KIND_VALUES = ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"] as const satisfies readonly ContentKind[];
+const CONTENT_KIND_VALUES = ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE", "WEBSITE"] as const satisfies readonly ContentKind[];
 
 export const networkOptionsSchema = z.record(
   z.string().regex(/^[a-z]+Data$/, "Opzioni di rete non valide"),
@@ -226,7 +234,9 @@ const commentSchema = z
     pinY: z.number().min(0).max(1).optional(),
     timeSec: videoTime.optional(),
     timeEndSec: videoTime.optional(),
-    anchor: blogAnchorSchema.optional(),
+    // Shape checked per kind in addComment: blog → blogAnchorSchema,
+    // website → liveAnchorSchema (lib/content/website.ts).
+    anchor: z.unknown().optional(),
     variantId: z.string().trim().min(1).max(64).optional(),
   })
   .refine((c) => (c.pinX === undefined) === (c.pinY === undefined), "Posizione del commento incompleta")
@@ -487,7 +497,10 @@ export function planActionItemComment(
 export type ActionItemTarget =
   | { kind: "SOCIAL_POST"; media: MediaItem[] }
   | { kind: "BLOG_ARTICLE" }
-  | { kind: "AD_CREATIVE"; variants: ReadonlyArray<{ id: string; media: MediaItem[] }> };
+  | { kind: "AD_CREATIVE"; variants: ReadonlyArray<{ id: string; media: MediaItem[] }> }
+  // Website: Heili's items stay in the summary comment; elements pointed at on
+  // the site are saved as anchored comments by the site iframe directly.
+  | { kind: "WEBSITE" };
 
 export interface PlannedActionComment {
   body: string;
@@ -520,6 +533,8 @@ export function planActionItemCommentFor(
     }
     case "BLOG_ARTICLE":
       return item.anchor ? { ...none, body, anchor: item.anchor } : null;
+    case "WEBSITE":
+      return null;
     case "AD_CREATIVE": {
       const variant = target.variants.find((v) => v.id === item.variantId);
       if (!variant) return null;
@@ -857,7 +872,9 @@ export function summarizeContentChanges(kind: ContentKind, before: unknown, afte
   const lines =
     kind === "BLOG_ARTICLE"
       ? blogContentChanges(asRecord(before), asRecord(after))
-      : adContentChanges(asRecord(before), asRecord(after));
+      : kind === "WEBSITE"
+        ? websiteContentChanges(before, after)
+        : adContentChanges(asRecord(before), asRecord(after));
   return lines.length > 0 ? lines : ["Contenuto modificato"];
 }
 
@@ -978,8 +995,8 @@ function versionContent(version: {
   };
 }
 
-/** Content of a blog/ads version, as stored in PostVersion.content. */
-export type KindContent = BlogContent | AdContent;
+/** Content of a blog/ads/website version, as stored in PostVersion.content. */
+export type KindContent = BlogContent | AdContent | WebsiteContent;
 
 /**
  * Runs a lib/content parser and turns any validation failure (zod error or
@@ -1000,10 +1017,12 @@ function parseWith<T>(parse: (json: unknown) => T, json: unknown, label: string)
 /** Validates the content of a blog/ads post (throws ValidationError). */
 export function parseKindContent(kind: "BLOG_ARTICLE", json: unknown): BlogContent;
 export function parseKindContent(kind: "AD_CREATIVE", json: unknown): AdContent;
+export function parseKindContent(kind: "WEBSITE", json: unknown): WebsiteContent;
 export function parseKindContent(kind: ContentKind, json: unknown): KindContent | null;
 export function parseKindContent(kind: ContentKind, json: unknown): KindContent | null {
   if (kind === "BLOG_ARTICLE") return parseWith(parseBlogContent, json, "Articolo");
   if (kind === "AD_CREATIVE") return parseWith(parseAdContent, json, "Set di creatività");
+  if (kind === "WEBSITE") return parseWith(parseWebsiteContent, json, "Sito web");
   return null;
 }
 
@@ -1030,6 +1049,7 @@ function issueMessages(issues: ReadonlyArray<string | { message: string }>): str
 function reviewIssuesFor(kind: ContentKind, json: unknown): string[] {
   if (kind === "BLOG_ARTICLE") return issueMessages(validateBlogForReview(parseKindContent(kind, json)));
   if (kind === "AD_CREATIVE") return issueMessages(validateAdsForReview(parseKindContent(kind, json)));
+  if (kind === "WEBSITE") return issueMessages(validateWebsiteForReview(parseKindContent(kind, json)));
   return [];
 }
 
@@ -1069,6 +1089,11 @@ async function prepareKindContent(
       return { ...variant, media, google: { ...variant.google, logos } };
     });
     return { ...content, variants };
+  }
+  if (kind === "WEBSITE") {
+    const content = parseKindContent(kind, json);
+    // The review key (WebsiteSite) is attached by the server only.
+    return { ...content, siteId: null };
   }
   throw new ValidationError("Questo tipo di contenuto non ha un contenuto strutturato");
 }
@@ -1889,6 +1914,8 @@ async function createActionItemComments(
   const target: ActionItemTarget =
     kind === "BLOG_ARTICLE"
       ? { kind: "BLOG_ARTICLE" }
+      : kind === "WEBSITE"
+        ? { kind: "WEBSITE" }
       : kind === "AD_CREATIVE"
         ? { kind: "AD_CREATIVE", variants: actionItems.length ? adVariantsOf(readKindContent(kind, version.content)) : [] }
         : { kind: "SOCIAL_POST", media: parseMediaItems(version.media) };
@@ -2174,8 +2201,8 @@ export interface AddCommentInput {
   timeSec?: number;
   /** Videos: end of a range, after timeSec. */
   timeEndSec?: number;
-  /** Blog only: the selected passage. */
-  anchor?: BlogAnchor | null;
+  /** Blog: the selected passage. Website: the element pointed at on the site (LiveAnchor). */
+  anchor?: BlogAnchor | LiveAnchor | Record<string, unknown> | null;
   /** Ads only: the variant (must exist in the version); mediaIndex then refers to its media. */
   variantId?: string | null;
   /** Agency callers: the active workspace; the post must belong to it. */
@@ -2268,9 +2295,18 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
     }
 
     // Where a comment can point depends on the kind: social → the post's
-    // media; blog → a passage (anchor); ads → a variant and its media.
-    if (data.anchor && post.kind !== "BLOG_ARTICLE") {
-      throw new ValidationError("Il passaggio del testo si può indicare solo sugli articoli");
+    // media; blog → a passage (anchor); ads → a variant and its media;
+    // website → an element of the real site (LiveAnchor on an allowed origin).
+    let anchor: BlogAnchor | LiveAnchor | null = null;
+    if (data.anchor !== undefined && data.anchor !== null) {
+      if (post.kind === "BLOG_ARTICLE") {
+        anchor = parseOrThrow(blogAnchorSchema, data.anchor);
+      } else if (post.kind === "WEBSITE") {
+        const content = parseKindContent("WEBSITE", version.content);
+        anchor = parseLiveAnchorForSite(data.anchor, commentOriginsFor(content, await siteOriginsOf(tx, content.siteId)));
+      } else {
+        throw new ValidationError("Il passaggio del testo si può indicare solo sugli articoli");
+      }
     }
     if (data.variantId && post.kind !== "AD_CREATIVE") {
       throw new ValidationError("La variante si può indicare solo sulle creatività ads");
@@ -2287,6 +2323,10 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
     } else if (post.kind === "BLOG_ARTICLE") {
       if (data.mediaIndex !== undefined) {
         throw new ValidationError("Sugli articoli seleziona il passaggio del testo da commentare");
+      }
+    } else if (post.kind === "WEBSITE") {
+      if (data.mediaIndex !== undefined || data.timeSec !== undefined) {
+        throw new ValidationError("Sul sito indica un elemento della pagina, non un'immagine");
       }
     } else {
       media = parseMediaItems(version.media);
@@ -2316,7 +2356,7 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
         timeSec: time.timeSec,
         timeEndSec: time.timeEndSec,
         variantId: data.variantId ?? null,
-        ...(data.anchor ? { anchor: toJson(data.anchor) } : {}),
+        ...(anchor ? { anchor: toJson(anchor) } : {}),
       },
     });
     await recordEvent(tx, {
@@ -2327,7 +2367,8 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
       metadata: {
         commentId: comment.id,
         ...(data.variantId ? { variantId: data.variantId } : {}),
-        ...(data.anchor ? { quote: data.anchor.quote.slice(0, 200) } : {}),
+        ...(anchor && "quote" in anchor ? { quote: anchor.quote.slice(0, 200) } : {}),
+        ...(anchor && "selector" in anchor ? { pageUrl: anchor.pageUrl, device: anchor.device } : {}),
         ...(data.mediaIndex !== undefined ? { mediaIndex: data.mediaIndex } : {}),
         ...(time.timeSec !== null ? { timeSec: time.timeSec } : {}),
         ...(time.timeEndSec !== null ? { timeEndSec: time.timeEndSec } : {}),
@@ -2396,6 +2437,21 @@ export function readBlogAnchor(value: unknown): BlogAnchor | null {
   return parseBlogAnchor(value);
 }
 
+/** Website comment anchor (an element of the real site), or null. */
+export function readWebsiteAnchor(value: unknown): LiveAnchor | null {
+  return parseWebsiteAnchor(value);
+}
+
+/**
+ * Origins registered for a website review key (none in Fase 1: the comment
+ * may then only point at the site's own origin, commentOriginsFor).
+ */
+async function siteOriginsOf(_db: DbClient, siteId: string | null): Promise<string[] | null> {
+  void _db;
+  void siteId;
+  return null;
+}
+
 export interface ReviewerPostVersion {
   id: string;
   number: number;
@@ -2428,6 +2484,8 @@ export interface ReviewerPostComment {
   timeEndSec: number | null;
   /** Blog: the commented passage. */
   anchor: BlogAnchor | null;
+  /** Website: the element of the site the comment points at. */
+  siteAnchor: LiveAnchor | null;
   /** Ads: the commented variant (mediaIndex refers to its media). */
   variantId: string | null;
   resolvedAt: Date | null;
@@ -2569,7 +2627,8 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
         pinY: c.pinY,
         timeSec: c.timeSec,
         timeEndSec: c.timeEndSec,
-        anchor: readBlogAnchor(c.anchor),
+        anchor: post.kind === "BLOG_ARTICLE" ? readBlogAnchor(c.anchor) : null,
+        siteAnchor: post.kind === "WEBSITE" ? readWebsiteAnchor(c.anchor) : null,
         variantId: c.variantId,
         resolvedAt: c.resolvedAt,
         createdAt: c.createdAt,
@@ -2643,6 +2702,23 @@ export function summarizeVersionForList(
       mediaCount: media.length,
       variantCount: content.variants.length,
       excerpt: truncate(first?.primaryText || first?.headline || ""),
+    };
+  }
+  if (content && "pages" in content) {
+    const host = (() => {
+      try {
+        return content.siteUrl ? new URL(content.siteUrl).host : "";
+      } catch {
+        return "";
+      }
+    })();
+    const pages = content.pages.filter((p) => p.url).length;
+    const pagesLabel = pages === 1 ? "1 pagina da rivedere" : `${pages} pagine da rivedere`;
+    return {
+      cover: null,
+      mediaCount: 0,
+      variantCount: null,
+      excerpt: truncate(content.roundNote.trim() || [host, pagesLabel].filter(Boolean).join(" · ")),
     };
   }
   if (content && "bodyMarkdown" in content) {

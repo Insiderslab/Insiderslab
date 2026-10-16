@@ -32,6 +32,7 @@ const TO_THE: Record<ContentKind, string> = {
   SOCIAL_POST: "al post",
   BLOG_ARTICLE: "all'articolo",
   AD_CREATIVE: "alle creatività",
+  WEBSITE: "al sito",
 };
 
 function safePostUrl(reviewer: { tokenEncrypted: string }, postId: string): string | null {

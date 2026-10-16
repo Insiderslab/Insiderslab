@@ -6,7 +6,7 @@
  */
 
 import type { ContentKind, PostStatus } from "@/app/generated/prisma/client";
-import type { AdContent, BlogAnchor, BlogContent } from "@/lib/content/types";
+import type { AdContent, BlogAnchor, BlogContent, LiveAnchor, WebsiteContent } from "@/lib/content/types";
 import type { MediaItem, Network } from "@/lib/domain";
 import type { DiffSegment } from "@/lib/posts";
 
@@ -28,6 +28,8 @@ export interface PortalComment {
   timeEndSec: number | null;
   /** Blog: the commented passage. */
   anchor: BlogAnchor | null;
+  /** Website: the element of the site the comment points at. */
+  siteAnchor?: LiveAnchor | null;
   /** Ads: the commented variant (mediaIndex refers to its media). */
   variantId: string | null;
   resolved: boolean;
@@ -133,6 +135,14 @@ export interface PortalAdsPost extends PortalItemBase {
   content: AdContent;
   /** By variant id; missing = not decided yet. */
   decisions: Record<string, PortalVariantDecision>;
+}
+
+/** Website «Sul sito»: the round the client reviews. */
+export interface PortalWebsitePost extends PortalItemBase {
+  kind: "WEBSITE";
+  content: WebsiteContent;
+  /** The review key is active and the site can be opened with Heili («Apri il sito»). */
+  liveReady: boolean;
 }
 
 export interface PortalClient {

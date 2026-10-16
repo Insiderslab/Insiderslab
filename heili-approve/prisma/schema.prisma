@@ -229,6 +229,7 @@ enum ContentKind {
   SOCIAL_POST // post social: dopo l'approvazione va su Metricool
   BLOG_ARTICLE // articolo di blog: revisione del testo, export interno
   AD_CREATIVE // set di creatività ads (foto/video + copy) per una campagna
+  WEBSITE // sito web da rivedere «Sul sito» (docs/SITO-WEB.md); interno come blog e ads
 }
 
 enum PostStatus {
@@ -317,7 +318,8 @@ model PostVersion {
   videoCoverMs     Int?
   /// Contenuto specifico del tipo (Post.kind), validato da lib/content/<tipo>.ts:
   /// BLOG_ARTICLE → BlogContent (corpo Markdown, SEO, immagine in evidenza…),
-  /// AD_CREATIVE → AdContent (campagna + varianti con media, copy, CTA, posizionamenti).
+  /// AD_CREATIVE → AdContent (campagna + varianti con media, copy, CTA, posizionamenti),
+  /// WEBSITE → WebsiteContent (indirizzo del sito, giro, pagine da rivedere; lib/content/website.ts).
   /// Per SOCIAL_POST resta {} (usa text/firstCommentText/media).
   content          Json     @default("{}")
   /// Nota dell'agenzia su cosa è cambiato rispetto alla versione precedente.
@@ -364,6 +366,8 @@ model PostComment {
   timeEndSec Float?
   /// Blog: ancoraggio a un passaggio del testo selezionato dal cliente
   /// { quote, prefix, suffix, blockIndex } (vedi lib/content/blog.ts).
+  /// Sito web: elemento indicato sul sito (LiveAnchor: pageUrl, selettore,
+  /// testo dell'elemento, viewport, scorrimento; vedi lib/content/website.ts).
   anchor     Json?
   /// Ads: variante della creatività a cui si riferisce il commento.
   variantId  String?

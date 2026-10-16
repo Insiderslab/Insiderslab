@@ -89,6 +89,20 @@ const TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: "client-website",
+    audience: "client",
+    title: "Rivedere un sito web",
+    summary: "Apri il sito vero, indica un elemento e commentalo; poi decidi dal portale.",
+    searchTerms: ["sito", "sito web", "pagina", "apri il sito", "indica un punto", "sul sito", "approvare sito"],
+    kinds: ["WEBSITE"],
+    routes: [/\/posts\//],
+    steps: [
+      { title: "Apri il sito", body: "Tocca «Apri il sito»: si apre in una nuova scheda con il pulsante di Heili in basso a destra. Puoi navigare come sempre." },
+      { title: "Indica un elemento", body: "Tocca Heili, poi «Indica un punto» e tocca l’elemento da commentare (un titolo, una foto, un pulsante). Scrivi o detta la nota e inviala." },
+      { title: "Decidi dal portale", body: "Torna alla scheda del portale: in «Le tue note» trovi tutto. Scegli «Chiedi modifiche» o «Approva»: si decide solo qui, non dentro il sito." },
+    ],
+  },
+  {
     id: "client-comments",
     audience: "client",
     title: "Scrivere una richiesta di modifica chiara",
@@ -182,6 +196,20 @@ const TOPICS: HelpTopic[] = [
       { title: "Crea le varianti", body: "Inserisci dati campagna, media, copy, CTA, URL e posizionamenti. Controlla gli avvisi delle specifiche per ogni variante." },
       { title: "Leggi decisioni e commenti", body: "Il cliente approva o scarta ogni variante. Le note restano collegate alla variante, al punto dell’immagine o al momento del video." },
       { title: "Esporta ciò che è approvato", body: "Scarica il pacchetto ZIP dalla scheda: contiene le varianti approvate e i relativi copy. Dopo la consegna usa «Segna come consegnato»." },
+    ],
+  },
+  {
+    id: "agency-website",
+    audience: "agency",
+    title: "Far rivedere un sito «Sul sito»",
+    summary: "Installa una riga di codice sul sito di prova, il cliente commenta sul sito vero e decide dal portale.",
+    searchTerms: ["sito", "sito web", "sul sito", "riga di codice", "script", "plugin wordpress", "verifica installazione", "apri nel punto"],
+    kinds: ["WEBSITE"],
+    routes: [/\/posts(?:\/|$)/],
+    steps: [
+      { title: "Prepara il giro", body: "Inserisci l’indirizzo del sito di prova e le pagine da rivedere. Salva: nella scheda trovi «Sul sito» con la riga di codice." },
+      { title: "Installa e verifica", body: "Copia la riga nel sito (o usa il plugin WordPress), aggiungi gli indirizzi consentiti e premi «Verifica installazione». Poi invia in revisione." },
+      { title: "Leggi le note e pubblica", body: "Ogni nota mostra pagina, dispositivo ed elemento; «Apri nel punto» apre il sito lì. Dopo l’approvazione metti online, segna come pubblicato e togli la riga di codice." },
     ],
   },
   {

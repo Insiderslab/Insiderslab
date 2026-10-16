@@ -52,6 +52,7 @@ const SERVICE_DESCRIPTIONS: Record<ContentKind, string> = {
   SOCIAL_POST: "Testi, foto, video e Reel. Dopo l'approvazione si programmano su Metricool.",
   BLOG_ARTICLE: "Articoli per il sito con controlli SEO; il cliente commenta le frasi, poi li esporti.",
   AD_CREATIVE: "Set di creatività per le campagne: il cliente approva o scarta ogni variante.",
+  WEBSITE: "Siti fatti da voi: con una riga di codice il cliente apre il sito vero, indica un elemento e lo commenta.",
 };
 
 interface ClientFormProps {

@@ -231,6 +231,7 @@ function reviewerPost(kind: ReviewerPost["kind"], content: unknown, media: Media
         authorName: "Marco",
         isMine: false,
         body: "Abbiamo aggiunto i prezzi",
+        siteAnchor: null,
         mediaIndex: null,
         pinX: null,
         pinY: null,
