@@ -455,6 +455,12 @@ I test usano l'app vera, avviata con `APP_VARIANT=all`. Tra i file in `e2e/`:
   foglio e immagini abbinate per nome, righe incollate con errori in rosso e
   correzione, bozze (solo `DRAFT`) con il piano del mese, nessun duplicato
   rifacendo l'importazione, mesi diversi e 390 px;
+- `guide.spec.mjs` — «Come usare lo strumento» a 390 e 1366 px: la pagina **Guida**
+  (`/guida`) dal menu, con i passi e i loro link e le domande frequenti; la lista
+  «Per iniziare» della dashboard per un'agenzia nuova (si spunta dai dati, si chiude,
+  sparisce da sola alla prima approvazione); i tre passi del cliente alla prima
+  visita del portale, una volta sola, senza coprire barra delle decisioni e Heili.
+  La stessa guida, da mandare per email o WhatsApp, è in `docs/GUIDA-RAPIDA.md`;
 - `variant-gating.spec.mjs` — avvia un secondo server con `APP_VARIANT=blog`
   (porta `E2E_BLOG_PORT`, default 3101), controlla che il menu abbia solo
   «Articoli», che non ci sia Metricool e che una creatività ads non si possa
