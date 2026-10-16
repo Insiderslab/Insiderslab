@@ -53,7 +53,7 @@ export default function PlanReview({
   gridSlot: ReactNode;
   /** "Panoramica · Griglia · Sfoglia" switch, under the way back. */
   modeSlot?: ReactNode;
-  /** Phones: "Rivedi in modalità veloce", the way into Sfoglia. */
+  /** Phones: «Sfoglia i post, uno alla volta», the way into Sfoglia. */
   quickReviewSlot?: ReactNode;
 }) {
   const router = useRouter();
@@ -195,10 +195,10 @@ export default function PlanReview({
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                // On phones "Rivedi in modalità veloce" is the one primary action.
+                // On phones «Sfoglia i post, uno alla volta» is the one primary action.
                 className={`btn btn-primary min-h-12 order-1${quickReviewSlot ? " max-sm:!border-line-strong max-sm:!bg-surface max-sm:!text-foreground" : ""}`}
               >
-                Rivedi uno per uno
+                Apri il primo post
               </Link>
             )}
           </div>

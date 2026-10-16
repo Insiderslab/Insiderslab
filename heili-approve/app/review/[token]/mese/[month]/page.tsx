@@ -54,7 +54,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
   if (nextMonthPost) {
     destinations.push({ id: "next", label: "Rivedi il prossimo post", href: portalPath(token, nextMonthPost.id), kind: "next" });
   }
-  if (!sfoglia) destinations.push({ id: "browse", label: "Rivedi veloce (Sfoglia)", href: viewPath(monthPath, "sfoglia"), kind: "view" });
+  if (!sfoglia) destinations.push({ id: "browse", label: "Sfoglia i post, uno alla volta", href: viewPath(monthPath, "sfoglia"), kind: "view" });
   if (sfoglia) destinations.push({ id: "grid", label: "Vai alla griglia", href: viewPath(monthPath, "griglia"), kind: "view" });
   destinations.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
 

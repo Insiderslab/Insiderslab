@@ -115,7 +115,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
     }
     if (page !== "plan") list.push({ id: "plan", label: "Torna al piano", href: planPath, kind: "plan" });
     if (page !== "plan-grid") list.push({ id: "grid", label: "Vai alla griglia", href: viewPath(planPath, "griglia"), kind: "view" });
-    if (page !== "browse") list.push({ id: "browse", label: "Rivedi veloce (Sfoglia)", href: viewPath(planPath, "sfoglia"), kind: "view" });
+    if (page !== "browse") list.push({ id: "browse", label: "Sfoglia i post, uno alla volta", href: viewPath(planPath, "sfoglia"), kind: "view" });
     list.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
     return list;
   };

@@ -15,7 +15,10 @@
 // - K-04  the same link open on two devices: after approving on one, the other
 //         does not blame the agency for the change;
 // - K-06  the toast after an approval says what «Annulla» undoes («Annulla
-//         l'approvazione»), so it is not mistaken for the sheet's «Annulla».
+//         l'approvazione»), so it is not mistaken for the sheet's «Annulla»;
+// - K-05  one name per way of reviewing a plan: «Sfoglia» is «Sfoglia i post,
+//         uno alla volta» everywhere (button, Heili), the other button opens
+//         the first post.
 
 import { execFileSync } from "node:child_process";
 import { MOBILE, connectDb, expect, expectNoHorizontalScroll, root, seed, test, uniq } from "./helpers.mjs";
@@ -47,7 +50,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await db?.query('update "Client" set "archivedAt" = now() where id = any($1)', [
-    [state.a?.clientId, state.b?.clientId, state.c?.clientId].filter(Boolean),
+    [state.a?.clientId, state.b?.clientId, state.c?.clientId, state.month?.a.clientId, state.month?.b.clientId].filter(Boolean),
   ]);
   await db?.end();
 });
@@ -178,6 +181,42 @@ test("K-06: il toast dopo l'approvazione dice cosa annulla e sta nello schermo a
     await context.close();
   }
 });
+
+test("K-05: il piano usa un nome solo per «Sfoglia»: pulsante, scorciatoia di Heili e scheda", async ({ browser }) => {
+  const month = await monthPlan();
+  const { context, page } = await phone(browser, month.a.reviewUrl);
+  await page.goto(`${month.a.reviewUrl}/piani/${month.planId}`);
+  const quick = page.getByTestId("quick-review");
+  await expect(quick).toHaveText("Sfoglia i post, uno alla volta");
+  await expect(page.getByRole("link", { name: "Apri il primo post" })).toBeVisible();
+  await expect(page.getByTestId("view-sfoglia")).toHaveText("Sfoglia");
+  expect(await page.locator("main").innerText()).not.toMatch(/modalità veloce|uno per uno|Rivedi veloce/);
+  // Heili's shortcut says the same thing as the button.
+  await page.getByRole("button", { name: "Apri la Guida di Heili" }).click();
+  await expect(page.getByTestId("heili-shortcut-browse")).toHaveText("Sfoglia i post, uno alla volta");
+  await context.close();
+});
+
+function monthInRome(delta) {
+  const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit" })
+    .format(new Date())
+    .split("-")
+    .map(Number);
+  const index = y * 12 + (m - 1) + delta;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+}
+
+async function monthPlan() {
+  state.month ??= runFixture("e2e/support/create-month-fixture.ts", [
+    data.workspaceId,
+    data.userId,
+    monthInRome(1),
+    monthInRome(2),
+    monthInRome(3),
+    uniq() + "m",
+  ]);
+  return state.month;
+}
 
 async function postStatus(id) {
   const { rows } = await db.query('select status from "Post" where id = $1', [id]);

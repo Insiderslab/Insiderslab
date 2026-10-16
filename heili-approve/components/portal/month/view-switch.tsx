@@ -39,7 +39,7 @@ export default function ViewSwitch({
 }
 
 /** Phones: the way into the fast review, prominent. */
-export function QuickReviewLink({ basePath, label = "Rivedi in modalità veloce" }: { basePath: string; label?: string }) {
+export function QuickReviewLink({ basePath, label = "Sfoglia i post, uno alla volta" }: { basePath: string; label?: string }) {
   // The wrapper hides it from tablets up: `.btn` sets its own display, so it cannot carry `sm:hidden`.
   return (
     <div className="sm:hidden">

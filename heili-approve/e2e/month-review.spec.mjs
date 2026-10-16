@@ -9,7 +9,7 @@
 // third month.
 //
 // 1. Home: the plan card and "Rivedi tutto <mese> insieme" for the loose posts.
-// 2. Plan page at 390 px: the mode switch and "Rivedi in modalità veloce";
+// 2. Plan page at 390 px: the mode switch and "Sfoglia i post, uno alla volta";
 //    Sfoglia: approve one (next card, progress, status), comment another
 //    (post page, "Torna a Sfoglia" lands on the same card), swipe and
 //    keyboard, the summary and "Approva i rimanenti" (the commented post is
