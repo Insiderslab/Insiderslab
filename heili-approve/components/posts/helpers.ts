@@ -21,6 +21,7 @@ import {
 } from "@/lib/domain";
 import { getNetworkFormat, toZonedDateTimeString, zonedDateTimeToUtc } from "@/lib/metricool/payload";
 import { kindParam } from "@/lib/variant";
+import { dateTimeFormat, isValidTimeZone } from "@/lib/intl-format";
 
 export const DEFAULT_TIME_ZONE = "Europe/Rome";
 
@@ -260,13 +261,7 @@ export function newContentHref(
 // ─── Dates and time zones ────────────────────────────────────────────────────
 
 function safeZone(timeZone: string | null | undefined): string {
-  if (!timeZone) return DEFAULT_TIME_ZONE;
-  try {
-    new Intl.DateTimeFormat("it-IT", { timeZone });
-    return timeZone;
-  } catch {
-    return DEFAULT_TIME_ZONE;
-  }
+  return timeZone && isValidTimeZone(timeZone) ? timeZone : DEFAULT_TIME_ZONE;
 }
 
 /**
@@ -290,7 +285,7 @@ export function formatDateTime(
   options: { year?: boolean; weekday?: boolean } = {}
 ): string {
   const { year = true, weekday = true } = options;
-  return new Intl.DateTimeFormat("it-IT", {
+  return dateTimeFormat("it-IT", {
     timeZone: safeZone(timeZone),
     ...(weekday ? { weekday: "short" } : {}),
     day: "numeric",
@@ -303,7 +298,7 @@ export function formatDateTime(
 
 /** "09:30" in the given zone. */
 export function formatTime(value: Date | string, timeZone?: string | null): string {
-  return new Intl.DateTimeFormat("it-IT", {
+  return dateTimeFormat("it-IT", {
     timeZone: safeZone(timeZone),
     hour: "2-digit",
     minute: "2-digit",
@@ -313,7 +308,7 @@ export function formatTime(value: Date | string, timeZone?: string | null): stri
 /** "CEST", "GMT-5"… — short name of the zone at `at`. */
 export function timeZoneAbbr(timeZone: string, at: Date | string = new Date()): string {
   try {
-    const part = new Intl.DateTimeFormat("it-IT", { timeZone, timeZoneName: "short" })
+    const part = dateTimeFormat("it-IT", { timeZone, timeZoneName: "short" })
       .formatToParts(toDate(at))
       .find((p) => p.type === "timeZoneName")?.value;
     return part ?? timeZone;
@@ -407,14 +402,14 @@ export function addMonths({ year, month }: MonthRef, delta: number): MonthRef {
 
 /** "ottobre 2026" */
 export function monthLabel({ year, month }: MonthRef): string {
-  return new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+  return dateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" }).format(
     new Date(Date.UTC(year, month - 1, 1))
   );
 }
 
 /** "lun 6", or "lunedì 6 ottobre" with `long`. */
 export function dayLabel(dayKey: string, long = false): string {
-  return new Intl.DateTimeFormat(
+  return dateTimeFormat(
     "it-IT",
     long
       ? { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }
