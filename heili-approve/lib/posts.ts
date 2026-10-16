@@ -1684,6 +1684,16 @@ export async function deliverPost(postId: string, workspaceId: string, actor: Ac
 
 // ─── Client: approve / request changes ───────────────────────────────────────
 
+/** The post when it is already approved by this reviewer at this version (a concurrent click won), else null. */
+async function sameApprovalAlreadyRecorded(postId: string, reviewer: ReviewerRef, versionNumber: number) {
+  const post = await prisma.post.findUnique({ where: { id: postId }, include: { client: true } });
+  if (!post || post.clientId !== reviewer.clientId) return null;
+  const approved = ["APPROVED", "SCHEDULING", "SCHEDULED", "DELIVERED"].includes(post.status);
+  return approved && post.approvedAt && post.approvedByReviewerId === reviewer.id && post.currentVersionNumber === versionNumber
+    ? post
+    : null;
+}
+
 async function loadPostForReviewerAction(db: DbClient, postId: string, reviewer: ReviewerRef) {
   const post = await db.post.findUnique({ where: { id: postId }, include: { client: true } });
   if (!post || post.clientId !== reviewer.clientId || !isClientVisible(post.status) || !isKindEnabled(post.kind)) {
@@ -1837,6 +1847,16 @@ export async function approvePost(
     if (opts.bulkSafety === true) metadata = { ...(metadata ?? {}), bulk: true };
     await recordEvent(tx, { postId, type: "APPROVED", actor, versionNumber, ...(metadata ? { metadata } : {}) });
     return { post: { ...post, status: next, approvedAt: now, approvedByReviewerId: reviewer.id }, changed: true };
+  }).catch(async (error: unknown) => {
+    // Double tap / two tabs at the same instant: both read "in review", the
+    // first one approves, the second loses the guarded write. If what won is
+    // this reviewer's approval of this version, the second click is a no-op,
+    // not «I dati sono cambiati» after a successful approval.
+    if (error instanceof ConflictError) {
+      const won = await sameApprovalAlreadyRecorded(postId, reviewer, versionNumber);
+      if (won) return { post: won, changed: false };
+    }
+    throw error;
   });
 
   if (!result.changed) return result.post;
