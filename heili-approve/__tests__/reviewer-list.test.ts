@@ -15,7 +15,7 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
       if (c.notIn && c.notIn.includes(value)) return false;
       if (c.gte && (value as Date) < c.gte) return false;
       if (c.lt && (value as Date) >= c.lt) return false;
-    } else if (value !== cond) return false;
+    } else if (key !== "include" && value !== cond) return false;
   }
   return true;
 }
@@ -23,9 +23,9 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
 vi.mock("@/lib/db/client", () => ({
   prisma: {
     post: {
-      findMany: async (args: { where: Record<string, unknown>; orderBy: { publishAt: "asc" | "desc" }; take?: number }) => {
+      findMany: async (args: { where: Record<string, unknown>; orderBy?: { publishAt: "asc" | "desc" }; take?: number }) => {
         db.calls.push(args);
-        const dir = args.orderBy.publishAt === "asc" ? 1 : -1;
+        const dir = args.orderBy?.publishAt === "desc" ? -1 : args.orderBy ? 1 : 0;
         return db.posts
           .filter((p) => matches(p, args.where))
           .sort((a, b) => dir * (a.publishAt.getTime() - b.publishAt.getTime()))
@@ -33,13 +33,14 @@ vi.mock("@/lib/db/client", () => ({
       },
     },
     postEvent: { groupBy: async () => [] },
+    creativeDecision: { findMany: async () => [] },
     postVersion: {
       findMany: async () => [],
     },
   },
 }));
 
-import { REVIEWER_HISTORY_LIMIT, listPostsForReviewer } from "@/lib/posts";
+import { REVIEWER_HISTORY_LIMIT, getPostsForReviewer, listPostsForReviewer } from "@/lib/posts";
 import { monthQueryRange } from "@/lib/month-rules";
 
 const reviewer = { id: "r1", clientId: "c1" };
@@ -109,5 +110,36 @@ describe("monthQueryRange", () => {
       to: new Date("2026-12-03T00:00:00.000Z"),
     });
     expect(monthQueryRange("2026-13")).toEqual({});
+  });
+});
+
+describe("getPostsForReviewer", () => {
+  const full = (i: number, extra: Partial<Row> = {}) => ({
+    ...post(i, "IN_REVIEW", day(i), extra),
+    title: `Post ${i}`,
+    networks: ["instagram"],
+    networkOptions: {},
+    reviewDueAt: null,
+    approvedAt: null,
+    scheduledAt: null,
+    client: { id: "c1", name: "Cliente", logoUrl: null, timezone: "Europe/Rome" },
+    versions: [{ id: `v${i}`, number: 1, text: "Testo", firstCommentText: null, media: [], videoCoverMs: null, content: {}, schedule: null, changeNote: null, createdAt: day(i) }],
+    comments: [],
+    reviewSessions: [],
+  });
+
+  it("loads 300 posts with one post query, in the order asked, without other clients' posts", async () => {
+    db.posts = Array.from({ length: 300 }, (_, i) => full(i) as unknown as Row);
+    db.posts.push(full(999, { clientId: "c2" }) as unknown as Row);
+    const ids = [...db.posts.map((p) => p.id)].reverse();
+
+    const posts = await getPostsForReviewer(ids, reviewer);
+
+    expect(db.calls).toHaveLength(1);
+    expect(posts).toHaveLength(300);
+    expect(posts[0].id).toBe("p299");
+    expect(posts.some((p) => p.id === "p999")).toBe(false);
+    expect(posts[0].versions[0].text).toBe("Testo");
+    expect(posts[0].canAct).toBe(true);
   });
 });

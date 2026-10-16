@@ -28,6 +28,7 @@
 import { z } from "zod";
 import type {
   ContentKind,
+  CreativeDecision,
   MediaAsset,
   Post,
   PostComment,
@@ -2480,9 +2481,23 @@ export interface ReviewerPost {
  * is of a kind this instance does not handle.
  */
 export async function getPostForReviewer(postId: string, reviewer: ReviewerRef): Promise<ReviewerPost> {
-  const post = await prisma.post.findFirst({
+  const [post] = await getPostsForReviewer([postId], reviewer);
+  if (!post) throw new NotFoundError("Post non trovato");
+  return post;
+}
+
+/**
+ * getPostForReviewer for many posts at once, in a fixed number of queries
+ * (Sfoglia of a 300-post plan made 1.800 of them one post at a time). Same
+ * rules: client scope, visible statuses, enabled kinds, the version sent.
+ * Posts that are not visible are left out; the result follows `postIds`.
+ */
+export async function getPostsForReviewer(postIds: readonly string[], reviewer: ReviewerRef): Promise<ReviewerPost[]> {
+  const ids = [...new Set(postIds)];
+  if (ids.length === 0) return [];
+  const rows = await prisma.post.findMany({
     where: {
-      id: postId,
+      id: { in: ids },
       clientId: reviewer.clientId,
       status: { in: CLIENT_VISIBLE_STATUSES },
       kind: { in: enabledKinds() },
@@ -2501,9 +2516,57 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
       },
     },
   });
-  if (!post) throw new NotFoundError("Post non trovato");
+  if (rows.length === 0) return [];
 
-  const visible = visibleVersionNumber(post.currentVersionNumber, await lastSubmittedVersion(prisma, post));
+  const submitted = await lastSubmittedVersions(prisma, rows.map((p) => p.id));
+  const visibleOf = new Map(
+    rows.map((p) => [
+      p.id,
+      visibleVersionNumber(p.currentVersionNumber, effectiveLastSubmittedVersion(submitted.get(p.id), p.submittedAt, p.currentVersionNumber)),
+    ])
+  );
+  const ads = rows.filter((p) => p.kind === "AD_CREATIVE");
+  const allDecisions =
+    ads.length > 0
+      ? await prisma.creativeDecision.findMany({
+          where: { OR: ads.map((p) => ({ postId: p.id, versionNumber: visibleOf.get(p.id)! })) },
+          orderBy: { createdAt: "asc" },
+          include: { reviewer: { select: { name: true } } },
+        })
+      : [];
+
+  const byId = new Map(
+    rows.map((post) => [
+      post.id,
+      toReviewerPost(
+        post,
+        visibleOf.get(post.id)!,
+        allDecisions.filter((d) => d.postId === post.id),
+        reviewer
+      ),
+    ])
+  );
+  return ids.flatMap((id) => {
+    const post = byId.get(id);
+    return post ? [post] : [];
+  });
+}
+
+type ReviewerPostRow = Prisma.PostGetPayload<{
+  include: {
+    client: { select: { id: true; name: true; logoUrl: true; timezone: true } };
+    versions: true;
+    comments: { include: { user: { select: { name: true } }; reviewer: { select: { name: true } } } };
+    reviewSessions: { include: { messages: true } };
+  };
+}>;
+
+function toReviewerPost(
+  post: ReviewerPostRow,
+  visible: number,
+  decisions: Array<CreativeDecision & { reviewer: { name: string } | null }>,
+  reviewer: ReviewerRef
+): ReviewerPost {
   const versions = post.versions.filter((v) => v.number <= visible);
   const visibleVersionIds = new Set(versions.map((v) => v.id));
   const live: VersionSchedule = {
@@ -2516,15 +2579,6 @@ export async function getPostForReviewer(postId: string, reviewer: ReviewerRef):
   const scheduleOf = (v: { number: number; schedule: unknown }) =>
     v.number === post.currentVersionNumber ? live : parseVersionSchedule(v.schedule);
   const shownSchedule = scheduleOf(versions.find((v) => v.number === visible) ?? { number: -1, schedule: null }) ?? live;
-
-  const decisions =
-    post.kind === "AD_CREATIVE"
-      ? await prisma.creativeDecision.findMany({
-          where: { postId: post.id, versionNumber: visible },
-          orderBy: { createdAt: "asc" },
-          include: { reviewer: { select: { name: true } } },
-        })
-      : [];
 
   return {
     id: post.id,
