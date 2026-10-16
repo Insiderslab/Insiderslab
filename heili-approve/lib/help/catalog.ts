@@ -28,7 +28,7 @@ const TOPICS: HelpTopic[] = [
     routes: [/\/posts\//],
     steps: [
       { title: "Scegli il punto", body: "Tocca un punto della foto, ferma il video sul momento giusto oppure seleziona una frase. Il riferimento compare accanto al tuo feedback." },
-      { title: "Scrivi o parla", body: "Il microfono accanto alla freccia detta nel campo: puoi correggere il testo. «Parla con Heili» apre una conversazione per precisare la richiesta. La freccia salva il commento e lo rende visibile all'agenzia; una bozza sul dispositivo non è ancora inviata." },
+      { title: "Scrivi o parla", body: "Il microfono accanto alla freccia detta nel campo: puoi correggere il testo. «Parla con Heili» apre una conversazione per precisare la richiesta. La freccia salva il commento e lo rende visibile all'agenzia; il testo che non hai ancora salvato resta solo sul tuo telefono." },
       { title: "Concludi quando sei pronto", body: "Con i commenti salvati, scegli «Chiedi modifiche» per inviare la richiesta senza riscriverli. Se hai usato Heili controlla prima il riepilogo. Oppure approva il contenuto: entrambi gli esiti fanno avanzare la revisione." },
     ],
   },
@@ -50,14 +50,14 @@ const TOPICS: HelpTopic[] = [
     id: "client-plan",
     audience: "client",
     title: "Rivedere il piano del mese",
-    summary: "Scegli elenco o anteprima Instagram e rivedi i post uno alla volta.",
+    summary: "Tre modi di guardare gli stessi post: Panoramica, Griglia e Sfoglia.",
     searchTerms: ["piano mensile", "approva tutto", "calendario", "griglia instagram", "post del mese"],
     kinds: ["SOCIAL_POST"],
     routes: [/\/piani(?:\/|$)/],
     steps: [
-      { title: "Leggi il riepilogo", body: "In cima trovi il messaggio dell’agenzia e lo stato complessivo del piano." },
-      { title: "Apri i post da verificare", body: "Scegli «Elenco» oppure «Anteprima Instagram»: sono viste dello stesso piano. La griglia include solo i post Instagram. Apri un contenuto e approva oppure chiedi modifiche." },
-      { title: "Conferma il piano", body: "«Approva tutto il piano» conferma insieme soltanto i contenuti ancora approvabili. Prima controlla che non restino note da inviare." },
+      { title: "Leggi il riepilogo", body: "In cima trovi il messaggio dell’agenzia e quanti post hai già rivisto." },
+      { title: "Scegli come guardare i post", body: "Panoramica: l’elenco dei post. Griglia: i post Instagram uno accanto all’altro, come sul profilo. Sfoglia: un post alla volta, con Approva e Commenta. Apri un post per leggerlo per intero." },
+      { title: "Conferma il piano", body: "«Approva tutto il piano» approva insieme i post che non hai ancora deciso. Se hai scritto una nota, inviala prima." },
     ],
   },
   {
@@ -98,7 +98,7 @@ const TOPICS: HelpTopic[] = [
     steps: [
       { title: "Indica il punto", body: "Su una foto tocca il punto interessato; su un video fermati sul secondo giusto; in un articolo seleziona la frase." },
       { title: "Descrivi il risultato che vuoi", body: "Scrivi cosa cambiare e, se puoi, perché: per esempio tono, colore, immagine, frase o invito all’azione." },
-      { title: "Usa l’assistente se serve", body: "Apri «Parla con Heili» nello spazio feedback per scrivere o conversare a voce, anche interrompendo l’assistente. Controlla il riepilogo, poi invialo all’agenzia: parlare o preparare il riepilogo non invia una richiesta. Anche dopo «Chiedi modifiche» puoi parlare con Heili: il riepilogo si aggiunge con «Aggiungi al feedback» alla richiesta già inviata. Il microfono accanto all’invio trascrive soltanto nel campo." },
+      { title: "Chiedi aiuto a Heili se serve", body: "«Parla con Heili» ti aiuta a spiegare cosa cambiare, scrivendo o a voce. Alla fine controlla il riepilogo: finché non lo confermi, non arriva nulla all’agenzia. Dopo «Chiedi modifiche» puoi aggiungere altro con «Aggiungi al feedback». Il microfono accanto alla freccia scrive solo nel campo del commento." },
     ],
   },
   {

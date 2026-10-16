@@ -34,4 +34,17 @@ describe("help guide catalog", () => {
     expect(suggestedHelpTopics(topics, "/settings")[0]?.id).toBe("agency-import");
     expect(suggestedHelpTopics(topics, "/posts/import")[0]?.id).toBe("agency-import-panel");
   });
+
+  it("the client's guide speaks with the words of the portal and keeps each step short (K-07)", () => {
+    const client = helpTopics({ audience: "client", services: ["SOCIAL_POST", "BLOG_ARTICLE", "AD_CREATIVE"] });
+    const plan = client.find((topic) => topic.id === "client-plan");
+    const planText = [plan?.summary, ...(plan?.steps.flatMap((step) => [step.title, step.body]) ?? [])].join(" ");
+    for (const view of ["Panoramica", "Griglia", "Sfoglia"]) expect(planText).toContain(view);
+    for (const topic of client) {
+      for (const step of topic.steps) {
+        expect(step.body.length, `${topic.id} · ${step.title}`).toBeLessThanOrEqual(330);
+        expect(step.body, `${topic.id} · ${step.title}`).not.toMatch(/Metricool|assistente di revisione/);
+      }
+    }
+  });
 });
