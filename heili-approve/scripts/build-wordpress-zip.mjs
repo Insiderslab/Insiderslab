@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Packs the WordPress plugin (wordpress/heili-approve-review/) into
+// Packs the WordPress plugin (wordpress/heili-approve-review/: the plugin file,
+// readme.txt and uninstall.php) into
 // public/wordpress/heili-approve-review.zip, downloadable from the agency's
 // «Sul sito» panel. Deterministic (fixed dates) so the committed zip only
 // changes when the plugin does.
@@ -10,13 +11,13 @@ import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const FILE = "heili-approve-review/heili-approve-review.php";
-const FIXED_DATE = new Date("2026-10-16T00:00:00Z");
+const FILES = ["heili-approve-review.php", "readme.txt", "uninstall.php"].map((name) => `heili-approve-review/${name}`);
+const FIXED_DATE = new Date("2026-10-17T00:00:00Z");
 
 export async function buildWordpressZip() {
   const zip = new JSZip();
   zip.file("heili-approve-review/", null, { dir: true, date: FIXED_DATE });
-  zip.file(FILE, readFileSync(path.join(root, "wordpress", FILE)), { date: FIXED_DATE });
+  for (const file of FILES) zip.file(file, readFileSync(path.join(root, "wordpress", file)), { date: FIXED_DATE });
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", platform: "UNIX" });
 }
 
