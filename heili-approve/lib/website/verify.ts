@@ -2,13 +2,18 @@
  * «Verifica installazione»: downloads the site's page with the anti-SSRF
  * fetch (lib/website/ssrf.ts) and looks for the review tag with this site's
  * key. The page is only searched as text: nothing of it runs or is stored.
+ *
+ * The result is a short Italian message (stored on the site as
+ * `verifyMessage`); verify-outcomes.ts explains it in plain words.
  */
 
 import { localFetchAllowed, safeFetchText, SsrfError, type LookupAll } from "./ssrf";
+import { OUTCOMES, SSRF_KINDS } from "./verify-outcomes";
+export { describeVerification, type VerifyGroup, type VerifyKind, type VerifyOutcome } from "./verify-outcomes";
 
 export interface VerifyResult {
   found: boolean;
-  /** Italian, shown to the agency. */
+  /** Italian, shown to the agency (the title of the outcome). */
   message: string;
 }
 
@@ -27,20 +32,6 @@ export function findReviewTags(html: string): string[] {
   return keys;
 }
 
-const FETCH_MESSAGES: Record<string, string> = {
-  scheme: "Indirizzo non consentito: usa https://",
-  credentials: "Indirizzo non consentito: togli nome utente e password.",
-  port: "Indirizzo non consentito: porta non ammessa (usa 80, 443, 8080 o 8443).",
-  host: "Indirizzo non consentito: serve un dominio pubblico.",
-  private: "Indirizzo non consentito: il sito punta a una rete privata.",
-  dns: "Il dominio non esiste o non risponde.",
-  redirects: "Il sito fa troppi reindirizzamenti.",
-  timeout: "Il sito non risponde (tempo scaduto).",
-  "too-large": "La pagina è troppo grande da controllare.",
-  tls: "Certificato non valido: controlla l'https del sito.",
-  network: "Il sito non risponde.",
-};
-
 /** Looks for the tag on `url`. Never throws: the outcome is a message. */
 export async function verifyInstallation(
   url: string,
@@ -52,24 +43,15 @@ export async function verifyInstallation(
       lookupAll: opts.lookupAll,
       allowLocal: opts.allowLocal ?? localFetchAllowed(),
     });
-    if (page.status === 401 || page.status === 403) {
-      return {
-        found: false,
-        message: "Il sito chiede una password o blocca l'accesso: non si può verificare da qui.",
-      };
-    }
+    if (page.status === 401 || page.status === 403) return { found: false, message: OUTCOMES.protected.title };
     if (page.status >= 400) return { found: false, message: `Il sito risponde con un errore (${page.status}).` };
     const keys = findReviewTags(page.body);
-    if (keys.includes(siteKey)) return { found: true, message: "Script trovato sul sito" };
-    if (keys.length > 0) {
-      return { found: false, message: "Lo script c'è ma con un'altra chiave: copia di nuovo la riga di codice." };
-    }
-    return {
-      found: false,
-      message: "Non trovato: controlla di aver salvato, la cache del sito e il plugin di ottimizzazione.",
-    };
+    if (keys.includes(siteKey)) return { found: true, message: OUTCOMES.found.title };
+    if (keys.some((key) => key === "")) return { found: false, message: OUTCOMES.noKey.title };
+    if (keys.length > 0) return { found: false, message: OUTCOMES.otherKey.title };
+    return { found: false, message: OUTCOMES.missing.title };
   } catch (error) {
-    if (error instanceof SsrfError) return { found: false, message: FETCH_MESSAGES[error.code] ?? "Il sito non risponde." };
-    return { found: false, message: "Il sito non risponde." };
+    if (error instanceof SsrfError) return { found: false, message: OUTCOMES[SSRF_KINDS[error.code] ?? "network"].title };
+    return { found: false, message: OUTCOMES.network.title };
   }
 }

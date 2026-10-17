@@ -103,15 +103,17 @@ test("agenzia: crea il «Sito web», installa la riga e la verifica", async ({ b
   state.siteKey = key;
   await expect(page.getByTestId("site-origins")).toContainText(site.origin);
 
-  // The tag still has no key (another key) → not verified; with the key → «Script trovato sul sito».
+  // The tag still has no key → not verified, with what to do; with the key → «Script trovato sul sito».
   await page.getByTestId("site-verify").click();
-  await expect(page.getByTestId("site-verify-message")).toContainText("altra chiave");
+  await expect(page.getByTestId("site-verify-message")).toContainText("senza chiave");
+  await expect(page.getByTestId("site-verify-hints")).toContainText("Copia di nuovo la riga");
   site.setKey(key);
   otherSite.setKey(key);
   await page.getByTestId("site-verify").click();
   await expect(page.getByTestId("site-verify-message")).toHaveText("Script trovato sul sito");
 
-  // An http:// address that is not local needs the test-site mark.
+  // An http:// address that is not local needs the test-site mark (the list of addresses is folded away once the site's own is allowed).
+  await page.getByText(/^Indirizzi consentiti \(/).click();
   await page.getByTestId("site-origin-input").fill("http://prova.esempio.it");
   await page.getByTestId("site-origin-add").click();
   await expect(page.getByText(/solo per i siti di prova/)).toBeVisible();
