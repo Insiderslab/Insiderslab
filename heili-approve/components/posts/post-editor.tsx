@@ -425,6 +425,7 @@ export default function PostEditor({
                     }}
                     onBusyChange={setUploading}
                     disabled={disabled}
+                    catchPageDrops
                   />
                 </div>
                 {firstVideo && (

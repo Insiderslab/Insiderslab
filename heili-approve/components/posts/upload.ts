@@ -14,6 +14,21 @@ export const ACCEPTED_MEDIA = "image/jpeg,image/png,image/webp,image/gif,video/m
 
 const RAW_TYPES = new Set(ACCEPTED_MEDIA.split(","));
 
+/**
+ * Why a file cannot be uploaded, checked in the browser before sending it
+ * (the server checks again): null when it can go. A file without a type is
+ * left to the server, which sniffs the content.
+ */
+export function uploadProblem(file: { name: string; size: number; type: string }): string | null {
+  if (file.size > MAX_UPLOAD_MB * 1024 * 1024) return `File troppo grande: max ${MAX_UPLOAD_MB} MB.`;
+  if (file.size === 0) return "Il file è vuoto.";
+  if (file.type && !RAW_TYPES.has(file.type)) {
+    const extension = file.name.includes(".") ? file.name.split(".").pop()?.toUpperCase() : null;
+    return `Formato non supportato${extension ? ` (${extension})` : ""}: usa JPG, PNG, WebP, GIF, MP4, MOV o WebM.`;
+  }
+  return null;
+}
+
 /** Duration of a local video file in seconds, or undefined when the browser cannot read it. */
 export function readVideoDuration(file: File, timeoutMs = 15_000): Promise<number | undefined> {
   if (!file.type.startsWith("video/")) return Promise.resolve(undefined);
@@ -59,7 +74,7 @@ export function uploadMedia(
 ): Promise<MediaItem> {
   const { durationSec, onProgress, signal } = options;
   if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-    return Promise.reject(new UploadFailed(`Il file supera il limite di ${MAX_UPLOAD_MB} MB.`));
+    return Promise.reject(new UploadFailed(`File troppo grande: max ${MAX_UPLOAD_MB} MB.`));
   }
 
   return new Promise((resolve, reject) => {

@@ -196,7 +196,10 @@ export default function BlogEditor({
   }
 
   // ── Featured image ────────────────────────────────────────────────────────
+  // Kept for "Riprova" after a failed upload.
+  const [featuredRetry, setFeaturedRetry] = useState<File | null>(null);
   async function uploadFeatured(file: File) {
+    setFeaturedRetry(null);
     if (!file.type.startsWith("image/")) {
       setFeaturedUpload({ progress: 0, error: "Scegli un'immagine (JPG, PNG, WebP, GIF)." });
       return;
@@ -210,6 +213,7 @@ export default function BlogEditor({
       const previousAlt = valueRef.current.featuredImage?.alt ?? "";
       update({ featuredImage: { ...media, alt: media.alt ?? previousAlt } });
     } catch (error) {
+      setFeaturedRetry(file);
       setFeaturedUpload({ progress: 0, error: error instanceof Error ? error.message : "Caricamento non riuscito." });
     }
   }
@@ -500,7 +504,19 @@ export default function BlogEditor({
         </div>
       </section>
 
-      <section className="panel space-y-3 rounded p-4 sm:p-5">
+      <section
+        className="panel space-y-3 rounded p-4 sm:p-5"
+        // An image dropped on the section becomes the featured image.
+        onDragOver={(event) => {
+          if (!disabled && Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          if (disabled || !Array.from(event.dataTransfer.types).includes("Files")) return;
+          event.preventDefault();
+          const file = event.dataTransfer.files[0];
+          if (file) void uploadFeatured(file);
+        }}
+      >
         <h3 className="text-sm font-semibold">Immagine in evidenza</h3>
         <input
             disabled={disabled}
@@ -568,13 +584,25 @@ export default function BlogEditor({
             onClick={() => featuredFileRef.current?.click()}
             className="flex min-h-24 w-full items-center justify-center rounded-md border border-dashed border-border bg-background px-4 text-sm text-muted hover:border-border-hover hover:text-foreground disabled:opacity-50"
           >
-            Carica l&apos;immagine in evidenza (JPG, PNG, WebP)
+            Trascina qui l&apos;immagine in evidenza, o tocca per sceglierla (JPG, PNG, WebP)
           </button>
         )}
         {featuredUpload && (
           <div className="text-xs" aria-live="polite">
             {featuredUpload.error ? (
-              <p className="text-error">{featuredUpload.error}</p>
+              <p className="text-error" role="alert">
+                {featuredUpload.error}{" "}
+                {featuredRetry && (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 items-center px-1 font-semibold text-accent underline"
+                    disabled={disabled}
+                    onClick={() => void uploadFeatured(featuredRetry)}
+                  >
+                    Riprova
+                  </button>
+                )}
+              </p>
             ) : (
               <div className="flex items-center gap-2 text-muted">
                 <span>Caricamento…</span>
