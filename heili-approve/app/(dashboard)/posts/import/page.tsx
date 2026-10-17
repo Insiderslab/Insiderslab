@@ -10,6 +10,8 @@
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { loadRecentClientIds } from "@/app/(dashboard)/posts/data";
+import ClientPicker from "@/components/posts/client-picker";
 import ImportClientSelect from "@/components/posts/import/client-select";
 import ImportWizard from "@/components/posts/import/import-wizard";
 import { clientHasService } from "@/lib/clients";
@@ -89,15 +91,11 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
               </p>
             )}
           </div>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {eligible.map((c) => (
-              <li key={c.id}>
-                <Link href={`/posts/import?clientId=${encodeURIComponent(c.id)}`} className="btn w-full justify-start" data-testid="import-client-option">
-                  {c.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <ClientPicker
+            clients={eligible.map((c) => ({ id: c.id, name: c.name, href: `/posts/import?clientId=${encodeURIComponent(c.id)}` }))}
+            recentIds={await loadRecentClientIds(context.workspaceId)}
+            testId="import-client-option"
+          />
         </section>
       )}
     </div>

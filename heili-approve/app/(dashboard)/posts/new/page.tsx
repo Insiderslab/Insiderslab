@@ -12,7 +12,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ContentKind } from "@/app/generated/prisma/client";
-import { loadEditorClients } from "@/app/(dashboard)/posts/data";
+import { loadEditorClients, loadRecentClientIds } from "@/app/(dashboard)/posts/data";
+import ClientPicker from "@/components/posts/client-picker";
 import ContentEditor from "@/components/posts/content-editor";
 import { addDays, contentWords, dayKeyIn, DEFAULT_TIME_ZONE, isDayKey, newContentHref } from "@/components/posts/helpers";
 import { KindIcon } from "@/components/posts/kind-badge";
@@ -140,28 +141,18 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
               .
             </p>
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {allClients.map((option) => (
-                <li key={option.id}>
-                  <Link
-                    href={newContentHref(null, { clientId: option.id, day })}
-                    className="panel flex h-full flex-col gap-2 rounded p-4 hover:border-border-hover"
-                  >
-                    <span className="text-base font-semibold text-foreground">{option.name}</span>
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                      {option.services.length === 0
-                        ? "Nessun servizio attivo"
-                        : option.services.map((service) => (
-                            <span key={service} className="inline-flex items-center gap-1">
-                              <KindIcon kind={service} className="h-3.5 w-3.5" />
-                              {KIND_UI[service].serviceLabel}
-                            </span>
-                          ))}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <ClientPicker
+              clients={allClients.map((option) => ({
+                id: option.id,
+                name: option.name,
+                href: newContentHref(null, { clientId: option.id, day }),
+                detail:
+                  option.services.length === 0
+                    ? "Nessun servizio attivo"
+                    : option.services.map((service) => KIND_UI[service].serviceLabel).join(" · "),
+              }))}
+              recentIds={await loadRecentClientIds(context.workspaceId)}
+            />
           )}
         </section>
         <section className="space-y-3">
