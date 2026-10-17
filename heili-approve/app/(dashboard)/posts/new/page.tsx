@@ -28,6 +28,7 @@ import { emptyWebsiteContent } from "@/lib/content/website";
 import { isNetwork } from "@/lib/domain";
 import { KIND_UI, enabledKinds, parseKindParam, postsHref, productName } from "@/lib/variant";
 import { getCurrentClientId } from "@/lib/current-client";
+import { prisma } from "@/lib/db/client";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 type SearchParams = { kind?: string | string[]; clientId?: string | string[]; data?: string | string[] };
@@ -269,8 +270,21 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
     );
   }
 
-  // A client with exactly one network gets it preselected.
+  // Networks preselected: the client's only one, else those of its latest
+  // social post (what the agency usually picks for it). YouTube and Pinterest
+  // need fields of their own, so they are never preselected.
   const clientNetworks = (client?.networks ?? []).filter(isNetwork);
+  const lastPost =
+    client && clientNetworks.length !== 1
+      ? await prisma.post.findFirst({
+          where: { workspaceId: context.workspaceId, clientId: client.id, kind: "SOCIAL_POST" },
+          orderBy: { createdAt: "desc" },
+          select: { networks: true },
+        })
+      : null;
+  const usual = (lastPost?.networks ?? [])
+    .filter(isNetwork)
+    .filter((n) => n !== "youtube" && n !== "pinterest" && (clientNetworks.length === 0 || clientNetworks.includes(n)));
 
   return (
     <div className="space-y-4">
@@ -286,7 +300,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
           title: "",
           date,
           time: "10:00",
-          networks: clientNetworks.length === 1 ? clientNetworks : [],
+          networks: clientNetworks.length === 1 ? clientNetworks : usual,
           networkOptions: {},
           text: "",
           firstCommentText: "",

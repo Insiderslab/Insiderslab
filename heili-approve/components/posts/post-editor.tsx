@@ -12,6 +12,10 @@
  * (validateForNetworks) run on every change, so problems show up here and
  * not as a failed schedule. A draft can be saved with warnings; sending it
  * to the client cannot.
+ *
+ * Only what a post needs is in view: client, when, networks, media and text.
+ * Title and first comment are in "Altre opzioni": a post without a title
+ * takes the first words of its text (as the importer does).
  */
 
 import Link from "next/link";
@@ -46,6 +50,7 @@ import {
   setNetworkOption,
   timeZoneAbbr,
 } from "./helpers";
+import { titleFromText } from "@/lib/post-import/rows";
 import MediaUploader from "./media-uploader";
 import type { EditorClient, PostFormInput } from "./types";
 import VideoCoverPicker from "./video-cover-picker";
@@ -183,12 +188,13 @@ export default function PostEditor({
 
   function buildInput(): PostFormInput | string {
     if (!values.clientId) return "Scegli il cliente.";
-    if (!values.title.trim()) return "Inserisci un titolo.";
     if (!publishAt) return "Inserisci data e ora di pubblicazione.";
     if (values.networks.length === 0) return "Scegli almeno una rete.";
+    // No title: the first words of the text, else the day (the client sees it in the portal and emails).
+    const title = values.title.trim() || titleFromText(values.text.trim()) || `Post del ${values.date.split("-").reverse().join("/")}`;
     return {
       clientId: values.clientId,
-      title: values.title.trim(),
+      title,
       publishAt: publishAt.toISOString(),
       networks: values.networks,
       networkOptions: pruneNetworkOptions(values.networkOptions, values.networks),
@@ -288,7 +294,7 @@ export default function PostEditor({
         <fieldset disabled={disabled} className="space-y-5">
           <section className="panel studio-panel space-y-5">
             <div className="studio-section-heading">
-              <div><h2>Dove e quando</h2><p>Definisci il cliente, il titolo, la pubblicazione e i canali del contenuto.</p></div>
+              <div><h2>Dove e quando</h2><p>Il cliente, il giorno e l&apos;ora di pubblicazione, le reti.</p></div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -319,20 +325,6 @@ export default function PostEditor({
                     {!client.hasMetricoolBrand && <span className="text-warning">Brand Metricool non collegato: il post non potrà essere programmato. </span>}
                   </p>
                 )}
-              </div>
-
-              <div>
-                <label htmlFor="post-title" className={labelClass}>Titolo (visibile al cliente)</label>
-                <input
-                  id="post-title"
-                  type="text"
-                  value={values.title}
-                  onChange={(event) => update("title", event.target.value)}
-                  maxLength={200}
-                  placeholder="Es. Carosello lancio collezione autunno"
-                  className={inputClass}
-                />
-                <p className="mt-1 text-xs text-muted">Serve nel portale e nelle email; non viene pubblicato.</p>
               </div>
             </div>
 
@@ -414,7 +406,7 @@ export default function PostEditor({
             <div className="studio-section-heading">
               <div><h2>Il contenuto</h2><p>Carica i media e completa il testo che il cliente vedrà nell’anteprima.</p></div>
             </div>
-            <div className="grid gap-5 lg:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.1fr)]">
+            <div className="grid gap-5 2xl:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.1fr)]">
               <div className="space-y-4">
                 <div><span className={labelClass}>Media</span>
                   <MediaUploader
@@ -454,12 +446,33 @@ export default function PostEditor({
                   </ul>
                 )}
 
-                <details className="mt-4 rounded-xl bg-surface-hover px-4 py-3" open={values.firstCommentText.length > 0 ? true : undefined}>
-                  <summary className="cursor-pointer text-sm font-semibold">Primo commento <span className="font-normal text-muted">(facoltativo)</span></summary>
-                  <div className="pt-3">
-                    <label htmlFor="post-first-comment" className="sr-only">Primo commento</label>
+                <details
+                  className="mt-4 rounded-xl bg-surface-hover px-4 py-3"
+                  open={mode === "edit" || values.firstCommentText.length > 0 || values.title.length > 0 ? true : undefined}
+                  data-testid="post-more-options"
+                >
+                  <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">
+                    Altre opzioni <span className="ml-1 font-normal text-muted">(titolo, primo commento)</span>
+                  </summary>
+                  <div className="space-y-4 pt-3">
+                    <div>
+                      <label htmlFor="post-title" className={labelClass}>Titolo (visibile al cliente)</label>
+                      <input
+                        id="post-title"
+                        type="text"
+                        value={values.title}
+                        onChange={(event) => update("title", event.target.value)}
+                        maxLength={200}
+                        placeholder={titleFromText(values.text.trim()) || "Es. Carosello lancio collezione autunno"}
+                        className={inputClass}
+                      />
+                      <p className="mt-1 text-xs text-muted">Facoltativo: se lo lasci vuoto uso l&apos;inizio del testo. Serve nel portale e nelle email; non viene pubblicato.</p>
+                    </div>
+                  <div>
+                    <label htmlFor="post-first-comment" className={labelClass}>Primo commento <span className="font-normal text-muted">(facoltativo)</span></label>
                     <textarea id="post-first-comment" value={values.firstCommentText} onChange={(event) => update("firstCommentText", event.target.value)} rows={2} className={`${inputClass} resize-y`} placeholder="Es. gli hashtag, per tenere pulita la didascalia" />
                     <p className="mt-1 text-xs text-muted">Pubblicato come commento su {FIRST_COMMENT_NETWORKS.map((n) => NETWORK_LABELS[n]).join(", ")}.</p>
+                  </div>
                   </div>
                 </details>
 
