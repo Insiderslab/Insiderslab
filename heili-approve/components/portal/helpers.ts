@@ -90,6 +90,19 @@ export function groupPortalPosts<T extends GroupablePost>(posts: readonly T[], n
   return groups;
 }
 
+/** How many items of a long home list are shown before «Mostra gli altri N» (K-11). */
+export const HOME_LIST_FIRST = 10;
+
+/**
+ * A long list of the home split into the first items, shown, and the rest,
+ * one tap away (K-11 / QA-12). Nothing is dropped; a list just over the
+ * limit is shown whole (no «Mostra gli altri 2»).
+ */
+export function firstOfList<T>(items: readonly T[], first = HOME_LIST_FIRST): { shown: T[]; more: T[] } {
+  if (items.length <= first + 2) return { shown: [...items], more: [] };
+  return { shown: items.slice(0, first), more: items.slice(first) };
+}
+
 /**
  * Post to open after the current one: the next post awaiting review in
  * publish order, wrapping around; never the current post itself.

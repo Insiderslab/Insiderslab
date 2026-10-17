@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { messageLooksLong } from "@/components/portal/helpers";
+import { firstOfList, messageLooksLong } from "@/components/portal/helpers";
 import { guideStatusSentence } from "@/components/portal/heili/rules";
 import { channelsLabel } from "@/components/portal/month/month-grid";
 import { MONTH_VIEW_LABELS, parseMonthView, parsePostReturn, planViews, postLinkQuery, viewPath } from "@/lib/month-rules";
@@ -51,5 +51,22 @@ describe("K-13: Griglia and Anteprima Instagram are two different views", () => 
     expect(guideStatusSentence({ page: "plan-instagram", title: "Piano social di novembre" })).toBe(
       "Sei nell'anteprima Instagram del piano social di novembre."
     );
+  });
+});
+
+describe("K-11 / QA-12: a long home shows the first contents and keeps the others one tap away", () => {
+  const items = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+
+  it("splits a long list without dropping anything", () => {
+    const { shown, more } = firstOfList(items(59));
+    expect(shown).toEqual(items(10));
+    expect(more).toHaveLength(49);
+    expect([...shown, ...more]).toEqual(items(59));
+  });
+
+  it("shows a short list, or one just over the limit, whole", () => {
+    expect(firstOfList(items(3))).toEqual({ shown: items(3), more: [] });
+    expect(firstOfList(items(12))).toEqual({ shown: items(12), more: [] });
+    expect(firstOfList(items(13)).more).toEqual([11, 12, 13]);
   });
 });

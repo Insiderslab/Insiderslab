@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  firstOfList,
   formatPortalDate,
   groupPortalPosts,
   homePrimaryAction,
@@ -80,6 +81,7 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
   const groups = groupPortalPosts(cards, now);
   const standaloneIds = new Set(posts.filter((p) => !p.planId || !visiblePlanIds.has(p.planId)).map((p) => p.id));
   const standaloneGroups = groupPortalPosts(cards.filter((p) => standaloneIds.has(p.id)), now);
+  const toReviewShown = firstOfList(standaloneGroups.toReview);
   // Several posts of one month waiting outside any plan: review them together.
   const offers = monthOffers(
     posts.filter((p) => standaloneIds.has(p.id)),
@@ -189,58 +191,70 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 
       {tabs.length > 0 && <KindTabs tabs={tabs} />}
 
+      {/* K-11 / QA-12: what waits for the client first, the first ones in full and the
+          rest one tap away; then what is already decided, grouped and closed. Nothing is dropped. */}
       {standaloneGroups.toReview.length > 0 && (
         <Section title={planCards.length > 0 ? "Contenuti singoli da approvare" : "Da approvare"} count={standaloneGroups.toReview.length} highlight>
-          {standaloneGroups.toReview.map((post) => (
+          {toReviewShown.shown.map((post) => (
             <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
           ))}
-        </Section>
-      )}
-
-      {standaloneGroups.inProgress.length > 0 && (
-        <Section
-          title="Modifiche richieste"
-          subtitle={
-            reviewer.email
-              ? "In lavorazione dall'agenzia: riceverai un'email quando la nuova versione sarà pronta."
-              : "In lavorazione dall'agenzia: ti avviseremo quando la nuova versione sarà pronta."
-          }
-          count={standaloneGroups.inProgress.length}
-        >
-          {standaloneGroups.inProgress.map((post) => (
-            <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
-          ))}
-        </Section>
-      )}
-
-      {(standaloneGroups.approvedUpcoming.length > 0 || standaloneGroups.approvedPast.length > 0) && (
-        <Section
-          title={socialOnly ? "Approvati / programmati" : "Approvati"}
-          count={standaloneGroups.approvedUpcoming.length + standaloneGroups.approvedPast.length}
-        >
-          {standaloneGroups.approvedUpcoming.length === 0 && (
-            <p className="text-sm text-muted">
-              {adsOnly
-                ? "Nessuna campagna in partenza nei prossimi giorni."
-                : `Nessun ${noun.one} in uscita nei prossimi giorni.`}
-            </p>
-          )}
-          {standaloneGroups.approvedUpcoming.map((post) => (
-            <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
-          ))}
-          {standaloneGroups.approvedPast.length > 0 && (
-            <details className="group rounded-lg border border-border">
-              <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm text-muted">
-                {`${adsOnly ? "Campagne già partite" : socialOnly ? "Già pubblicati" : "Date già passate"} (${standaloneGroups.approvedPast.length})`}
+          {toReviewShown.more.length > 0 && (
+            <details className="group space-y-3" data-testid="home-more-to-review">
+              <summary className="flex min-h-12 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface px-4 text-base font-semibold text-accent group-open:hidden">
+                {`Mostra gli altri ${toReviewShown.more.length} da approvare`}
               </summary>
-              <div className="space-y-3 p-3 pt-0">
-                {standaloneGroups.approvedPast.map((post) => (
+              <div className="space-y-3">
+                {toReviewShown.more.map((post) => (
                   <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
                 ))}
               </div>
             </details>
           )}
         </Section>
+      )}
+
+      {standaloneGroups.inProgress.length > 0 && (
+        <ClosedGroup title="Modifiche richieste" count={standaloneGroups.inProgress.length} testId="home-changes">
+          <p className="text-sm text-muted">
+            {reviewer.email
+              ? "In lavorazione dall'agenzia: riceverai un'email quando la nuova versione sarà pronta."
+              : "In lavorazione dall'agenzia: ti avviseremo quando la nuova versione sarà pronta."}
+          </p>
+          {standaloneGroups.inProgress.map((post) => (
+            <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
+          ))}
+        </ClosedGroup>
+      )}
+
+      {(standaloneGroups.approvedUpcoming.length > 0 || standaloneGroups.approvedPast.length > 0) && (
+        <ClosedGroup
+          title="Già approvati"
+          count={standaloneGroups.approvedUpcoming.length + standaloneGroups.approvedPast.length}
+          testId="home-approved"
+        >
+          {standaloneGroups.approvedUpcoming.length === 0 ? (
+            <p className="text-sm text-muted">
+              {adsOnly
+                ? "Nessuna campagna in partenza nei prossimi giorni."
+                : `Nessun ${noun.one} in uscita nei prossimi giorni.`}
+            </p>
+          ) : (
+            <h3 className="text-sm font-semibold text-muted">{adsOnly ? "In partenza" : "In uscita"}</h3>
+          )}
+          {standaloneGroups.approvedUpcoming.map((post) => (
+            <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
+          ))}
+          {standaloneGroups.approvedPast.length > 0 && (
+            <>
+              <h3 className="pt-2 text-sm font-semibold text-muted">
+                {`${adsOnly ? "Campagne già partite" : socialOnly ? "Già pubblicati" : "Date già passate"} (${standaloneGroups.approvedPast.length})`}
+              </h3>
+              {standaloneGroups.approvedPast.map((post) => (
+                <PostCard key={post.id} post={post} href={portalPath(token, post.id)} />
+              ))}
+            </>
+          )}
+        </ClosedGroup>
       )}
 
       {posts.length === 0 && (
@@ -256,6 +270,27 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 /** The selected tab; "Tutti" when the portal shows a single kind. */
 function tabsSelected<K>(selected: K | null, kinds: readonly K[]): K | null {
   return kinds.length > 1 ? selected : null;
+}
+
+/** A group already decided (K-11): closed, with its name and count; a tap opens it. */
+function ClosedGroup({ title, count, testId, children }: { title: string; count: number; testId: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <details className="group rounded-xl border border-border bg-surface" data-testid={testId}>
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 [&::-webkit-details-marker]:hidden">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            {title}
+            <span className="chip chip-offline">{count}</span>
+          </h2>
+          <span className="text-sm font-semibold text-accent">
+            <span className="group-open:hidden">Mostra</span>
+            <span className="hidden group-open:inline">Nascondi</span>
+          </span>
+        </summary>
+        <div className="space-y-3 border-t border-border p-3">{children}</div>
+      </details>
+    </section>
+  );
 }
 
 function Section({
