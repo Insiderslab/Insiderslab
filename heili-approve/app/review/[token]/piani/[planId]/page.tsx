@@ -200,6 +200,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
           switcher={switcher}
           quick={<QuickReviewLink basePath={planPath} />}
           compact={sfoglia}
+          introToken={token}
         >
           {content}
         </MonthFrame>

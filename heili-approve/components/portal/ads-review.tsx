@@ -60,6 +60,7 @@ import {
 } from "./helpers";
 import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import KindLabel from "./kind-label";
+import PortalIntro from "./portal-intro";
 import {
   AssistantActionButton,
   DecisionBar,
@@ -683,6 +684,9 @@ export default function AdsReview({
       />
 
       {outcome === null && !post.canAct && <AdsStatusNotice post={post} hasEmail={reviewerHasEmail} />}
+
+      {/* First visit: one compact row (K-10); the variants below can be long. */}
+      <PortalIntro token={token} />
 
       {changesSlot}
 

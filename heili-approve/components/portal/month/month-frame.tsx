@@ -8,6 +8,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { PlanProgressBar } from "@/components/plans/plan-bits";
 import type { PlanProgress } from "@/lib/plan-rules";
+import PortalIntro from "../portal-intro";
 
 export default function MonthFrame({
   backHref,
@@ -18,6 +19,7 @@ export default function MonthFrame({
   switcher,
   quick,
   compact = false,
+  introToken,
   children,
 }: {
   backHref: string;
@@ -31,6 +33,8 @@ export default function MonthFrame({
   /** The way into Sfoglia (Griglia and Anteprima Instagram). */
   quick?: ReactNode;
   compact?: boolean;
+  /** The link token: on a first visit, the compact «Come funziona» row under the header (K-10). */
+  introToken?: string;
   children: ReactNode;
 }) {
   return (
@@ -59,6 +63,7 @@ export default function MonthFrame({
           {progress.inReview > 0 && quick}
         </header>
       )}
+      {!compact && introToken && <PortalIntro token={introToken} />}
       {children}
     </div>
   );

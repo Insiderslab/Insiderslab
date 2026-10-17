@@ -23,6 +23,7 @@ import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
 import { SKIP_REASON_LABELS, planProgress, selectApproveAll, type ApproveAllSkipReason } from "@/lib/plan-rules";
 import BottomSheet from "./bottom-sheet";
+import PortalIntro from "./portal-intro";
 import { messageLooksLong, portalStatusLabel, portalTone } from "./helpers";
 import { DecisionBar, SheetButtons, SheetError } from "./review-pieces";
 import type { PortalPlan, PortalPlanPost } from "./types";
@@ -200,6 +201,9 @@ export default function PlanReview({
           </div>
         )}
       </header>
+
+      {/* First visit: one compact row under the plan's card (K-10). */}
+      <PortalIntro token={token} />
 
       {/* One level of views (K-13): the grid and the Instagram preview are in the switch above. */}
       <section className="space-y-3" aria-labelledby="plan-posts">

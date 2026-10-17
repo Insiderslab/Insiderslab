@@ -259,21 +259,26 @@ for (const [label, options] of SIZES) {
     expect(await smallControls(page, '[data-testid="portal-intro"]')).toEqual([]);
     await viewportShot(page, `intro-cliente-${label}.png`);
 
-    // In the flow, never on the bar or on Heili's button, wherever the page is scrolled.
-    for (const scroll of [0, 300]) {
-      await page.evaluate((y) => window.scrollTo(0, y), scroll);
+    // In the flow (never fixed), so never on the bar or on Heili's button. K-10: it sits under
+    // the preview, so it is checked where the client reads it, at the top and in the middle of the window.
+    expect(await intro.evaluate((el) => getComputedStyle(el).position)).toBe("static");
+    // The content comes first: the preview starts above the intro.
+    const preview = await page.getByRole("region", { name: "Anteprima del post" }).boundingBox();
+    expect(preview.y).toBeLessThan((await intro.boundingBox()).y);
+    for (const block of ["start", "center"]) {
+      await intro.evaluate((el, b) => el.scrollIntoView({ block: b }), block);
       await page.waitForTimeout(200);
       const box = await intro.boundingBox();
       if (!box || box.y + box.height <= 0) continue;
       for (const other of [page.locator(".sticky.bottom-0").last(), page.getByTestId("heili-dock-button")]) {
         const otherBox = await other.boundingBox();
-        expect(overlap(box, otherBox), `${label}px, scroll ${scroll}: l'introduzione copre ${await other.getAttribute("data-testid") ?? "la barra"}`).toBe(false);
+        expect(overlap(box, otherBox), `${label}px, ${block}: l'introduzione copre ${await other.getAttribute("data-testid") ?? "la barra"}`).toBe(false);
       }
       expect(box.x + box.width).toBeLessThanOrEqual(width);
     }
 
     // «Ho capito» closes it; a reload and the home do not bring it back.
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await intro.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await intro.getByRole("button", { name: "Ho capito" }).click();
     await expect(intro).toHaveCount(0);
     await page.reload();

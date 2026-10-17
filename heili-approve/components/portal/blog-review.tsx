@@ -32,6 +32,7 @@ import CommentComposer, { type CommentDraft, type CommentSubmission } from "./co
 import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
+import PortalIntro from "./portal-intro";
 import {
   AssistantActionButton,
   DecisionBar,
@@ -526,6 +527,8 @@ export default function BlogReview({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)] lg:items-start">
         <div className="space-y-4">
+          {/* First visit: one compact row (K-10); an article is too long to put it after. */}
+          <PortalIntro token={token} />
           {changesSlot}
           <section ref={readerRef} aria-label="Articolo" className="scroll-mt-4 rounded-[20px] border border-border bg-background px-4 py-6 sm:px-6">
             <BlogReader content={post.content} html={post.html} comments={readerComments}

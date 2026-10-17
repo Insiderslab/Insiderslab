@@ -78,6 +78,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
         switcher={<ViewSwitch basePath={monthPath} view={view} views={MONTH_VIEWS} />}
         quick={<QuickReviewLink basePath={monthPath} />}
         compact={sfoglia}
+        introToken={token}
       >
         {sfoglia ? (
           <Browse
