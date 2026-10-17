@@ -192,7 +192,9 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   expect(new Set(posts.map((p) => p.planId)).size).toBe(1);
   expect(posts[0].planId).toBeTruthy();
 
-  // "Manda in revisione" goes to the plan, where the plan is sent to the client.
+  // The summary and the next step: the plan, where the plan is sent to the client.
+  await expect(page.getByTestId("import-result-summary")).toHaveText("3 bozze create");
+  await expect(page.getByTestId("import-send-review")).toHaveText("Apri il piano e invialo al cliente");
   const href = await page.getByTestId("import-send-review").getAttribute("href");
   expect(href).toBe(`/plans/${posts[0].planId}`);
   await page.getByTestId("import-send-review").click();

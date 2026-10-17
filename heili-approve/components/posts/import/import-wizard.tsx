@@ -27,7 +27,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { checkImportAction, createImportAction } from "@/app/(dashboard)/posts/import/actions";
 import DropZone from "@/components/posts/import/drop-zone";
-import ImportSummary, { plural } from "@/components/posts/import/import-summary";
+import ImportSummary, { importSummaryLine, plural } from "@/components/posts/import/import-summary";
 import ImportRow, { type DroppedFile, type EditableRow } from "@/components/posts/import/import-row";
 import TemplateHelp from "@/components/posts/import/template-help";
 import { formatBytes } from "@/components/posts/helpers";
@@ -432,14 +432,21 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
             <h2 id="import-done" tabIndex={-1} className="text-xl font-semibold outline-none" data-testid="import-result-title">
               {finished.created === 0 ? "Nessuna nuova bozza" : finished.created === 1 ? "Creata 1 bozza" : `Create ${finished.created} bozze`}
             </h2>
+            <p className="text-base font-semibold" data-testid="import-result-summary">
+              {importSummaryLine(finished)}
+            </p>
             <p className="text-sm text-muted">
               Per {client.name}.
               {finished.existing > 0 ? ` ${plural(finished.existing, "riga era", "righe erano")} già importata: non ${finished.existing === 1 ? "è stata duplicata" : "sono state duplicate"}.` : ""}
-              {finished.failed > 0 ? ` ${plural(finished.failed, "riga non è stata creata", "righe non sono state create")}.` : ""}
+              {finished.failed > 0 ? ` ${plural(finished.failed, "riga non è stata creata", "righe non sono state create")}: le trovi in rosso qui sotto.` : ""}
             </p>
           </div>
           <p className="inset p-3 text-sm">
-            Sono bozze: il cliente non vede ancora nulla. Quando sono pronte, le mandi in revisione tu.
+            <strong className="font-semibold">Passo successivo:</strong>{" "}
+            {finished.plan?.status === "ok"
+              ? "apri il piano e premi «Invia il piano al cliente»: riceve un solo messaggio per tutto il mese."
+              : "controlla le bozze e inviale al cliente (puoi sceglierle tutte insieme nell'elenco)."}{" "}
+            Fino ad allora il cliente non vede nulla.
           </p>
 
           {finished.plan?.status === "ok" && (
@@ -451,7 +458,7 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
 
           <div className="flex flex-wrap gap-2">
             <Link href={reviewHref} className="btn btn-primary" data-testid="import-send-review">
-              Manda in revisione
+              {finished.plan?.status === "ok" ? "Apri il piano e invialo al cliente" : "Invia al cliente"}
             </Link>
             {finished.plan?.status === "ok" ? (
               <Link href={`/posts?clientId=${client.id}`} className="btn">
@@ -470,7 +477,7 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
                   scheduleCheck(rows, files);
                 }}
               >
-                Torna alle righe
+                {finished.failed === 1 ? "Sistema la riga da correggere" : `Sistema le ${finished.failed} righe da correggere`}
               </button>
             )}
           </div>
@@ -492,7 +499,7 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
               </span>
               {item.status === "created" && <ToneChip tone="success">Bozza creata</ToneChip>}
               {item.status === "existing" && <ToneChip tone="neutral">Già presente</ToneChip>}
-              {item.status === "failed" && <ToneChip tone="error">Non creata</ToneChip>}
+              {item.status === "failed" && <ToneChip tone="error">Da sistemare</ToneChip>}
             </li>
           ))}
         </ul>
