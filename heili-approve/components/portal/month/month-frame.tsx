@@ -28,7 +28,7 @@ export default function MonthFrame({
   heading: string;
   progress: PlanProgress;
   switcher: ReactNode;
-  /** The phone shortcut into Sfoglia (Griglia only). */
+  /** The way into Sfoglia (Griglia and Anteprima Instagram). */
   quick?: ReactNode;
   compact?: boolean;
   children: ReactNode;

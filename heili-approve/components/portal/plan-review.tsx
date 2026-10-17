@@ -49,7 +49,7 @@ export default function PlanReview({
   homeHref: string;
   /** "Panoramica · Griglia · Anteprima Instagram · Sfoglia" switch, under the way back. */
   modeSlot?: ReactNode;
-  /** Phones: «Sfoglia i post, uno alla volta», the way into Sfoglia. */
+  /** «Sfoglia i post, uno alla volta»: the one primary invitation (QA-13). */
   quickReviewSlot?: ReactNode;
 }) {
   const router = useRouter();
@@ -180,14 +180,19 @@ export default function PlanReview({
               : "Hai rivisto tutti i post del piano. Grazie!"}
           </p>
         ) : (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {/* «Approva tutto il piano» lives in the sticky bar below (QA-15): one invitation, not two. */}
+          // QA-13: one primary invitation, on every screen: «Sfoglia i post, uno alla volta».
+          // Opening the first post stays possible as a plain link; «Approva tutto il piano»
+          // lives in the sticky bar below (QA-15).
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-5">
             {quickReviewSlot}
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                // On phones «Sfoglia i post, uno alla volta» is the one primary action.
-                className={`btn btn-primary min-h-12 order-1${quickReviewSlot ? " max-sm:!border-line-strong max-sm:!bg-surface max-sm:!text-foreground" : ""}`}
+                className={
+                  quickReviewSlot
+                    ? "inline-flex min-h-11 items-center justify-center text-sm font-semibold text-accent underline underline-offset-2"
+                    : "btn btn-primary min-h-12"
+                }
               >
                 Apri il primo post
               </Link>
