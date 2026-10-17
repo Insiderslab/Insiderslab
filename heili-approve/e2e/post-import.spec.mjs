@@ -176,7 +176,7 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   await expect(page.getByText(/Crea anche il piano di \w+ \d{4}/)).toBeVisible();
   await page.getByTestId("import-create").click();
 
-  await expect(page.getByTestId("import-result-title")).toHaveText("Create 3 bozze", { timeout: 60_000 });
+  await expect(page.getByTestId("import-result-title")).toHaveText("3 bozze create", { timeout: 60_000 });
   // The agency shell scrolls inside <main>: after creating, the result is at the top (QA-03).
   await expect(page.getByTestId("import-result-title")).toBeInViewport();
   await expect(page.getByTestId("import-result-list").getByText("Bozza creata")).toHaveCount(3);
@@ -193,7 +193,6 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   expect(posts[0].planId).toBeTruthy();
 
   // The summary and the next step: the plan, where the plan is sent to the client.
-  await expect(page.getByTestId("import-result-summary")).toHaveText("3 bozze create");
   await expect(page.getByTestId("import-send-review")).toHaveText("Apri il piano e invialo al cliente");
   const href = await page.getByTestId("import-send-review").getAttribute("href");
   expect(href).toBe(`/plans/${posts[0].planId}`);
@@ -248,7 +247,7 @@ test("450 righe incollate: lette tutte, create a gruppi con l'avanzamento, nessu
   await page.getByTestId("import-create").click();
   await expect(page.getByTestId("import-progress")).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "Bozze create" })).toBeVisible();
-  await expect(page.getByTestId("import-result-title")).toHaveText("Create 449 bozze", { timeout: 300_000 });
+  await expect(page.getByTestId("import-result-title")).toHaveText("449 bozze create", { timeout: 300_000 });
   const { rows: made } = await db.query(
     `select count(*)::int as n, count(*) filter (where status <> 'DRAFT')::int as other from "Post" where title like 'E2E import lungo %'`
   );
@@ -302,7 +301,7 @@ test("la colonna «Formato» arriva fino alla bozza: un Reel resta un Reel, e si
   await expect(row).toHaveAttribute("data-state", "ready");
   await expect(row.getByTestId("import-format-read")).toContainText("Instagram: Reel");
   await page.getByTestId("import-create").click();
-  await expect(page.getByTestId("import-result-title")).toHaveText("Creata 1 bozza", { timeout: 60_000 });
+  await expect(page.getByTestId("import-result-title")).toHaveText("1 bozza creata", { timeout: 60_000 });
   const { rows } = await db.query(`select "networkOptions" from "Post" where title = 'E2E import Reel'`);
   expect(rows).toHaveLength(1);
   expect(rows[0].networkOptions).toEqual({ instagramData: { type: "REEL" } });

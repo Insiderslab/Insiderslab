@@ -430,11 +430,8 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
         <div className="panel space-y-4 p-5 sm:p-6">
           <div className="space-y-1">
             <h2 id="import-done" tabIndex={-1} className="text-xl font-semibold outline-none" data-testid="import-result-title">
-              {finished.created === 0 ? "Nessuna nuova bozza" : finished.created === 1 ? "Creata 1 bozza" : `Create ${finished.created} bozze`}
-            </h2>
-            <p className="text-base font-semibold" data-testid="import-result-summary">
               {importSummaryLine(finished)}
-            </p>
+            </h2>
             <p className="text-sm text-muted">
               Per {client.name}.
               {finished.existing > 0 ? ` ${plural(finished.existing, "riga era", "righe erano")} già importata: non ${finished.existing === 1 ? "è stata duplicata" : "sono state duplicate"}.` : ""}

@@ -328,10 +328,10 @@ export default function PostEditor({
               </div>
             </div>
 
-            <div className="grid gap-5 border-t border-border pt-5 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
+            <div className="grid gap-5 border-t border-border pt-5 2xl:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
               <div>
                 <span className={labelClass}>Pubblicazione</span>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
                   <input
                     type="date"
                     aria-label="Data di pubblicazione"
