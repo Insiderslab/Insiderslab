@@ -90,6 +90,19 @@ export function groupPortalPosts<T extends GroupablePost>(posts: readonly T[], n
   return groups;
 }
 
+/** How many items of a long home list are shown before «Mostra gli altri N» (K-11). */
+export const HOME_LIST_FIRST = 10;
+
+/**
+ * A long list of the home split into the first items, shown, and the rest,
+ * one tap away (K-11 / QA-12). Nothing is dropped; a list just over the
+ * limit is shown whole (no «Mostra gli altri 2»).
+ */
+export function firstOfList<T>(items: readonly T[], first = HOME_LIST_FIRST): { shown: T[]; more: T[] } {
+  if (items.length <= first + 2) return { shown: [...items], more: [] };
+  return { shown: items.slice(0, first), more: items.slice(first) };
+}
+
 /**
  * Post to open after the current one: the next post awaiting review in
  * publish order, wrapping around; never the current post itself.
@@ -306,7 +319,7 @@ export interface PortalWording {
   position: (position: number, total: number) => string;
   /** "Prossimo post →". */
   nextLabel: string;
-  /** "C'è ancora un post da rivedere." */
+  /** "C'è ancora un post da approvare." */
   remaining: (count: number) => string;
   /** "Hai rivisto tutti i post in attesa. Grazie!" */
   allDone: string;
@@ -322,7 +335,7 @@ export function portalWording(kinds: readonly ContentKind[]): PortalWording {
     position: (position, total) => `${capital} ${position} di ${total} da approvare`,
     nextLabel: nextLabel(kinds),
     remaining: (count) =>
-      count === 1 ? `C'è ancora un ${noun.one} da rivedere.` : `Ci sono ancora ${count} ${noun.many} da rivedere.`,
+      count === 1 ? `C'è ancora un ${noun.one} da approvare.` : `Ci sono ancora ${count} ${noun.many} da approvare.`,
     allDone: `Hai rivisto tutti ${noun.theMany} in attesa. Grazie!`,
     homeLabel: `Torna all'elenco ${noun.ofMany}`,
   };
@@ -492,6 +505,27 @@ export function formatPlanSlot(date: Date, timeZone: string | null | undefined):
     hourCycle: "h23",
   });
   return `${p.weekday} ${p.day} ${p.month} · ${p.hour}:${p.minute}`;
+}
+
+/** "ven 6 nov · 09:30": the compact slot under a tile of the Griglia, in the client's time zone. */
+export function formatGridSlot(date: Date, timeZone: string | null | undefined): string {
+  const p = dateParts(date, safeTimeZone(timeZone), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return `${p.weekday} ${p.day} ${p.month} · ${p.hour}:${p.minute}`;
+}
+
+/**
+ * Whether the agency's message of a plan needs «Leggi tutto» (shown in four
+ * lines, K-09): a first guess for the server render, before the browser measures it.
+ */
+export function messageLooksLong(text: string): boolean {
+  return text.trim().split("\n").length > 4 || text.trim().length > 160;
 }
 
 /**

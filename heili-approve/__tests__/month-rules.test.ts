@@ -195,7 +195,7 @@ describe("Sfoglia progress and summary", () => {
   it("summarises the end: approved, with comments, still to decide", () => {
     const summary = browseSummary(items);
     expect(summary).toEqual({ total: 6, approved: 2, withComments: 2, waiting: 1, locked: 1 });
-    expect(browseSummaryText(summary)).toBe("2 approvati, 2 con commenti, 1 da decidere");
+    expect(browseSummaryText(summary)).toBe("2 approvati, 2 con commenti, 1 da approvare");
     expect(browseSummaryText({ approved: 10, withComments: 2, waiting: 0 })).toBe("10 approvati, 2 con commenti");
     expect(browseSummaryText({ approved: 1, withComments: 1, waiting: 0 })).toBe("1 approvato, 1 con commento");
     expect(browseSummaryText({ approved: 0, withComments: 0, waiting: 0 })).toBe("nessun post deciso");

@@ -117,6 +117,8 @@ export function guideStatusSentence(context: Pick<HeiliPageContext, "page" | "ti
         return `Sei nel ${lowerFirst(title)}`;
       case "plan-grid":
         return `Sei nella griglia del ${lowerFirst(title)}`;
+      case "plan-instagram":
+        return `Sei nell'anteprima Instagram del ${lowerFirst(title)}`;
       case "browse":
         return `Stai sfogliando ${lowerFirst(title)}`;
       case "month":

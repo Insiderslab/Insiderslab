@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import InstagramGrid, { type GridTile } from "@/components/plans/instagram-grid";
+import type { GridTile } from "@/components/plans/instagram-grid";
 import Browse from "@/components/portal/month/browse";
 import { loadBrowsePosts } from "@/components/portal/month/browse-data";
+import InstagramView from "@/components/portal/month/instagram-view";
 import MonthFrame from "@/components/portal/month/month-frame";
 import MonthGrid, { monthGridTiles } from "@/components/portal/month/month-grid";
 import ViewSwitch, { QuickReviewLink } from "@/components/portal/month/view-switch";
@@ -19,10 +20,10 @@ import type { HeiliDestination, HeiliPageKind } from "@/components/portal/heili/
 import PlanReview from "@/components/portal/plan-review";
 import type { PortalPlan } from "@/components/portal/types";
 import { NotFoundError } from "@/lib/errors";
-import { parseMonthView, parsePosition, viewPath, type MonthView } from "@/lib/month-rules";
-import { byPublishAsc, instagramGridOrder, planHeading, planMonthName, planProgress } from "@/lib/plan-rules";
+import { parseMonthView, parsePosition, planViews, postLinkQuery, viewPath } from "@/lib/month-rules";
+import { byPublishAsc, instagramGridOrder, isInstagramFeedPost, planHeading, planMonthName, planProgress } from "@/lib/plan-rules";
 import { getPlanForReviewer, openClientCommentCounts, type ReviewerPlan } from "@/lib/plans";
-import { listPostsForReviewer, type ReviewerRef } from "@/lib/posts";
+import { listPostsForReviewer, listPublishedInstagramPosts, type ReviewerRef } from "@/lib/posts";
 import { isAssistantEnabled } from "@/lib/review-assistant";
 import { getPortalReviewer } from "../../reviewer";
 
@@ -32,8 +33,6 @@ type ReviewPlanPageProps = {
   params: Promise<{ token: string; planId: string }>;
   searchParams?: Promise<PlanSearch>;
 };
-
-const PLAN_VIEWS: readonly MonthView[] = ["panoramica", "griglia", "sfoglia"];
 
 async function loadPlan(planId: string, reviewer: ReviewerRef): Promise<ReviewerPlan> {
   try {
@@ -51,10 +50,12 @@ const TILE_TONE = { action: "brand", waiting: "stale", done: "fresh" } as const;
  * that the agency sent (never a draft plan, never another client's: both are
  * "not found"), and of its posts only those visible to the client, at the
  * version they were sent with (listPostsForReviewer).
+ *
+ * Views (`?vista=`): Panoramica (the list), Griglia (every content, compact),
+ * Anteprima Instagram (only with Instagram feed posts in the plan) and Sfoglia.
  */
 export default async function ReviewPlanPage({ params, searchParams }: ReviewPlanPageProps) {
   const [{ token, planId }, query] = await Promise.all([params, searchParams ?? ({} as PlanSearch)]);
-  const view = parseMonthView(query.vista, { allowed: PLAN_VIEWS });
   const reviewer = await getPortalReviewer(token);
   if (!reviewer) return null; // the layout shows the invalid-link page
 
@@ -62,6 +63,9 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
   const plan = await loadPlan(planId, ref);
   const summaries = await listPostsForReviewer(ref, { planId: plan.id });
   const posts = byPublishAsc(summaries.filter((p) => p.planId === plan.id && p.kind === plan.kind));
+  const feedPosts = posts.filter(isInstagramFeedPost);
+  const views = planViews(feedPosts.length > 0);
+  const view = parseMonthView(query.vista, { allowed: views });
   const comments = await openClientCommentCounts(posts.filter((p) => p.canAct).map((p) => p.id));
 
   const timeZone = reviewer.client.timezone;
@@ -103,7 +107,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
   };
 
   const planPath = portalPlanPath(token, plan.id);
-  const switcher = <ViewSwitch basePath={planPath} view={view} views={PLAN_VIEWS} />;
+  const switcher = <ViewSwitch basePath={planPath} view={view} views={views} />;
 
   // Heili in this plan: server-built destinations for the current view.
   const progressAll = planProgress(posts.map((p) => p.status));
@@ -119,7 +123,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
     list.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
     return list;
   };
-  const heiliSummary = `${progressAll.total} post, ${progressAll.inReview} da rivedere`;
+  const heiliSummary = `${progressAll.total} post, ${progressAll.inReview} da approvare`;
   const heiliTitle = portalPlan.heading.charAt(0).toLowerCase() + portalPlan.heading.slice(1);
   const heiliSlot = (page: HeiliPageKind) => (
     <HeiliPage
@@ -133,13 +137,60 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
     />
   );
 
-  // Griglia and Sfoglia: every post of the month, same data and rules as the overview.
+  // Griglia, Anteprima Instagram and Sfoglia: same data and rules as the overview.
   if (view !== "panoramica") {
     const progress = planProgress(posts.map((p) => p.status));
     const sfoglia = view === "sfoglia";
+    const content =
+      view === "sfoglia" ? (
+        <Browse
+          token={token}
+          scope={{ kind: "plan", planId: plan.id }}
+          posts={await loadBrowsePosts({ token, reviewer: ref, summaries: posts, timeZone, now })}
+          backHref={planPath}
+          backLabel="Torna al piano"
+          startPosition={parsePosition(query.i)}
+          schedulingOn={reviewer.client.autoSchedule && reviewer.client.metricoolBlogId !== null}
+          clientName={reviewer.client.name}
+          logoUrl={reviewer.client.logoUrl}
+          timeZone={timeZone}
+          assistantEnabled={isAssistantEnabled()}
+        />
+      ) : view === "instagram" ? (
+        <InstagramView
+          tiles={instagramGridOrder(feedPosts).map((p): GridTile => {
+            const tone = portalTone(p.status, p.canAct);
+            return {
+              id: p.id,
+              title: p.title,
+              cover: p.cover,
+              mediaCount: p.mediaCount,
+              excerpt: p.excerpt,
+              dateLabel: formatPlanSlot(p.publishAt, timeZone),
+              status: { label: portalStatusLabel(p.kind, p.status), tone: TILE_TONE[tone] },
+              reel: p.instagramFormat === "REEL",
+              href: `${portalPath(token, p.id)}${postLinkQuery("instagram")}`,
+            };
+          })}
+          published={(await listPublishedInstagramPosts(reviewer.clientId, { before: now, excludePlanId: plan.id })).map(
+            (p): GridTile => ({
+              id: p.id,
+              title: p.title,
+              cover: p.cover,
+              mediaCount: p.mediaCount,
+              excerpt: p.excerpt,
+              dateLabel: formatPlanSlot(p.publishAt, timeZone),
+            })
+          )}
+          accountName={reviewer.client.name}
+          logoUrl={reviewer.client.logoUrl}
+        />
+      ) : (
+        <MonthGrid tiles={monthGridTiles({ token, posts, timeZone })} monthLabel={portalPlan.monthName} />
+      );
     return (
       <main>
-        {heiliSlot(sfoglia ? "browse" : "plan-grid")}
+        {heiliSlot(sfoglia ? "browse" : view === "instagram" ? "plan-instagram" : "plan-grid")}
         <MonthFrame
           backHref={planPath}
           backLabel="Piano del mese"
@@ -149,47 +200,13 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
           switcher={switcher}
           quick={<QuickReviewLink basePath={planPath} />}
           compact={sfoglia}
+          introToken={token}
         >
-          {sfoglia ? (
-            <Browse
-              token={token}
-              scope={{ kind: "plan", planId: plan.id }}
-              posts={await loadBrowsePosts({ token, reviewer: ref, summaries: posts, timeZone, now })}
-              backHref={planPath}
-              backLabel="Torna al piano"
-              startPosition={parsePosition(query.i)}
-              schedulingOn={reviewer.client.autoSchedule && reviewer.client.metricoolBlogId !== null}
-              clientName={reviewer.client.name}
-              logoUrl={reviewer.client.logoUrl}
-              timeZone={timeZone}
-              assistantEnabled={isAssistantEnabled()}
-            />
-          ) : (
-            <MonthGrid
-              tiles={monthGridTiles({ token, posts, timeZone })}
-              accountName={reviewer.client.name}
-              logoUrl={reviewer.client.logoUrl}
-              monthLabel={portalPlan.monthName}
-            />
-          )}
+          {content}
         </MonthFrame>
       </main>
     );
   }
-
-  const tiles: GridTile[] = instagramGridOrder(posts.filter((p) => p.networks.includes("instagram"))).map((p) => {
-    const tone = portalTone(p.status, p.canAct);
-    return {
-      id: p.id,
-      title: p.title,
-      cover: p.cover,
-      mediaCount: p.mediaCount,
-      excerpt: p.excerpt,
-      dateLabel: formatPlanSlot(p.publishAt, timeZone),
-      status: { label: portalStatusLabel(p.kind, p.status), tone: TILE_TONE[tone] },
-      href: portalPath(token, p.id),
-    };
-  });
 
   return (
     <main>
@@ -200,14 +217,6 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
         homeHref={portalPath(token)}
         modeSlot={switcher}
         quickReviewSlot={<QuickReviewLink basePath={planPath} />}
-        gridSlot={
-          <InstagramGrid
-            tiles={tiles}
-            accountName={reviewer.client.name}
-            logoUrl={reviewer.client.logoUrl}
-            caption={`${tiles.length} post Instagram del piano`}
-          />
-        }
       />
     </main>
   );

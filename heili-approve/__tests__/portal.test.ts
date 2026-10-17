@@ -205,8 +205,8 @@ describe("wording per kind", () => {
     expect(wording.backLabel).toBe("← Tutti i post");
     expect(wording.position(1, 3)).toBe("Post 1 di 3 da approvare");
     expect(wording.nextLabel).toBe("Prossimo post →");
-    expect(wording.remaining(1)).toBe("C'è ancora un post da rivedere.");
-    expect(wording.remaining(2)).toBe("Ci sono ancora 2 post da rivedere.");
+    expect(wording.remaining(1)).toBe("C'è ancora un post da approvare.");
+    expect(wording.remaining(2)).toBe("Ci sono ancora 2 post da approvare.");
     expect(wording.allDone).toBe("Hai rivisto tutti i post in attesa. Grazie!");
     expect(wording.homeLabel).toBe("Torna all'elenco dei post");
     expect(portalTitle(["SOCIAL_POST"])).toBe("Post da approvare");

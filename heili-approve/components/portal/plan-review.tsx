@@ -4,8 +4,7 @@
  * Client portal — a monthly plan ("Piano social di ottobre").
  *
  * The agency's message for the month, how far along the client is ("3 di 12
- * approvati"), the Instagram profile-grid preview (server-rendered slot),
- * then every post of the month in calendar order as compact cards that open
+ * approvati"), then every post of the month in calendar order as compact cards that open
  * the usual review page. "Approva tutto il piano" approves, in one step,
  * every post still waiting for the client at the version shown here; posts
  * with the client's own open comments or with changes requested are left
@@ -17,14 +16,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { addPlanCommentAction, approvePlanAction } from "@/components/portal/safe-actions";
-import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
+import { PlanProgressBar } from "@/components/plans/plan-bits";
 import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
 import { SKIP_REASON_LABELS, planProgress, selectApproveAll, type ApproveAllSkipReason } from "@/lib/plan-rules";
 import BottomSheet from "./bottom-sheet";
-import { portalStatusLabel, portalTone } from "./helpers";
+import PortalIntro from "./portal-intro";
+import { messageLooksLong, portalStatusLabel, portalTone } from "./helpers";
 import { DecisionBar, SheetButtons, SheetError } from "./review-pieces";
 import type { PortalPlan, PortalPlanPost } from "./types";
 
@@ -42,18 +42,15 @@ export default function PlanReview({
   token,
   plan,
   homeHref,
-  gridSlot,
   modeSlot,
   quickReviewSlot,
 }: {
   token: string;
   plan: PortalPlan;
   homeHref: string;
-  /** Server-rendered Instagram grid. */
-  gridSlot: ReactNode;
-  /** "Panoramica · Griglia · Sfoglia" switch, under the way back. */
+  /** "Panoramica · Griglia · Anteprima Instagram · Sfoglia" switch, under the way back. */
   modeSlot?: ReactNode;
-  /** Phones: «Sfoglia i post, uno alla volta», the way into Sfoglia. */
+  /** «Sfoglia i post, uno alla volta»: the one primary invitation (QA-13). */
   quickReviewSlot?: ReactNode;
 }) {
   const router = useRouter();
@@ -161,7 +158,7 @@ export default function PlanReview({
               ? "L'agenzia li riceve subito e verranno programmati per le loro date."
               : "L'agenzia li riceve subito e li programmerà per le loro date."}
           </p>
-          {outcome.skipped.length > 0 && <SkippedList skipped={outcome.skipped} title="Da decidere uno per uno:" />}
+          {outcome.skipped.length > 0 && <SkippedList skipped={outcome.skipped} title="Da guardare uno per uno:" />}
         </section>
       )}
 
@@ -172,12 +169,7 @@ export default function PlanReview({
             {plan.heading}
           </h1>
         </div>
-        {plan.intro && (
-          <div className="inset space-y-1 p-4">
-            <p className="label-caps">Il messaggio dell&apos;agenzia</p>
-            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed">{plan.intro}</p>
-          </div>
-        )}
+        {plan.intro && <AgencyMessage text={plan.intro} />}
         <PlanProgressBar progress={progress} />
         {waiting > 0 && plan.dueLabel && (
           <p className="text-sm font-medium text-warning">Ti chiediamo di rispondere entro {plan.dueLabel}.</p>
@@ -189,14 +181,19 @@ export default function PlanReview({
               : "Hai rivisto tutti i post del piano. Grazie!"}
           </p>
         ) : (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {/* «Approva tutto il piano» lives in the sticky bar below (QA-15): one invitation, not two. */}
+          // QA-13: one primary invitation, on every screen: «Sfoglia i post, uno alla volta».
+          // Opening the first post stays possible as a plain link; «Approva tutto il piano»
+          // lives in the sticky bar below (QA-15).
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-5">
             {quickReviewSlot}
             {firstToReview && (
               <Link
                 href={firstToReview.href}
-                // On phones «Sfoglia i post, uno alla volta» is the one primary action.
-                className={`btn btn-primary min-h-12 order-1${quickReviewSlot ? " max-sm:!border-line-strong max-sm:!bg-surface max-sm:!text-foreground" : ""}`}
+                className={
+                  quickReviewSlot
+                    ? "inline-flex min-h-11 items-center justify-center text-sm font-semibold text-accent underline underline-offset-2"
+                    : "btn btn-primary min-h-12"
+                }
               >
                 Apri il primo post
               </Link>
@@ -205,21 +202,18 @@ export default function PlanReview({
         )}
       </header>
 
-      <PlanViews instagram={<section className="space-y-3" aria-labelledby="plan-grid">
-        <div className="space-y-1">
-          <h2 id="plan-grid" className="text-lg font-semibold">
-            Post Instagram del piano
-          </h2>
-          <p className="text-sm text-muted">Anteprima dei soli post Instagram inclusi nel piano, dal più recente. Non include i contenuti già presenti sul profilo. Tocca un post per aprirlo.</p>
-        </div>
-        {gridSlot}
-      </section>}
+      {/* First visit: one compact row under the plan's card (K-10). */}
+      <PortalIntro token={token} />
 
-      list={<section className="space-y-3" aria-labelledby="plan-posts">
-        <h2 id="plan-posts" className="flex items-center gap-2 text-lg font-semibold">
-          I post del mese
-          <span className="chip chip-offline">{plan.posts.length}</span>
-        </h2>
+      {/* One level of views (K-13): the grid and the Instagram preview are in the switch above. */}
+      <section className="space-y-3" aria-labelledby="plan-posts">
+        <div className="space-y-1">
+          <h2 id="plan-posts" className="flex items-center gap-2 text-lg font-semibold">
+            I post del mese
+            <span className="chip chip-offline">{plan.posts.length}</span>
+          </h2>
+          <p className="text-sm text-muted">Tutti i post del piano in ordine di data, con testo e stato. Tocca un post per aprirlo e decidere.</p>
+        </div>
         <ol className="space-y-2" data-testid="plan-post-list">
           {plan.posts.map((post) => (
             <li key={post.id}>
@@ -227,7 +221,7 @@ export default function PlanReview({
             </li>
           ))}
         </ol>
-      </section>} />
+      </section>
 
       <section className="panel space-y-3 p-5" aria-labelledby="plan-comment">
         <div className="space-y-1">
@@ -328,6 +322,51 @@ export default function PlanReview({
           confirmClass="bg-success text-white hover:opacity-90"
         />
       </BottomSheet>
+    </div>
+  );
+}
+
+/**
+ * The agency's message for the month, four lines at most with «Leggi tutto»:
+ * on a phone the way into the review («Sfoglia i post, uno alla volta») stays
+ * in the first screen (K-09). The whole text is in the page, only clamped.
+ */
+function AgencyMessage({ text }: { text: string }) {
+  const id = useId();
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  // First guess for the server render; the measure below corrects it.
+  const [long, setLong] = useState(() => messageLooksLong(text));
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || expanded || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setLong(element.scrollHeight > element.clientHeight + 1));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  return (
+    <div className="inset space-y-1 p-4" data-testid="plan-intro">
+      <p className="label-caps">Il messaggio dell&apos;agenzia</p>
+      <p
+        ref={ref}
+        id={`${id}-text`}
+        className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed ${expanded ? "" : "line-clamp-4"}`}
+      >
+        {text}
+      </p>
+      {(long || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          aria-expanded={expanded}
+          aria-controls={`${id}-text`}
+          className="-mb-2 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline underline-offset-2"
+        >
+          {expanded ? "Mostra meno" : "Leggi tutto"}
+        </button>
+      )}
     </div>
   );
 }

@@ -66,7 +66,8 @@ export function PlanViews({
 }: {
   list: ReactNode;
   calendar?: ReactNode;
-  instagram: ReactNode;
+  /** «Anteprima Instagram»; undefined (no Instagram feed post in the plan) hides the tab. */
+  instagram?: ReactNode;
 }) {
   const id = useId();
   const [view, setView] = useState<"list" | "calendar" | "instagram">("list");
@@ -74,7 +75,7 @@ export function PlanViews({
   const views = [
     { id: "list" as const, label: "Elenco", content: list },
     ...(calendar === undefined ? [] : [{ id: "calendar" as const, label: "Calendario", content: calendar }]),
-    { id: "instagram" as const, label: "Anteprima Instagram", content: instagram },
+    ...(instagram === undefined ? [] : [{ id: "instagram" as const, label: "Anteprima Instagram", content: instagram }]),
   ];
   function moveTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let next = index;

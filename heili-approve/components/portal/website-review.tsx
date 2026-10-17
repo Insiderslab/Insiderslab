@@ -30,6 +30,7 @@ import CommentComposer, { type CommentDraft, type CommentSubmission } from "./co
 import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
+import PortalIntro from "./portal-intro";
 import {
   AssistantActionButton,
   DecisionBar,
@@ -397,12 +398,14 @@ export default function WebsiteReview({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,.9fr)] lg:items-start">
         <div className="space-y-4">
+          {/* First visit: one compact row (K-10). */}
+          <PortalIntro token={token} />
           {changesSlot}
           <section className="space-y-4 rounded-[20px] border border-border bg-background p-4 sm:p-5" aria-labelledby="site-title">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Giro {content.round}</p>
               <h2 id="site-title" className="mt-1 text-xl font-semibold">
-                Il sito da rivedere
+                Il sito da guardare
               </h2>
               {content.roundNote && (
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm" data-testid="website-round-note">

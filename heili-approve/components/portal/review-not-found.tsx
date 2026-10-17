@@ -18,7 +18,7 @@ export default function ReviewNotFoundView({ noun }: { noun: PortalNoun }) {
     <main className="space-y-4 py-8">
       <h1 className="text-xl font-semibold">Questo {noun.one} non è disponibile</h1>
       <p className="text-base text-muted">
-        Forse l&apos;agenzia lo ha ritirato o lo sta ancora preparando. Trovi tutti {noun.theMany} da rivedere
+        Forse l&apos;agenzia lo ha ritirato o lo sta ancora preparando. Trovi tutti {noun.theMany} da approvare
         nell&apos;elenco.
       </p>
       {token && (

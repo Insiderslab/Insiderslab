@@ -14,7 +14,7 @@ Stefano ha scelto la proposta «Studio» il 9 ottobre 2026 e ha autorizzato l'es
 
 L'editor social raggruppa configurazione e contenuto in due sezioni: «Dove e quando» e «Il contenuto». Media e testo convivono, i campi facoltativi si possono espandere e la preview resta accanto. Salvare una bozza e inviare in revisione sono azioni distinte; reti, formati, controlli, versioni e note di reinvio mantengono le regole esistenti.
 
-Il piano ha tre viste degli stessi contenuti: Elenco, Calendario, Anteprima Instagram. La griglia contiene solo Instagram e non rappresenta l'intero profilo già pubblicato. Nel portale cliente sono disponibili Elenco e Anteprima Instagram, con il percorso di revisione individuale in evidenza.
+Il piano ha tre viste degli stessi contenuti: Elenco, Calendario, Anteprima Instagram. L'Anteprima Instagram (decisione del titolare, 17 ottobre 2026) mostra come apparirà il profilo: solo i post Instagram del feed del piano (niente storie né altre reti), dal più recente, in tre colonne con le proporzioni del feed (4:5) e, sotto, gli ultimi post già pubblicati; senza post Instagram nel piano la vista non compare. Nel portale cliente le viste sono su un solo livello: Panoramica (l'elenco), Griglia (tutti i contenuti del mese a colpo d'occhio, con data e stato), Anteprima Instagram e Sfoglia, con un solo invito principale: «Sfoglia i post, uno alla volta».
 
 «Copia link cliente» è separato da «Apri». La risoluzione dei link verifica ogni volta sessione, workspace, visibilità del contenuto, cliente attivo e referenti attivi. Con un solo referente copia direttamente, quando il browser lo permette; con più persone richiede la scelta. Se la clipboard è bloccata il link resta selezionabile.
 

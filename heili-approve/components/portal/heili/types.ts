@@ -16,6 +16,7 @@ export type HeiliPageKind =
   | "home"
   | "plan"
   | "plan-grid"
+  | "plan-instagram"
   | "browse"
   | "month"
   | "post"
@@ -73,7 +74,7 @@ export interface HeiliPageContext {
   page: HeiliPageKind;
   /** "Piano social di novembre", "Post 3 di 12". */
   title: string;
-  /** "12 post, 3 da rivedere". */
+  /** "12 post, 3 da approvare". */
   summary?: string;
   destinations: HeiliDestination[];
   review?: HeiliReviewContext;

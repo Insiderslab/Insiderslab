@@ -32,6 +32,7 @@ import CommentList from "./comment-list";
 import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import { PORTAL_STATUS_LABELS, mediaName, orderComments, portalPath, portalWording } from "./helpers";
 import KindLabel from "./kind-label";
+import PortalIntro from "./portal-intro";
 import {
   AssistantActionButton,
   DecisionBar,
@@ -615,6 +616,8 @@ export default function PostReview({
             registerTimeGetter={hasVideo ? registerTimeGetter : undefined}
             seekTo={seek}
           />
+          {/* First visit: one row under the preview, never above the content (K-10). */}
+          <PortalIntro token={token} />
         </section>
 
         <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-2">

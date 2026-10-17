@@ -64,7 +64,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
         context={{
           page: sfoglia ? "browse" : "month",
           title: `i ${heading.charAt(0).toLowerCase()}${heading.slice(1)}`,
-          summary: `${posts.length} post, ${monthProgress.inReview} da rivedere`,
+          summary: `${posts.length} post, ${monthProgress.inReview} da approvare`,
           destinations,
           services: ["SOCIAL_POST"],
         }}
@@ -78,6 +78,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
         switcher={<ViewSwitch basePath={monthPath} view={view} views={MONTH_VIEWS} />}
         quick={<QuickReviewLink basePath={monthPath} />}
         compact={sfoglia}
+        introToken={token}
       >
         {sfoglia ? (
           <Browse
@@ -96,8 +97,6 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
         ) : (
           <MonthGrid
             tiles={monthGridTiles({ token, posts, timeZone, month })}
-            accountName={reviewer.client.name}
-            logoUrl={reviewer.client.logoUrl}
             monthLabel={monthName}
           />
         )}

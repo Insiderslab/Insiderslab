@@ -205,7 +205,7 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await page.getByTestId("browse-next").click();
   const summary = page.getByTestId("browse-summary");
   await expect(summary).toBeVisible();
-  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 1 con commento, 3 da decidere");
+  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 1 con commento, 3 da approvare");
   await expect(summary).toContainText(planPosts[1].title);
   await expectNoHorizontalScroll(page);
   await viewportShot(page, "mese-sfoglia-riepilogo-mobile.png");
@@ -242,20 +242,44 @@ test("griglia: tutti i post con il loro stato; un tocco apre il post con il rito
   const grid = page.getByTestId("month-grid");
   const tiles = grid.getByRole("listitem");
   await expect(tiles).toHaveCount(5);
-  // Newest first, like the profile.
-  await expect(tiles.first()).toContainText(planPosts[4].title);
-  await expect(tiles.last()).toContainText(planPosts[0].title);
+  // Calendar order: the whole month at a glance (K-13; the profile order is «Anteprima Instagram»).
+  await expect(tiles.first()).toContainText(planPosts[0].title);
+  await expect(tiles.last()).toContainText(planPosts[4].title);
   // One waiting (the commented post), four approved or scheduled.
   await expect(grid.locator(".chip", { hasText: "Da approvare" })).toHaveCount(1);
   await expect(grid.locator(".chip", { hasText: /^(Approvato|Programmato)$/ })).toHaveCount(4);
   await expectNoHorizontalScroll(page);
   await viewportShot(page, "mese-griglia-mobile.png");
 
-  await tiles.nth(3).getByRole("link").click(); // the carousel
+  await tiles.nth(1).getByRole("link").click(); // the carousel
   await page.waitForURL(new RegExp(`/posts/${planPosts[1].id}\\?da=griglia`));
   await page.getByTestId("plan-nav").getByRole("link", { name: "← Torna alla griglia" }).click();
   await page.waitForURL(/vista=griglia/);
   await expect(page.getByTestId("month-grid")).toBeVisible();
+  await context.close();
+});
+
+test("anteprima Instagram: i post del feed dal più recente, come sul profilo; un tocco apre il post con il ritorno (K-13)", async ({ browser }) => {
+  const context = await browser.newContext(MOBILE);
+  const page = await context.newPage();
+  const { planPosts } = state.fixture;
+  await page.goto(state.planUrl);
+  await page.getByTestId("view-instagram").click();
+  await page.waitForURL(/vista=instagram/);
+  const view = page.getByTestId("instagram-view");
+  await expect(view.getByRole("heading", { name: "Anteprima Instagram" })).toBeVisible();
+  const tiles = view.getByTestId("instagram-grid").getByRole("listitem");
+  await expect(tiles).toHaveCount(5);
+  // Newest first, like the profile.
+  await expect(tiles.first()).toHaveAttribute("title", new RegExp(planPosts[4].title));
+  await expect(tiles.last()).toHaveAttribute("title", new RegExp(planPosts[0].title));
+  await expectNoHorizontalScroll(page);
+
+  await tiles.first().getByRole("link").click();
+  await page.waitForURL(new RegExp(`/posts/${planPosts[4].id}\\?da=instagram`));
+  await page.getByTestId("plan-nav").getByRole("link", { name: "← Torna all'anteprima Instagram" }).click();
+  await page.waitForURL(/vista=instagram/);
+  await expect(page.getByTestId("instagram-view")).toBeVisible();
   await context.close();
 });
 
@@ -305,7 +329,7 @@ test("mese senza piano: griglia, Sfoglia e «Approva i rimanenti»", async ({ br
   await expect(modes.getByRole("link", { name: "Griglia" })).toHaveAttribute("aria-current", "page");
   const tiles = page.getByTestId("month-grid").getByRole("listitem");
   await expect(tiles).toHaveCount(3);
-  await expect(tiles.first()).toContainText(loosePosts[2].title);
+  await expect(tiles.first()).toContainText(loosePosts[0].title);
   await expect(page.getByTestId("month-grid").locator(".chip", { hasText: "Da approvare" })).toHaveCount(3);
   await expectNoHorizontalScroll(page);
   await viewportShot(page, "mese-senza-piano-mobile.png");
@@ -328,7 +352,7 @@ test("mese senza piano: griglia, Sfoglia e «Approva i rimanenti»", async ({ br
   await page.getByTestId("browse-next").click();
   await expect(cardTitle(page)).toContainText(loosePosts[2].title);
   await page.getByTestId("browse-next").click();
-  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 2 da decidere");
+  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 2 da approvare");
   await page.getByTestId("browse-approve-rest").click();
   await page.getByRole("dialog").getByRole("button", { name: "Sì, approva 2 post" }).click();
   await expect(page.getByTestId("browse-outcome")).toContainText("Fatto! 2 post approvati.");

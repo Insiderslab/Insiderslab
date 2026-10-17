@@ -60,6 +60,7 @@ import {
 } from "./helpers";
 import { DECISION_ROW_CLASS, decisionButtonClass, hasDecisionFeedback, primaryDecision } from "./decision";
 import KindLabel from "./kind-label";
+import PortalIntro from "./portal-intro";
 import {
   AssistantActionButton,
   DecisionBar,
@@ -578,7 +579,7 @@ export default function AdsReview({
   useHeiliPage({
     page: "ads",
     title: `gli annunci «${heiliHeading}»`,
-    summary: canAct ? "Da decidere" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
+    summary: canAct ? "Da approvare" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
     destinations: heiliDestinations,
     services: listKinds,
     review: assistantAvailable
@@ -683,6 +684,9 @@ export default function AdsReview({
       />
 
       {outcome === null && !post.canAct && <AdsStatusNotice post={post} hasEmail={reviewerHasEmail} />}
+
+      {/* First visit: one compact row (K-10); the variants below can be long. */}
+      <PortalIntro token={token} />
 
       {changesSlot}
 
@@ -1065,7 +1069,7 @@ function CampaignSummary({
           {name.trim() || "Campagna senza nome"}
         </h2>
         <p className="text-sm text-muted">
-          {variantCount === 1 ? "1 variante da rivedere" : `${variantCount} varianti da rivedere`}
+          {variantCount === 1 ? "1 variante da decidere" : `${variantCount} varianti da decidere`}
         </p>
       </div>
       {rows.length > 0 && (
