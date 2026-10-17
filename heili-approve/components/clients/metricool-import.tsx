@@ -47,11 +47,23 @@ const OPTIONS: Array<{ action: ImportAction; label: string }> = [
   { action: "skip", label: "Ignora" },
 ];
 
-function initialChoices(rows: ImportRow[]): Record<string, RowChoice> {
+/** The suggested choice of each brand (create, or link by name): what «Seleziona tutti» applies. */
+function suggestedChoices(rows: ImportRow[]): Record<string, RowChoice> {
   const result: Record<string, RowChoice> = {};
   for (const choice of defaultChoices(rows)) {
     result[choice.blogId] = { action: choice.action, clientId: choice.clientId ?? "" };
   }
+  return result;
+}
+
+/**
+ * D-02: nothing is picked at first (a new colleague could create ten clients
+ * with one click). Each brand keeps its suggested client, so choosing
+ * «Collega» or «Seleziona tutti» still proposes the name match.
+ */
+function initialChoices(rows: ImportRow[]): Record<string, RowChoice> {
+  const result: Record<string, RowChoice> = {};
+  for (const [blogId, choice] of Object.entries(suggestedChoices(rows))) result[blogId] = { ...choice, action: "skip" };
   return result;
 }
 
@@ -116,7 +128,7 @@ export default function MetricoolImport({ rows, candidates, fake }: Props) {
   }
 
   function selectAll(all: boolean) {
-    const defaults = initialChoices(rows);
+    const defaults = suggestedChoices(rows);
     setChoices((current) => {
       const next = { ...current };
       for (const row of visible) {
@@ -166,6 +178,9 @@ export default function MetricoolImport({ rows, candidates, fake }: Props) {
             {importable.length} da importare
             {linkedCount > 0 ? ` · ${linkedCount} già collegati` : ""}
             {fake ? " · modalità di prova: brand finti" : ""}
+          </p>
+          <p className="mt-1 text-xs text-muted" data-testid="import-help">
+            Scegli quali brand diventano clienti. Nessun cliente viene creato finché non premi «Importa N clienti».
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -319,7 +334,7 @@ export default function MetricoolImport({ rows, candidates, fake }: Props) {
           ) : (
             <p className="text-muted">
               {picked.length === 0
-                ? "Non hai scelto nessun brand da importare."
+                ? "Scegli «Crea nuovo cliente» o «Collega» sui brand che vuoi, oppure «Seleziona tutti»."
                 : "Puoi rifarlo quando vuoi: i brand già collegati vengono saltati."}
             </p>
           )}
