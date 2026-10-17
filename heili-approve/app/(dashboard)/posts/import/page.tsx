@@ -25,7 +25,7 @@ export async function generateMetadata() {
   return { title: `Importa post - ${productName()}` };
 }
 
-type SearchParams = { clientId?: string | string[] };
+type SearchParams = { clientId?: string | string[]; modo?: string | string[] };
 
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
@@ -80,7 +80,10 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
           </Link>
         </div>
       ) : scoped ? (
-        <ImportWizard client={{ id: scoped.id, name: scoped.name, timezone: scoped.timezone, networks: scoped.networks }} />
+        <ImportWizard
+          client={{ id: scoped.id, name: scoped.name, timezone: scoped.timezone, networks: scoped.networks }}
+          startWith={first(params.modo) === "incolla" ? "paste" : "file"}
+        />
       ) : (
         <section className="panel space-y-4 p-4 sm:p-6" aria-labelledby="pick-client" data-testid="import-pick-client">
           <div className="space-y-1">
@@ -94,7 +97,11 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
             )}
           </div>
           <ClientPicker
-            clients={eligible.map((c) => ({ id: c.id, name: c.name, href: `/posts/import?clientId=${encodeURIComponent(c.id)}` }))}
+            clients={eligible.map((c) => ({
+              id: c.id,
+              name: c.name,
+              href: `/posts/import?clientId=${encodeURIComponent(c.id)}${first(params.modo) === "incolla" ? "&modo=incolla" : ""}`,
+            }))}
             recentIds={await loadRecentClientIds(context.workspaceId)}
             testId="import-client-option"
           />

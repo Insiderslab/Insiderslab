@@ -1,12 +1,14 @@
 /**
- * New Post Page
+ * New Post Page — "Carica contenuti"
  *
- * Empty editor of the chosen kind: `?kind=social|blog|ads`. On instances
- * with several kinds and no kind given, the page first asks for the client
- * (`?clientId=`, also preselected from the clients pages), then offers only
- * that client's services — none to choose when it has exactly one. With a
- * kind, the client select lists only the clients with that service.
- * `?data=YYYY-MM-DD` preselects the day (from the calendar).
+ * Empty editor of the chosen kind: `?kind=social|blog|ads`. Without a kind
+ * this is the one way in to load content: the page first asks for the client
+ * (`?clientId=`, or the menu's client, or the only client), then offers what
+ * can be loaded for it: for social posts "Crea un post", "Importa da Excel o
+ * CSV" and "Incolla righe dal foglio" (the importer), then the client's other
+ * services. A client whose only service is not social goes straight to its
+ * editor. With a kind, the client select lists only the clients with that
+ * service. `?data=YYYY-MM-DD` preselects the day (from the calendar).
  */
 
 import Link from "next/link";
@@ -30,17 +32,65 @@ import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 type SearchParams = { kind?: string | string[]; clientId?: string | string[]; data?: string | string[] };
 
-/** The kind requested in the URL: the requested enabled one, the only one, or null. */
+/**
+ * The kind requested in the URL (if enabled), else the only enabled kind when
+ * it is not social posts (social posts have the "Carica contenuti" choice:
+ * one post, a sheet or pasted rows), else null.
+ */
 function requestedKind(value: string | string[] | undefined): ContentKind | null {
   const kinds = enabledKinds();
-  if (kinds.length === 1) return kinds[0];
   const requested = parseKindParam(value);
-  return requested && kinds.includes(requested) ? requested : null;
+  if (requested && kinds.includes(requested)) return requested;
+  return kinds.length === 1 && kinds[0] !== "SOCIAL_POST" ? kinds[0] : null;
 }
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const kind = requestedKind((await searchParams).kind);
-  return { title: `${kind ? KIND_UI[kind].newTitle : "Nuovo contenuto"} - ${productName()}` };
+  return { title: `${kind ? KIND_UI[kind].newTitle : "Carica contenuti"} - ${productName()}` };
+}
+
+/** "Crea un post · Importa da Excel o CSV · Incolla righe": the three ways to load social posts. */
+function SocialLoadCards({ clientId, day }: { clientId: string; day: string | null }) {
+  const importHref = `/posts/import?clientId=${encodeURIComponent(clientId)}`;
+  const options = [
+    {
+      href: newContentHref("SOCIAL_POST", { clientId, day }),
+      title: "Crea un post",
+      text: "Uno alla volta: foto o video, testo e anteprima per ogni rete.",
+      testId: "load-create",
+    },
+    {
+      href: importHref,
+      title: "Importa da Excel o CSV",
+      text: "Tanti post insieme da un foglio, con le loro immagini abbinate per nome.",
+      testId: "load-import",
+    },
+    {
+      href: `${importHref}&modo=incolla`,
+      title: "Incolla righe dal foglio",
+      text: "Copia le celle da Excel o Google Fogli e incollale: diventano bozze.",
+      testId: "load-paste",
+    },
+  ];
+  return (
+    <ul className="grid gap-3 md:grid-cols-3" data-testid="load-options">
+      {options.map((option) => (
+        <li key={option.testId}>
+          <Link
+            href={option.href}
+            className="panel flex h-full min-h-11 flex-col gap-2 rounded p-4 hover:border-border-hover"
+            data-testid={option.testId}
+          >
+            <span className="flex items-center gap-2 text-base font-semibold text-foreground">
+              <KindIcon kind="SOCIAL_POST" className="h-5 w-5 text-accent" />
+              {option.title}
+            </span>
+            <span className="text-sm text-muted">{option.text}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -88,11 +138,14 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   const requestedDay = first(params.data);
   const day = isDayKey(requestedDay) ? requestedDay : null;
   const allClients = await loadEditorClients(context.workspaceId);
-  const pickedClient = allClients.find((c) => c.id === requestedClient) ?? null;
+  // The client in the URL or the menu; with a single client, that one.
+  const pickedClient = allClients.find((c) => c.id === requestedClient) ?? (allClients.length === 1 ? allClients[0] : null);
+  const socialForPicked = Boolean(pickedClient?.services.includes("SOCIAL_POST"));
 
-  // The kind: from the URL, or the picked client's only service.
+  // The kind: from the URL, or the picked client's only service (social posts keep the choice of how to load them).
   const kind =
-    requestedKind(params.kind) ?? (pickedClient && pickedClient.services.length === 1 ? pickedClient.services[0] : null);
+    requestedKind(params.kind) ??
+    (pickedClient && pickedClient.services.length === 1 && !socialForPicked ? pickedClient.services[0] : null);
   const backHref = kind ? postsHref(kind) : "/posts";
   const backLabel = kind ? `← ${contentWords([kind]).all}` : "← Tutti i contenuti";
 
@@ -106,7 +159,12 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
             {backLabel}
           </Link>
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Cosa vuoi preparare per {pickedClient.name}?</h2>
+            <h2 className="text-lg font-semibold">Carica contenuti per {pickedClient.name}</h2>
+            <p className="text-sm text-muted">Si creano sempre bozze: il cliente non vede nulla finché non le invii tu.</p>
+            {socialForPicked && <SocialLoadCards clientId={pickedClient.id} day={day} />}
+            {socialForPicked && pickedClient.services.length > 1 && (
+              <h3 className="pt-2 text-base font-semibold text-muted">Altri contenuti</h3>
+            )}
             {pickedClient.services.length === 0 ? (
               <p className="panel rounded p-4 text-sm text-muted">
                 {pickedClient.name} non ha servizi attivi.{" "}
@@ -116,7 +174,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
                 .
               </p>
             ) : (
-              <KindCards kinds={pickedClient.services} clientId={pickedClient.id} day={day} />
+              <KindCards kinds={pickedClient.services.filter((s) => s !== "SOCIAL_POST")} clientId={pickedClient.id} day={day} />
             )}
             <p className="text-sm">
               <Link href={newContentHref(null, { day })} className="text-muted hover:text-foreground">

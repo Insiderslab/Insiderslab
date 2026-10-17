@@ -155,8 +155,10 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = Boolean(statusValue || clientId || periodo || q);
   const newKind = kindFilter ?? (multiKind ? null : kinds[0]);
-  const newLabel = newKind ? KIND_UI[newKind].newTitle : "Nuovo contenuto";
-  const newHref = newContentHref(newKind, { clientId: clientId || null });
+  // One way in to load social posts ("Carica contenuti": one post, a sheet or pasted rows).
+  const loadHub = social && (newKind === null || newKind === "SOCIAL_POST");
+  const newLabel = loadHub ? "Carica contenuti" : newKind ? KIND_UI[newKind].newTitle : "Nuovo contenuto";
+  const newHref = newContentHref(loadHub ? null : newKind, { clientId: clientId || null });
   const singleShown = shownKinds.length === 1 ? shownKinds[0] : null;
 
   const emptyHint = (() => {
@@ -189,19 +191,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
               Piano del mese
             </Link>
           )}
-          {social && (
-            <Link
-              href={clientId ? `/posts/import?clientId=${clientId}` : "/posts/import"}
-              className="btn btn-sm"
-              data-testid="posts-import-link"
-            >
-              Importa post
-            </Link>
-          )}
-          <Link
-            href={newHref}
-            className="btn btn-primary"
-          >
+          <Link href={newHref} className="btn btn-primary" data-testid="posts-load-link">
             {newLabel}
           </Link>
         </div>

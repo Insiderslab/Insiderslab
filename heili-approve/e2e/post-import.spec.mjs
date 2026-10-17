@@ -58,12 +58,15 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   const context = await agencyContext(browser, data);
   const page = await context.newPage();
   await page.goto("/posts");
-  await page.getByTestId("posts-import-link").click();
-  await page.waitForURL(/\/posts\/import$/);
-
-  // No client picked in the menu: the page asks for one.
-  await expect(page.getByTestId("import-pick-client")).toBeVisible();
-  await page.getByTestId("import-client-option").filter({ hasText: "Caffè Aurora" }).click();
+  // One way in: «Carica contenuti» → client → «Importa da Excel o CSV».
+  await page.getByTestId("posts-load-link").click();
+  await page.waitForURL(/\/posts\/new$/);
+  await expect(page.getByRole("heading", { name: "Per quale cliente?" })).toBeVisible();
+  await page.getByRole("link", { name: /Caffè Aurora/ }).first().click();
+  await expect(page.getByRole("heading", { name: "Carica contenuti per Caffè Aurora" })).toBeVisible();
+  await expect(page.getByTestId("load-options").getByRole("link")).toHaveText([/Crea un post/, /Importa da Excel o CSV/, /Incolla righe dal foglio/]);
+  await page.getByTestId("load-import").click();
+  await page.waitForURL(/\/posts\/import\?clientId=/);
   await expect(page.getByRole("heading", { name: "Importa post per Caffè Aurora" })).toBeVisible();
   // QA-16: the page's client becomes the menu's client too.
   await expect(page.getByTestId("client-switcher")).toContainText("Caffè Aurora");
@@ -75,6 +78,18 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   expect(csv.name).toBe("modello-importa-post.csv");
   expect(csv.buffer.toString("utf8")).toContain("Data;Ora;Reti;Testo;Primo commento;Titolo;Immagini");
   state.template = xlsx.buffer;
+  await context.close();
+});
+
+test("«Incolla righe dal foglio» apre la pagina con l'incolla per primo, già attivo", async ({ browser }) => {
+  const context = await agencyContext(browser, data);
+  const page = await context.newPage();
+  await page.goto(`/posts/new?clientId=${client.id}`);
+  await page.getByTestId("load-paste").click();
+  await page.waitForURL(/modo=incolla/);
+  await expect(page.getByRole("heading", { name: "Incolla le righe" })).toBeVisible();
+  await expect(page.getByTestId("import-paste")).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Oppure carica il foglio" })).toBeVisible();
   await context.close();
 });
 

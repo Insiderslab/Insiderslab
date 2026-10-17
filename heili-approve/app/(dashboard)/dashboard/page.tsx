@@ -244,7 +244,9 @@ export default async function DashboardPage() {
     );
   }
 
-  const newHref = newContentHref(multiKind ? null : kinds[0], { clientId: currentClientId });
+  // Social posts: one way in to load them ("Carica contenuti": one post, a sheet or pasted rows).
+  const loadHub = kinds.includes("SOCIAL_POST");
+  const newHref = newContentHref(multiKind || loadHub ? null : kinds[0], { clientId: currentClientId });
 
   return (
     <div className="space-y-8">
@@ -273,7 +275,7 @@ export default async function DashboardPage() {
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          {multiKind ? "Nuovo contenuto" : KIND_UI[kinds[0]].newTitle}
+          {loadHub ? "Carica contenuti" : multiKind ? "Nuovo contenuto" : KIND_UI[kinds[0]].newTitle}
         </Link>
       </div>
 

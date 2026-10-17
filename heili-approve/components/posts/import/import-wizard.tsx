@@ -41,6 +41,8 @@ import type { ImportResult, PlanOutcome, RowCheck } from "@/lib/post-import/serv
 
 interface Props {
   client: { id: string; name: string; timezone: string; networks: string[] };
+  /** "Incolla righe dal foglio" (from Carica contenuti): the paste box comes first, focused. */
+  startWith?: "file" | "paste";
 }
 
 type Notice = { tone: "info" | "warning"; text: string };
@@ -76,7 +78,7 @@ function toRaw(row: EditableRow): RawRow {
   };
 }
 
-export default function ImportWizard({ client }: Props) {
+export default function ImportWizard({ client, startWith = "file" }: Props) {
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [files, setFiles] = useState<DroppedFile[]>([]);
   const [source, setSource] = useState<string | null>(null);
@@ -508,11 +510,69 @@ export default function ImportWizard({ client }: Props) {
       )}
 
       {noRows ? (
-        <>
+        startWith === "paste" ? (
+          <>
+          <section className="panel space-y-3 p-4 sm:p-6" aria-labelledby="import-paste">
+            <div className="space-y-1">
+              <h2 id="import-paste" className="text-base font-semibold">
+                Incolla le righe
+              </h2>
+              <p className="text-sm text-muted">
+                Copia le celle da Excel o Google Fogli (anche con l&apos;intestazione) e incollale qui sotto.
+              </p>
+            </div>
+            <label htmlFor="import-paste-box" className="sr-only">
+              Righe copiate da Excel o Google Fogli
+            </label>
+            <textarea
+              id="import-paste-box"
+              className="field min-h-32 font-mono text-sm"
+              rows={5}
+              value={paste}
+              onChange={(e) => setPaste(e.target.value)}
+              placeholder={"Data\tOra\tReti\tTesto\n15/10/2026\t10:30\tInstagram, Facebook\tIl testo del post"}
+              spellCheck={false}
+              autoFocus
+              data-testid="import-paste"
+            />
+            <button type="button" className="btn btn-primary" disabled={!paste.trim()} onClick={readPasted} data-testid="import-paste-read">
+              Leggi le righe
+            </button>
+          </section>
           <section className="panel space-y-4 p-4 sm:p-6" aria-labelledby="import-file">
             <div className="space-y-1">
               <h2 id="import-file" className="text-base font-semibold">
-                1. Carica il foglio
+                Oppure carica il foglio
+              </h2>
+              <p className="text-sm text-muted">
+                Trascina qui il file Excel o CSV con i post. Se ci sono immagini o video, trascina anche quelli: li abbino alle righe dal nome del file.
+              </p>
+            </div>
+            <DropZone
+              onFiles={handleFiles}
+              accept={ACCEPT}
+              title="Trascina qui il foglio e le immagini"
+              hint="Excel (.xlsx) o CSV, più foto e video (JPG, PNG, WebP, GIF, MP4, MOV, WebM). Non servono i percorsi: contano i nomi dei file."
+              testId="import-drop"
+            />
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">Non hai il foglio?</span>
+              <a href="/posts/import/modello" className="btn btn-sm" download data-testid="import-template-xlsx">
+                Scarica il modello
+              </a>
+              <a href="/posts/import/modello?formato=csv" className="btn btn-quiet btn-sm" download data-testid="import-template-csv">
+                Modello CSV
+              </a>
+            </div>
+          </section>
+
+          </>
+        ) : (
+          <>
+          <section className="panel space-y-4 p-4 sm:p-6" aria-labelledby="import-file">
+            <div className="space-y-1">
+              <h2 id="import-file" className="text-base font-semibold">
+                Carica il foglio
               </h2>
               <p className="text-sm text-muted">
                 Trascina qui il file Excel o CSV con i post. Se ci sono immagini o video, trascina anche quelli: li abbino alle righe dal nome del file.
@@ -562,7 +622,8 @@ export default function ImportWizard({ client }: Props) {
               Leggi le righe
             </button>
           </section>
-        </>
+          </>
+        )
       ) : (
         <>
           <section className="panel space-y-3 p-4 sm:p-5" aria-label="Origine e file">
