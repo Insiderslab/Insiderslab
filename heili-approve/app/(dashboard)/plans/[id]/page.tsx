@@ -151,7 +151,7 @@ export default async function PlanPage({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            {plan.sentAt && <QuickReviewLink kind="plan" id={plan.id} />}
+            {plan.sentAt && <QuickReviewLink kind="plan" id={plan.id} label="Copia link del piano" />}
             <Link href={`/calendar?clientId=${plan.client.id}&mese=${plan.month}`} className="btn btn-sm min-h-11">
               Calendario del mese
             </Link>
@@ -206,6 +206,10 @@ export default async function PlanPage({
                         {plan.posts.slice(0, limit).map((post) => <PlanPostRow key={post.id} post={post} zone={zone} />)}
                       </ol>
                       <ShowMore planId={plan.id} total={plan.posts.length} shown={limit} />
+                      <p className="text-xs text-muted">
+                        {plan.sentAt ? "Per mandare il piano al cliente usa «Copia link del piano» in alto." : "Il piano non è ancora visibile al cliente."}{" "}
+                        Il link di un singolo post è nella sua scheda, in «Link diretto per il cliente».
+                      </p>
                     </>
                   )}
                 </section>
@@ -328,7 +332,6 @@ function ShowMore({ planId, total, shown }: { planId: string; total: number; sho
 function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: string; action?: React.ReactNode }) {
   const { cover } = coverOf(post);
   const comments = post._count.comments;
-  const clientVisible = post.status === "IN_REVIEW" || post.status === "CHANGES_REQUESTED";
   return (
     <li className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap" data-testid="plan-post-row">
       <span className="h-14 w-14 shrink-0 overflow-hidden rounded bg-surface-sunken">
@@ -354,12 +357,14 @@ function PlanPostRow({ post, zone, action }: { post: WorkspacePlanPost; zone: st
           )}
         </span>
       </span>
-      {(action || clientVisible) && (
-        <div className="flex w-full flex-wrap items-start justify-end gap-2 pl-[4.25rem] sm:w-auto sm:pl-0">
-          {action}
-          {clientVisible && <QuickReviewLink kind="post" id={post.id} />}
-        </div>
-      )}
+      {/* QA-18: one plan link at the top; a row only opens its post (the
+          post's own client link is in its page, "Link diretto per il cliente"). */}
+      <div className="flex w-full flex-wrap items-start justify-end gap-2 pl-[4.25rem] sm:w-auto sm:pl-0">
+        {action}
+        <Link href={`/posts/${post.id}`} className="btn btn-sm min-h-11" aria-label={`Apri ${post.title}`}>
+          Apri
+        </Link>
+      </div>
     </li>
   );
 }

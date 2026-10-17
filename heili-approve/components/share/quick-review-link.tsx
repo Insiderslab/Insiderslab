@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { quickReviewLinksAction } from "@/app/(dashboard)/share-actions";
 import type { QuickReviewChoice } from "@/lib/review-links";
 
-export default function QuickReviewLink({ kind, id }: { kind: "post" | "plan"; id: string }) {
+export default function QuickReviewLink({ kind, id, label = "Copia link cliente" }: { kind: "post" | "plan"; id: string; label?: string }) {
   const pickerId = useId();
   const [choices, setChoices] = useState<QuickReviewChoice[]>([]);
   const [selected, setSelected] = useState("");
@@ -29,7 +29,7 @@ export default function QuickReviewLink({ kind, id }: { kind: "post" | "plan"; i
         if (result.data.length === 1) await copy(result.data[0]);
         else if (!result.data.length) setNotice("Aggiungi un referente nella scheda cliente per ottenere il link.");
       } catch { setNotice("Connessione interrotta. Riprova a preparare il link."); }
-    })}>{pending ? "Preparazione…" : "Copia link cliente"}</button>
+    })}>{pending ? "Preparazione…" : label}</button>
     {open && choices.length > 0 && <div className="space-y-2 rounded-xl bg-surface-sunken p-3">
       {choices.length > 1 && <label htmlFor={pickerId} className="block text-xs text-muted">Scegli il referente
         <select id={pickerId} className="field mt-1" value={selected} onChange={event => { setSelected(event.target.value); setNotice(""); }}>

@@ -126,6 +126,10 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
 
   const share = page.getByTestId("plan-share-row");
   await expect(share).toHaveCount(1);
+  // QA-18: one link for the plan at the top, rows only open their post.
+  await expect(page.getByRole("button", { name: "Copia link del piano" })).toHaveCount(1);
+  await expect(page.getByTestId("plan-posts").getByRole("button", { name: "Copia link cliente" })).toHaveCount(0);
+  await expect(page.getByTestId("plan-posts").getByRole("link", { name: `Apri ${posts[0].title}` })).toHaveAttribute("href", `/posts/${posts[0].id}`);
   const planUrl = `${state.fixture.reviewUrl}/piani/${state.planId}`;
   await expect(share.getByTestId("share-link-url")).toHaveValue(planUrl);
   const whatsapp = await share.getByTestId("share-whatsapp").getAttribute("href");
