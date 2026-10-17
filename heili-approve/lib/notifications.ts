@@ -754,7 +754,7 @@ export function planEmailCopy(params: {
     subject: `${params.heading} per ${params.clientName}: ${posts} da approvare`,
     heading: params.heading,
     intro:
-      `${params.agencyName} ha preparato il ${lower} per ${params.clientName}: ${posts} da rivedere. ` +
+      `${params.agencyName} ha preparato il ${lower} per ${params.clientName}: ${posts} da approvare. ` +
       "Li vedi tutti insieme, anche come appariranno sul profilo Instagram, e puoi approvarli uno per uno o tutti in una volta.",
     ctaLabel: "Rivedi il piano",
   };

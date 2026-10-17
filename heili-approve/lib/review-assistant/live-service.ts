@@ -92,7 +92,7 @@ export interface CloseLiveCallResponse {
   closed: boolean;
 }
 
-const NOT_IN_REVIEW_MESSAGE = "Questo contenuto non è più in revisione: ricarica la pagina.";
+const NOT_IN_REVIEW_MESSAGE = "Questo contenuto non è più da approvare: ricarica la pagina.";
 const NEW_VERSION_MESSAGE = "Nel frattempo l'agenzia ha caricato una nuova versione: ricarica la pagina.";
 
 /** Same gate as the text chat (checkAssistantAccess): IN_REVIEW or CHANGES_REQUESTED, current version only. */

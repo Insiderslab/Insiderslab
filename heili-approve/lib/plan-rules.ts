@@ -213,7 +213,7 @@ export function planOutcomeSummary(statuses: readonly PostStatus[]): string {
   const parts: string[] = [];
   if (p.approved > 0) parts.push(`${p.approved} ${p.approved === 1 ? "approvato" : "approvati"}`);
   if (p.changes > 0) parts.push(`${p.changes} con modifiche`);
-  if (p.inReview > 0) parts.push(`${p.inReview} da rivedere`);
+  if (p.inReview > 0) parts.push(`${p.inReview} da approvare`);
   return parts.length > 0 ? parts.join(", ") : "nessun post deciso";
 }
 

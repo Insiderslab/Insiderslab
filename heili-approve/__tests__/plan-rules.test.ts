@@ -253,7 +253,7 @@ describe("plan wording", () => {
       toReview: 12,
     });
     expect(copy.subject).toBe("Piano social di ottobre per Caffè Aurora: 12 post da approvare");
-    expect(copy.intro).toMatch(/^InsidersLab ha preparato il piano social di ottobre per Caffè Aurora: 12 post da rivedere\./);
+    expect(copy.intro).toMatch(/^InsidersLab ha preparato il piano social di ottobre per Caffè Aurora: 12 post da approvare\./);
     expect(copy.ctaLabel).toBe("Rivedi il piano");
   });
 
@@ -267,7 +267,7 @@ describe("plan wording", () => {
         url: "https://approve.heili.cloud/review/t/piani/p",
       })
     ).toBe(
-      "Ciao Chiara, ecco il piano social di ottobre per Agriturismo Le Querce: 12 post da rivedere. https://approve.heili.cloud/review/t/piani/p"
+      "Ciao Chiara, ecco il piano social di ottobre per Agriturismo Le Querce: 12 post da approvare. https://approve.heili.cloud/review/t/piani/p"
     );
   });
 

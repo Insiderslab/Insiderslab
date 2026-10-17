@@ -239,7 +239,7 @@ export async function sendReviewerLink(reviewerId: string, workspaceId: string):
       `${workspace?.name ?? "L'agenzia"} usa Approve by Heili per farti rivedere ${words.the} prima della pubblicazione. Da questo link personale puoi vedere le anteprime, commentare e approvare, senza password.`,
       "Il link è personale: non inoltrarlo.",
     ],
-    cta: { label: `Apri ${words.the} da rivedere`, url: getReviewUrl(reviewer) },
+    cta: { label: `Apri ${words.the} da approvare`, url: getReviewUrl(reviewer) },
   });
   const result = await sendEmail({
     to: reviewer.email,

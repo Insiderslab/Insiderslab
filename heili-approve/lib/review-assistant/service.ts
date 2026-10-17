@@ -90,7 +90,7 @@ const ATTEMPT_COOLDOWN_MESSAGE = "Attendi qualche secondo prima di chiedere un'a
 const TURN_STALE_MS = 5 * 60 * 1000;
 const TURN_BUSY_MESSAGE = "L'assistente sta ancora rispondendo: attendi qualche secondo e riprova.";
 
-const NOT_ACTIONABLE_MESSAGE = "Questo post non è più in revisione: ricarica la pagina.";
+const NOT_ACTIONABLE_MESSAGE = "Questo post non è più da approvare: ricarica la pagina.";
 const STALE_VERSION_MESSAGE = "Nel frattempo l'agenzia ha caricato una nuova versione del post: ricarica la pagina.";
 
 // ─── Loading and checks ──────────────────────────────────────────────────────

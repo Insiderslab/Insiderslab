@@ -103,7 +103,7 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
   await page.getByTestId("plan-send").click();
   await expect(page.getByText(/Stai per inviare 4 post a Piano e2e/)).toBeVisible();
   await page.getByTestId("plan-send-confirm").click();
-  await expect(page.getByTestId("plan-notice")).toContainText("Piano inviato: 4 post da rivedere");
+  await expect(page.getByTestId("plan-notice")).toContainText("Piano inviato: 4 post da approvare");
 
   for (const post of posts) expect((await postRow(db, post.id)).status).toBe("IN_REVIEW");
   const plan = await planRow(state.planId);
@@ -116,7 +116,7 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
   await expect(share.getByTestId("share-link-url")).toHaveValue(planUrl);
   const whatsapp = await share.getByTestId("share-whatsapp").getAttribute("href");
   expect(decodeURIComponent(whatsapp.split("text=")[1])).toBe(
-    `Ciao Chiara, ecco il piano social di ${state.monthName}${state.month.slice(0, 4) === String(new Date().getFullYear()) ? "" : ` ${state.month.slice(0, 4)}`} per ${state.fixture.clientName}: 4 post da rivedere. ${planUrl}`
+    `Ciao Chiara, ecco il piano social di ${state.monthName}${state.month.slice(0, 4) === String(new Date().getFullYear()) ? "" : ` ${state.month.slice(0, 4)}`} per ${state.fixture.clientName}: 4 post da approvare. ${planUrl}`
   );
   await shot(page, "piano-agenzia.png");
 

@@ -134,7 +134,7 @@ export function nobodyEmailed({
 
 /**
  * Message for the link to a monthly plan:
- * "Ciao Chiara, ecco il piano social di ottobre per Agriturismo Le Querce: 12 post da rivedere. <url>".
+ * "Ciao Chiara, ecco il piano social di ottobre per Agriturismo Le Querce: 12 post da approvare. <url>".
  */
 export function planLinkMessage({
   reviewerName,
@@ -151,6 +151,6 @@ export function planLinkMessage({
   toReview: number;
   url: string;
 }): string {
-  const count = toReview > 0 ? `: ${toReview === 1 ? "1 post" : `${toReview} post`} da rivedere.` : ":";
+  const count = toReview > 0 ? `: ${toReview === 1 ? "1 post" : `${toReview} post`} da approvare.` : ":";
   return `${greeting(reviewerName)}, ecco il ${planName} per ${clientName}${count} ${url}`;
 }
