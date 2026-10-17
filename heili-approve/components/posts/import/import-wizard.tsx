@@ -29,6 +29,7 @@ import { checkImportAction, createImportAction } from "@/app/(dashboard)/posts/i
 import DropZone from "@/components/posts/import/drop-zone";
 import ImportSummary, { plural } from "@/components/posts/import/import-summary";
 import ImportRow, { type DroppedFile, type EditableRow } from "@/components/posts/import/import-row";
+import TemplateHelp from "@/components/posts/import/template-help";
 import { formatBytes } from "@/components/posts/helpers";
 import { ToneChip } from "@/components/status-badge";
 import { ACCEPTED_MEDIA, readVideoDuration, uploadMedia } from "@/components/posts/upload";
@@ -558,12 +559,13 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted">Non hai il foglio?</span>
               <a href="/posts/import/modello" className="btn btn-sm" download data-testid="import-template-xlsx">
-                Scarica il modello
+                Scarica il modello (con 2 esempi)
               </a>
               <a href="/posts/import/modello?formato=csv" className="btn btn-quiet btn-sm" download data-testid="import-template-csv">
                 Modello CSV
               </a>
             </div>
+            <TemplateHelp />
           </section>
 
           </>
@@ -588,12 +590,13 @@ export default function ImportWizard({ client, startWith = "file" }: Props) {
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted">Non hai il foglio?</span>
               <a href="/posts/import/modello" className="btn btn-sm" download data-testid="import-template-xlsx">
-                Scarica il modello
+                Scarica il modello (con 2 esempi)
               </a>
               <a href="/posts/import/modello?formato=csv" className="btn btn-quiet btn-sm" download data-testid="import-template-csv">
                 Modello CSV
               </a>
             </div>
+            <TemplateHelp />
           </section>
 
           <section className="panel space-y-3 p-4 sm:p-6" aria-labelledby="import-paste">

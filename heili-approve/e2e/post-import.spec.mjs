@@ -78,6 +78,10 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   expect(csv.name).toBe("modello-importa-post.csv");
   expect(csv.buffer.toString("utf8")).toContain("Data;Ora;Reti;Testo;Primo commento;Titolo;Immagini");
   state.template = xlsx.buffer;
+  // How pictures are matched, in one line; the columns explained on request.
+  await expect(page.getByTestId("import-images-hint")).toContainText("le abbino per nome");
+  await page.getByTestId("import-columns-help").getByText("Cosa scrivere in ogni colonna").click();
+  await expect(page.getByTestId("import-columns-help")).toContainText("Una o più reti separate da virgola");
   await context.close();
 });
 
@@ -102,8 +106,8 @@ test("il modello compilato si rilegge, con le immagini abbinate per nome", async
     { ...IMAGE, name: "Collezione-1.JPG" },
     { ...IMAGE, name: "collezione-2.jpg" },
   ]);
-  await expect(page.getByTestId("import-source")).toContainText("modello.xlsx · 1 riga");
-  const row = page.getByTestId("import-row");
+  await expect(page.getByTestId("import-source")).toContainText("modello.xlsx · 2 righe");
+  const row = page.getByTestId("import-row").first();
   // Sheet and pictures dropped together: the debounced server check must see the
   // pictures too (QA-01). The row is "Controllo…" until the answer, then stays ready.
   await expect(page.getByTestId("import-summary")).toContainText("Controllo le righe…");
@@ -112,7 +116,9 @@ test("il modello compilato si rilegge, con le immagini abbinate per nome", async
   await expect(row.getByText("Trovato")).toHaveCount(2);
   await expect(row.getByText("Immagine non trovata")).toHaveCount(0);
   await expect(row.getByLabel("Reti")).toHaveValue("Instagram, Facebook");
-  await expect(page.getByTestId("import-create")).toHaveText("Crea 1 bozza");
+  // The second example (text only, Facebook) is ready as it is.
+  await expect(page.getByTestId("import-row").nth(1)).toHaveAttribute("data-state", "ready");
+  await expect(page.getByTestId("import-create")).toHaveText("Crea 2 bozze");
   await expect(page.getByTestId("import-create")).toBeEnabled();
   await context.close();
 });

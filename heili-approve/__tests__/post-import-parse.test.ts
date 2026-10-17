@@ -275,11 +275,12 @@ describe("xlsx", () => {
 });
 
 describe("template", () => {
-  it("is read back by the importer: same headers, one example row", async () => {
+  it("is read back by the importer: same headers, two example rows", async () => {
     const xlsx = await buildTemplateXlsx({ exampleDate: "15/10/2026" });
     const { rows, ignoredColumns } = await parseSheetFile("modello.xlsx", xlsx.buffer.slice(xlsx.byteOffset, xlsx.byteOffset + xlsx.byteLength) as ArrayBuffer);
     expect(ignoredColumns).toEqual([]);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({ time: "18:30", networks: "Facebook", images: "", title: "Aperitivo con musica" });
     expect(rows[0]).toMatchObject({ date: "15/10/2026", time: "10:30", networks: "Instagram, Facebook", images: "collezione-1.jpg, collezione-2.jpg", format: "Post" });
     expect(rows[0].text).toContain("\n");
 
@@ -295,5 +296,6 @@ describe("template", () => {
     expect(csv.split("\r\n", 1)[0]).toContain(";");
     const { rows } = parsePastedRows(csv);
     expect(rows[0]).toMatchObject({ date: "15/10/2026", networks: "Instagram, Facebook" });
+    expect(rows).toHaveLength(2);
   });
 });
