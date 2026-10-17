@@ -131,7 +131,7 @@ export default function PostCard({ post, href }: { post: PortalPostCardData; hre
           {`Versione ${post.versionNumber}`}
         </p>
         {post.canAct && post.reviewDueLabel && (
-          <p className="text-xs font-medium text-warning">Da rivedere entro {post.reviewDueLabel}</p>
+          <p className="text-xs font-medium text-warning">Da approvare entro {post.reviewDueLabel}</p>
         )}
         {post.excerpt && <p className="line-clamp-2 text-xs text-muted">{post.excerpt}</p>}
       </div>

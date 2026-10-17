@@ -257,7 +257,7 @@ export function browseSummaryText(summary: Pick<BrowseSummary, "approved" | "wit
   if (summary.withComments > 0) {
     parts.push(`${summary.withComments} con ${summary.withComments === 1 ? "commento" : "commenti"}`);
   }
-  if (summary.waiting > 0) parts.push(`${summary.waiting} da decidere`);
+  if (summary.waiting > 0) parts.push(`${summary.waiting} da approvare`);
   return parts.length > 0 ? parts.join(", ") : "nessun post deciso";
 }
 

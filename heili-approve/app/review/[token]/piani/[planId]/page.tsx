@@ -123,7 +123,7 @@ export default async function ReviewPlanPage({ params, searchParams }: ReviewPla
     list.push({ id: "home", label: "Torna all'inizio", href: portalPath(token), kind: "home" });
     return list;
   };
-  const heiliSummary = `${progressAll.total} post, ${progressAll.inReview} da rivedere`;
+  const heiliSummary = `${progressAll.total} post, ${progressAll.inReview} da approvare`;
   const heiliTitle = portalPlan.heading.charAt(0).toLowerCase() + portalPlan.heading.slice(1);
   const heiliSlot = (page: HeiliPageKind) => (
     <HeiliPage

@@ -160,8 +160,8 @@ export function feedbackHint(canComment: boolean, assistantEnabled: boolean, cha
  */
 export function newVersionNotice(hasEmail: boolean): string {
   return hasEmail
-    ? "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da rivedere."
-    : "L'agenzia preparerà una nuova versione e ti avviserà quando sarà pronta da rivedere.";
+    ? "L'agenzia preparerà una nuova versione: riceverai un'email quando sarà pronta da approvare."
+    : "L'agenzia preparerà una nuova versione e ti avviserà quando sarà pronta da approvare.";
 }
 
 /** Sticky bar at the bottom of the screen with the page's decision buttons. */

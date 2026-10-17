@@ -579,7 +579,7 @@ export default function AdsReview({
   useHeiliPage({
     page: "ads",
     title: `gli annunci «${heiliHeading}»`,
-    summary: canAct ? "Da decidere" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
+    summary: canAct ? "Da approvare" : feedbackOpen ? "Modifiche già chieste, puoi aggiungere altro" : undefined,
     destinations: heiliDestinations,
     services: listKinds,
     review: assistantAvailable
@@ -1069,7 +1069,7 @@ function CampaignSummary({
           {name.trim() || "Campagna senza nome"}
         </h2>
         <p className="text-sm text-muted">
-          {variantCount === 1 ? "1 variante da rivedere" : `${variantCount} varianti da rivedere`}
+          {variantCount === 1 ? "1 variante da decidere" : `${variantCount} varianti da decidere`}
         </p>
       </div>
       {rows.length > 0 && (

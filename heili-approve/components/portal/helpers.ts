@@ -319,7 +319,7 @@ export interface PortalWording {
   position: (position: number, total: number) => string;
   /** "Prossimo post →". */
   nextLabel: string;
-  /** "C'è ancora un post da rivedere." */
+  /** "C'è ancora un post da approvare." */
   remaining: (count: number) => string;
   /** "Hai rivisto tutti i post in attesa. Grazie!" */
   allDone: string;
@@ -335,7 +335,7 @@ export function portalWording(kinds: readonly ContentKind[]): PortalWording {
     position: (position, total) => `${capital} ${position} di ${total} da approvare`,
     nextLabel: nextLabel(kinds),
     remaining: (count) =>
-      count === 1 ? `C'è ancora un ${noun.one} da rivedere.` : `Ci sono ancora ${count} ${noun.many} da rivedere.`,
+      count === 1 ? `C'è ancora un ${noun.one} da approvare.` : `Ci sono ancora ${count} ${noun.many} da approvare.`,
     allDone: `Hai rivisto tutti ${noun.theMany} in attesa. Grazie!`,
     homeLabel: `Torna all'elenco ${noun.ofMany}`,
   };

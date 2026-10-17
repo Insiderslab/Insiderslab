@@ -64,7 +64,7 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
         context={{
           page: sfoglia ? "browse" : "month",
           title: `i ${heading.charAt(0).toLowerCase()}${heading.slice(1)}`,
-          summary: `${posts.length} post, ${monthProgress.inReview} da rivedere`,
+          summary: `${posts.length} post, ${monthProgress.inReview} da approvare`,
           destinations,
           services: ["SOCIAL_POST"],
         }}

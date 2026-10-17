@@ -140,8 +140,8 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
             groups.toReview.length === 0
               ? "Nessun contenuto da approvare in questo momento"
               : groups.toReview.length === 1
-                ? "1 contenuto da rivedere"
-                : `${groups.toReview.length} contenuti da rivedere`,
+                ? "1 contenuto da approvare"
+                : `${groups.toReview.length} contenuti da approvare`,
           destinations,
           services: kindsShown,
         }}
@@ -259,7 +259,7 @@ export default async function ReviewHomePage({ params, searchParams }: ReviewHom
 
       {posts.length === 0 && (
         <p className="panel p-4 text-sm text-muted">
-          Qui troverai {noun.theMany} che l&apos;agenzia prepara per {reviewer.client.name}, pronti da rivedere
+          Qui troverai {noun.theMany} che l&apos;agenzia prepara per {reviewer.client.name}, pronti da guardare
           e approvare.
         </p>
       )}
@@ -393,7 +393,7 @@ function PlanCard({ plan }: { plan: PlanCardData }) {
       <span className="flex flex-wrap items-center justify-between gap-2">
         <span className="label-caps">Piano del mese</span>
         <span className={highlight ? "chip chip-brand" : "chip chip-fresh"}>
-          {highlight ? (plan.waiting === 1 ? "1 post da approvare" : `${plan.waiting} post da approvare`) : "Rivisto"}
+          {highlight ? (plan.waiting === 1 ? "1 post da approvare" : `${plan.waiting} post da approvare`) : "Revisionato"}
         </span>
       </span>
       <span className="block text-xl font-semibold leading-tight">{plan.heading}</span>

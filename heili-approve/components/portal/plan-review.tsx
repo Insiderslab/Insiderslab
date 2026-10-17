@@ -158,7 +158,7 @@ export default function PlanReview({
               ? "L'agenzia li riceve subito e verranno programmati per le loro date."
               : "L'agenzia li riceve subito e li programmerà per le loro date."}
           </p>
-          {outcome.skipped.length > 0 && <SkippedList skipped={outcome.skipped} title="Da decidere uno per uno:" />}
+          {outcome.skipped.length > 0 && <SkippedList skipped={outcome.skipped} title="Da guardare uno per uno:" />}
         </section>
       )}
 

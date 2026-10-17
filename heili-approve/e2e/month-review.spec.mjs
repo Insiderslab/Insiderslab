@@ -205,7 +205,7 @@ test("piano (390 px): interruttore, Sfoglia: approva, commenta e torna, riepilog
   await page.getByTestId("browse-next").click();
   const summary = page.getByTestId("browse-summary");
   await expect(summary).toBeVisible();
-  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 1 con commento, 3 da decidere");
+  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 1 con commento, 3 da approvare");
   await expect(summary).toContainText(planPosts[1].title);
   await expectNoHorizontalScroll(page);
   await viewportShot(page, "mese-sfoglia-riepilogo-mobile.png");
@@ -352,7 +352,7 @@ test("mese senza piano: griglia, Sfoglia e «Approva i rimanenti»", async ({ br
   await page.getByTestId("browse-next").click();
   await expect(cardTitle(page)).toContainText(loosePosts[2].title);
   await page.getByTestId("browse-next").click();
-  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 2 da decidere");
+  await expect(page.getByTestId("browse-summary-text")).toHaveText("1 approvato, 2 da approvare");
   await page.getByTestId("browse-approve-rest").click();
   await page.getByRole("dialog").getByRole("button", { name: "Sì, approva 2 post" }).click();
   await expect(page.getByTestId("browse-outcome")).toContainText("Fatto! 2 post approvati.");

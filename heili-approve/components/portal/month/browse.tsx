@@ -662,7 +662,7 @@ function SummaryCard({
               <li key={item.id}>
                 <Link href={item.href} className="inset flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-surface-sunken">
                   <span className="min-w-0 truncate font-medium">{item.title}</span>
-                  <span className="shrink-0 text-muted">{item.state === "changes" ? "Modifiche richieste" : "Da decidere"}</span>
+                  <span className="shrink-0 text-muted">{item.state === "changes" ? "Modifiche richieste" : "Da approvare"}</span>
                 </Link>
               </li>
             ))}

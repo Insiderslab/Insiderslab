@@ -405,7 +405,7 @@ export default function WebsiteReview({
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Giro {content.round}</p>
               <h2 id="site-title" className="mt-1 text-xl font-semibold">
-                Il sito da rivedere
+                Il sito da guardare
               </h2>
               {content.roundNote && (
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm" data-testid="website-round-note">
