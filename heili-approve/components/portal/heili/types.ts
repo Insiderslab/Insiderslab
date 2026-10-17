@@ -16,6 +16,7 @@ export type HeiliPageKind =
   | "home"
   | "plan"
   | "plan-grid"
+  | "plan-instagram"
   | "browse"
   | "month"
   | "post"

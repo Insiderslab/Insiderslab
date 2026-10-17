@@ -227,7 +227,9 @@ export default async function ReviewPostPage({ params, searchParams }: ReviewPos
       const position = origin?.i ?? around.position;
       planNav = {
         href: origin ? viewPath(scope.basePath, origin.da, sfoglia ? position : null) : scope.basePath,
-        ...(origin ? { backLabel: sfoglia ? "Torna a Sfoglia" : "Torna alla griglia" } : {}),
+        ...(origin
+          ? { backLabel: sfoglia ? "Torna a Sfoglia" : origin.da === "instagram" ? "Torna all'anteprima Instagram" : "Torna alla griglia" }
+          : {}),
         ...(sfoglia ? { browse: { nextHref: position < around.total ? viewPath(scope.basePath, "sfoglia", position + 1) : null } } : {}),
         heading: scope.heading,
         position: around.position,

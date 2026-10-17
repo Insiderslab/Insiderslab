@@ -253,6 +253,14 @@ export function byPublishAsc<T extends { id: string; publishAt: Date }>(posts: r
   return [...posts].sort((a, b) => a.publishAt.getTime() - b.publishAt.getTime() || a.id.localeCompare(b.id));
 }
 
+/**
+ * A post that lands in the Instagram profile grid: on Instagram and not a
+ * Story (feed posts, carousels and Reels do; Stories vanish after a day).
+ */
+export function isInstagramFeedPost(post: { networks: readonly string[]; instagramFormat?: string | null }): boolean {
+  return post.networks.includes("instagram") && post.instagramFormat !== "STORY";
+}
+
 /** Instagram profile order: newest publication first, as the grid shows it. */
 export function instagramGridOrder<T extends { id: string; publishAt: Date }>(posts: readonly T[]): T[] {
   return byPublishAsc(posts).reverse();

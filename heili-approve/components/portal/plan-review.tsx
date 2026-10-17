@@ -4,8 +4,7 @@
  * Client portal — a monthly plan ("Piano social di ottobre").
  *
  * The agency's message for the month, how far along the client is ("3 di 12
- * approvati"), the Instagram profile-grid preview (server-rendered slot),
- * then every post of the month in calendar order as compact cards that open
+ * approvati"), then every post of the month in calendar order as compact cards that open
  * the usual review page. "Approva tutto il piano" approves, in one step,
  * every post still waiting for the client at the version shown here; posts
  * with the client's own open comments or with changes requested are left
@@ -19,7 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { addPlanCommentAction, approvePlanAction } from "@/components/portal/safe-actions";
-import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
+import { PlanProgressBar } from "@/components/plans/plan-bits";
 import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
 import { SKIP_REASON_LABELS, planProgress, selectApproveAll, type ApproveAllSkipReason } from "@/lib/plan-rules";
@@ -42,16 +41,13 @@ export default function PlanReview({
   token,
   plan,
   homeHref,
-  gridSlot,
   modeSlot,
   quickReviewSlot,
 }: {
   token: string;
   plan: PortalPlan;
   homeHref: string;
-  /** Server-rendered Instagram grid. */
-  gridSlot: ReactNode;
-  /** "Panoramica · Griglia · Sfoglia" switch, under the way back. */
+  /** "Panoramica · Griglia · Anteprima Instagram · Sfoglia" switch, under the way back. */
   modeSlot?: ReactNode;
   /** Phones: «Sfoglia i post, uno alla volta», the way into Sfoglia. */
   quickReviewSlot?: ReactNode;
@@ -200,21 +196,15 @@ export default function PlanReview({
         )}
       </header>
 
-      <PlanViews instagram={<section className="space-y-3" aria-labelledby="plan-grid">
+      {/* One level of views (K-13): the grid and the Instagram preview are in the switch above. */}
+      <section className="space-y-3" aria-labelledby="plan-posts">
         <div className="space-y-1">
-          <h2 id="plan-grid" className="text-lg font-semibold">
-            Post Instagram del piano
+          <h2 id="plan-posts" className="flex items-center gap-2 text-lg font-semibold">
+            I post del mese
+            <span className="chip chip-offline">{plan.posts.length}</span>
           </h2>
-          <p className="text-sm text-muted">Anteprima dei soli post Instagram inclusi nel piano, dal più recente. Non include i contenuti già presenti sul profilo. Tocca un post per aprirlo.</p>
+          <p className="text-sm text-muted">Tutti i post del piano in ordine di data, con testo e stato. Tocca un post per aprirlo e decidere.</p>
         </div>
-        {gridSlot}
-      </section>}
-
-      list={<section className="space-y-3" aria-labelledby="plan-posts">
-        <h2 id="plan-posts" className="flex items-center gap-2 text-lg font-semibold">
-          I post del mese
-          <span className="chip chip-offline">{plan.posts.length}</span>
-        </h2>
         <ol className="space-y-2" data-testid="plan-post-list">
           {plan.posts.map((post) => (
             <li key={post.id}>
@@ -222,7 +212,7 @@ export default function PlanReview({
             </li>
           ))}
         </ol>
-      </section>} />
+      </section>
 
       <section className="panel space-y-3 p-5" aria-labelledby="plan-comment">
         <div className="space-y-1">

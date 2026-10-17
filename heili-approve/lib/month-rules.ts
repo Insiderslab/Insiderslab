@@ -29,14 +29,30 @@ import {
 
 // ─── Views (URL state) ───────────────────────────────────────────────────────
 
-export const MONTH_VIEWS = ["panoramica", "griglia", "sfoglia"] as const;
+/**
+ * Griglia: every content of the month, compact, with status and date (K-13).
+ * Instagram («Anteprima Instagram»): only the Instagram feed posts, as the
+ * profile will show them; a plan offers it only when it has some.
+ */
+export const MONTH_VIEWS = ["panoramica", "griglia", "instagram", "sfoglia"] as const;
 export type MonthView = (typeof MONTH_VIEWS)[number];
 
 export const MONTH_VIEW_LABELS: Record<MonthView, string> = {
   panoramica: "Panoramica",
   griglia: "Griglia",
+  instagram: "Anteprima Instagram",
   sfoglia: "Sfoglia",
 };
+
+/** Shorter tab label for phones, where four tabs share one row. */
+export const MONTH_VIEW_SHORT_LABELS: Partial<Record<MonthView, string>> = {
+  instagram: "Instagram",
+};
+
+/** The plan views: «Anteprima Instagram» only with Instagram feed posts in the plan. */
+export function planViews(hasInstagramFeed: boolean): MonthView[] {
+  return hasInstagramFeed ? ["panoramica", "griglia", "instagram", "sfoglia"] : ["panoramica", "griglia", "sfoglia"];
+}
 
 /**
  * `?vista=` → a view among `allowed`; anything else (missing, unknown, a
@@ -70,7 +86,7 @@ export function viewPath(basePath: string, view: MonthView, position?: number | 
 }
 
 /** Where a post page was opened from, so it can offer the way back. */
-export type PostOrigin = "griglia" | "sfoglia";
+export type PostOrigin = "griglia" | "instagram" | "sfoglia";
 
 export interface PostReturn {
   da: PostOrigin;
@@ -80,7 +96,7 @@ export interface PostReturn {
   mese: string | null;
 }
 
-/** Query string appended to a post link opened from Griglia / Sfoglia. */
+/** Query string appended to a post link opened from Griglia / Anteprima Instagram / Sfoglia. */
 export function postLinkQuery(origin: PostOrigin, opts: { position?: number | null; month?: string | null } = {}): string {
   const params = new URLSearchParams({ da: origin });
   if (origin === "sfoglia" && opts.position && opts.position > 0) params.set("i", String(opts.position));
@@ -91,7 +107,7 @@ export function postLinkQuery(origin: PostOrigin, opts: { position?: number | nu
 /** Reads `?da=&i=&mese=` of a post page; null when it was not opened from a month view. */
 export function parsePostReturn(query: { da?: unknown; i?: unknown; mese?: unknown }): PostReturn | null {
   const rawDa = Array.isArray(query.da) ? query.da[0] : query.da;
-  if (rawDa !== "griglia" && rawDa !== "sfoglia") return null;
+  if (rawDa !== "griglia" && rawDa !== "instagram" && rawDa !== "sfoglia") return null;
   const rawMonth = Array.isArray(query.mese) ? query.mese[0] : query.mese;
   return {
     da: rawDa,

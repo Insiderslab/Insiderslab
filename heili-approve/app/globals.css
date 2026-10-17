@@ -412,7 +412,7 @@ select:focus-visible {
   }
   .month-view-tabs .studio-view-tab {
     flex: 1 1 0;
-    padding: 0 8px;
+    padding: 0 4px;
   }
 }
 

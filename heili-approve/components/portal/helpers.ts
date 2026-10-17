@@ -494,6 +494,19 @@ export function formatPlanSlot(date: Date, timeZone: string | null | undefined):
   return `${p.weekday} ${p.day} ${p.month} · ${p.hour}:${p.minute}`;
 }
 
+/** "ven 6 nov · 09:30": the compact slot under a tile of the Griglia, in the client's time zone. */
+export function formatGridSlot(date: Date, timeZone: string | null | undefined): string {
+  const p = dateParts(date, safeTimeZone(timeZone), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return `${p.weekday} ${p.day} ${p.month} · ${p.hour}:${p.minute}`;
+}
+
 /**
  * Whether the agency's message of a plan needs «Leggi tutto» (shown in four
  * lines, K-09): a first guess for the server render, before the browser measures it.

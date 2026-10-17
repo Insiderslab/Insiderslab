@@ -6,8 +6,8 @@
  * One client's social posts for one month, presented together: status and
  * progress, the message for the client, due date and "Invia il piano al
  * cliente" (every draft / changes-requested post in one go, one email per
- * reviewer), the plan's link with WhatsApp, an Instagram profile-grid
- * preview (newest first), the month calendar and the list of posts with
+ * reviewer), the plan's link with WhatsApp, the «Anteprima Instagram»
+ * (feed posts newest first, then the ones already published), the month calendar and the list of posts with
  * their status. Posts of the month added after the plan was opened can be
  * added with "Aggiungi al piano". The client's general comments on the plan
  * are listed at the bottom.
@@ -28,6 +28,7 @@ import { NETWORK_LABELS, isNetwork, parseMediaItems, type MediaItem } from "@/li
 import { NotFoundError } from "@/lib/errors";
 import {
   instagramGridOrder,
+  isInstagramFeedPost,
   isApprovedLike,
   planHeading,
   planMonthName,
@@ -35,6 +36,7 @@ import {
   planProgress,
 } from "@/lib/plan-rules";
 import { getPlanForWorkspace, type WorkspacePlan, type WorkspacePlanPost } from "@/lib/plans";
+import { instagramFormatOf, listPublishedInstagramPosts } from "@/lib/posts";
 import { productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
@@ -91,14 +93,31 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     outside: plan.outside.filter(sendable).length,
     outsideTotal: plan.outside.length,
   };
-  const tiles: GridTile[] = instagramGridOrder(plan.posts.filter((post) => post.networks.includes("instagram"))).map((post) => ({
+  // «Anteprima Instagram» (K-13): only the feed posts, then the ones already published.
+  const feedPosts = plan.posts.filter((post) =>
+    isInstagramFeedPost({ networks: post.networks, instagramFormat: instagramFormatOf(post.networks, post.networkOptions) })
+  );
+  const tiles: GridTile[] = instagramGridOrder(feedPosts).map((post) => ({
     id: post.id,
     title: post.title,
     ...coverOf(post),
     dateLabel: formatDateTime(post.publishAt, zone, { year: false }),
     status: tileStatus(post),
+    reel: instagramFormatOf(post.networks, post.networkOptions) === "REEL",
     href: `/posts/${post.id}`,
   }));
+  const published: GridTile[] =
+    tiles.length === 0
+      ? []
+      : (await listPublishedInstagramPosts(plan.client.id, { before: now, excludePlanId: plan.id })).map((post) => ({
+          id: post.id,
+          title: post.title,
+          cover: post.cover,
+          mediaCount: post.mediaCount,
+          excerpt: post.excerpt,
+          dateLabel: formatDateTime(post.publishAt, zone, { year: false }),
+          href: `/posts/${post.id}`,
+        }));
   const calendarPosts = [...plan.posts, ...plan.outside].map((post) => ({
     id: post.id,
     title: post.title,
@@ -224,15 +243,21 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
               </div>
             }
             instagram={
-              <div className="space-y-3">
-                <p className="text-sm text-muted">Solo i contenuti Instagram inclusi, dal più recente. Tocca una casella per aprire il post.</p>
-                <InstagramGrid
-                  tiles={tiles}
-                  accountName={plan.client.name}
-                  logoUrl={plan.client.logoUrl}
-                  caption={`${tiles.length} contenuti Instagram del piano`}
-                />
-              </div>
+              tiles.length === 0 ? undefined : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted">
+                    Come apparirà il profilo Instagram: i post del feed del piano dal più recente
+                    {published.length > 0 ? " e, sotto, gli ultimi già pubblicati" : ""}. Le storie e le altre reti sono nell’elenco.
+                  </p>
+                  <InstagramGrid
+                    tiles={tiles}
+                    published={published}
+                    accountName={plan.client.name}
+                    logoUrl={plan.client.logoUrl}
+                    caption={tiles.length === 1 ? "1 post del piano" : `${tiles.length} post del piano`}
+                  />
+                </div>
+              )
             }
           />
         </div>

@@ -96,8 +96,6 @@ export default async function ReviewMonthPage({ params, searchParams }: ReviewMo
         ) : (
           <MonthGrid
             tiles={monthGridTiles({ token, posts, timeZone, month })}
-            accountName={reviewer.client.name}
-            logoUrl={reviewer.client.logoUrl}
             monthLabel={monthName}
           />
         )}

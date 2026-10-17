@@ -79,7 +79,7 @@ import {
 } from "@/lib/errors";
 import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
 import { recordEvent, type DbClient } from "@/lib/events";
-import { validateForNetworks } from "@/lib/metricool/payload";
+import { getNetworkFormat, validateForNetworks } from "@/lib/metricool/payload";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
 import { loadSubmittedSessionIds } from "@/lib/review-assistant/submitted";
 import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
@@ -2777,6 +2777,13 @@ export interface ReviewerPostSummary {
   excerpt: string;
   /** Monthly plan the post belongs to (lib/plans.ts), if any. */
   planId?: string | null;
+  /** Instagram format ("POST" | "REEL" | "STORY") when the post is on Instagram, else null. */
+  instagramFormat: string | null;
+}
+
+/** "POST" | "REEL" | "STORY" for a post on Instagram, null otherwise. */
+export function instagramFormatOf(networks: readonly string[] | null | undefined, networkOptions: unknown): string | null {
+  return networks?.includes("instagram") ? (getNetworkFormat("instagram", networkOptions) ?? null) : null;
 }
 
 /** Markdown → one line of plain text, good enough (and cheap) for a list excerpt. */
@@ -2929,7 +2936,56 @@ export async function listPostsForReviewer(reviewer: ReviewerRef, scope: Reviewe
       approvedAt: p.approvedAt,
       canAct: p.status === "IN_REVIEW" && visible === p.currentVersionNumber,
       planId: p.planId,
+      instagramFormat: instagramFormatOf(sent?.networks ?? p.networks, sent ? sent.networkOptions : p.networkOptions),
       ...summarizeVersionForList(p.kind, version),
     };
+  });
+}
+
+/** One already-published post for the Instagram preview (K-13). */
+export interface PublishedGridPost {
+  id: string;
+  title: string;
+  publishAt: Date;
+  cover: MediaItem | null;
+  mediaCount: number;
+  excerpt: string;
+}
+
+/**
+ * The client's most recent Instagram feed posts already published (scheduled
+ * on Metricool with a publish date passed, or delivered), newest first: shown
+ * under the plan in «Anteprima Instagram» to judge how the feed goes on.
+ * Callers pass a client they already checked (the reviewer's own, or a plan
+ * of the agency's workspace). Stories are left out: they are not in the grid.
+ */
+export async function listPublishedInstagramPosts(
+  clientId: string,
+  { before = new Date(), limit = 9, excludePlanId }: { before?: Date; limit?: number; excludePlanId?: string } = {}
+): Promise<PublishedGridPost[]> {
+  const posts = await prisma.post.findMany({
+    where: {
+      clientId,
+      kind: "SOCIAL_POST",
+      status: { in: ["SCHEDULED", "DELIVERED"] },
+      networks: { has: "instagram" },
+      publishAt: { lt: before },
+      ...(excludePlanId ? { OR: [{ planId: null }, { planId: { not: excludePlanId } }] } : {}),
+    },
+    orderBy: { publishAt: "desc" },
+    take: limit * 2,
+    select: { id: true, title: true, publishAt: true, networks: true, networkOptions: true, currentVersionNumber: true },
+  });
+  const feed = posts.filter((p) => instagramFormatOf(p.networks, p.networkOptions) !== "STORY").slice(0, limit);
+  if (feed.length === 0) return [];
+  // A scheduled post is frozen: its current version is the one approved and published.
+  const versions = await prisma.postVersion.findMany({
+    where: { OR: feed.map((p) => ({ postId: p.id, number: p.currentVersionNumber })) },
+    select: { postId: true, text: true, media: true, content: true },
+  });
+  const byPost = new Map(versions.map((v) => [v.postId, v]));
+  return feed.map((p) => {
+    const { cover, mediaCount, excerpt } = summarizeVersionForList("SOCIAL_POST", byPost.get(p.id));
+    return { id: p.id, title: p.title, publishAt: p.publishAt, cover, mediaCount, excerpt };
   });
 }

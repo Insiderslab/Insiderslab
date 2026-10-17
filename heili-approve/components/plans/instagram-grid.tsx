@@ -1,11 +1,13 @@
 /* eslint-disable @next/next/no-img-element -- media are arbitrary public URLs (uploads or external), not next/image sources */
 
 /**
- * Instagram profile-grid preview of a monthly plan: the month's posts as the
- * profile will show them — three columns, newest first, portrait 3:4 tiles
- * like today's Instagram grid — so agency and client judge the visual
- * coherence of the month at a glance. Carousels and videos carry Instagram's
- * corner icons; a post without media shows the start of its caption.
+ * «Anteprima Instagram» of a monthly plan (K-13): how the Instagram profile
+ * will look — only the feed posts of the plan (no Stories, no other
+ * networks), three columns, newest first, in the 4:5 portrait tiles of the
+ * feed — and, when the client has some, the posts already published right
+ * under them, so agency and client judge whether the new month sits well on
+ * the existing feed. Carousels and Reels carry Instagram's corner icons; a
+ * post without media shows the start of its caption.
  *
  * Presentational only (no hooks): used by the agency's plan page and by the
  * client portal. Tiles are links when `href` is given.
@@ -21,12 +23,12 @@ export interface GridTile {
   mediaCount: number;
   /** Caption start, shown when there is no media. */
   excerpt: string;
-  /** "ven 9 ott" — under the tile for screen readers and on hover. */
+  /** "ven 9 ott" — for screen readers and on hover. */
   dateLabel: string;
   /** Small chip on the tile ("Approvato", "Da approvare"); omit for none. */
   status?: { label: string; tone: "brand" | "fresh" | "stale" | "offline" };
-  /** Small label top left ("Facebook"): for posts that are not on Instagram, in the month view. */
-  badge?: string;
+  /** A Reel: the video icon even when the cover is an image. */
+  reel?: boolean;
   href?: string;
 }
 
@@ -54,7 +56,7 @@ function ReelIcon() {
   );
 }
 
-function TileMedia({ tile }: { tile: GridTile }) {
+export function TileMedia({ tile }: { tile: Pick<GridTile, "cover" | "excerpt" | "title"> }) {
   const cover = tile.cover;
   if (cover?.type === "image") {
     return <img src={cover.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />;
@@ -80,19 +82,65 @@ function TileMedia({ tile }: { tile: GridTile }) {
   );
 }
 
+function Tile({ tile, published = false }: { tile: GridTile; published?: boolean }) {
+  const inner = (
+    <>
+      <TileMedia tile={tile} />
+      {tile.mediaCount > 1 ? (
+        <span className="absolute right-1.5 top-1.5 text-white drop-shadow">
+          <CarouselIcon />
+        </span>
+      ) : tile.reel || tile.cover?.type === "video" ? (
+        <span className="absolute right-1.5 top-1.5 text-white drop-shadow">
+          <ReelIcon />
+        </span>
+      ) : null}
+      {tile.status && (
+        <span className={`${CHIP[tile.status.tone]} absolute bottom-1 left-1 !px-1.5 !py-0 !text-[10px] shadow-sm`}>
+          {tile.status.label}
+        </span>
+      )}
+      <span className="sr-only">
+        {tile.title}, {tile.dateLabel}
+        {tile.status ? `, ${tile.status.label}` : ""}
+        {published ? ", già pubblicato" : ""}
+      </span>
+    </>
+  );
+  return (
+    // 4:5, the portrait proportion of the feed (a square post is cropped like on the profile).
+    <li
+      className="relative aspect-[4/5] bg-surface-sunken"
+      title={`${tile.dateLabel} · ${tile.title}${published ? " · già pubblicato" : ""}`}
+      data-published={published ? "true" : undefined}
+    >
+      {tile.href ? (
+        <Link href={tile.href} className="relative block h-full w-full focus-visible:outline-offset-[-2px]">
+          {inner}
+        </Link>
+      ) : (
+        <div className="relative h-full w-full">{inner}</div>
+      )}
+    </li>
+  );
+}
+
 export default function InstagramGrid({
   tiles,
+  published = [],
   accountName,
   logoUrl,
   caption,
-  ariaLabel = "Anteprima dei contenuti Instagram del piano",
-  emptyText = "Nessun contenuto Instagram incluso nel piano. I post delle altre reti sono nell’elenco del piano.",
+  ariaLabel = "Anteprima del profilo Instagram con i post del piano",
+  emptyText = "Nessun post Instagram del feed in questo piano.",
 }: {
-  /** Already in Instagram order (newest first, see instagramGridOrder). */
+  /** The plan's feed posts, already in Instagram order (newest first, see instagramGridOrder). */
   tiles: GridTile[];
+  /** Feed posts already published, newest first: shown under the plan's ones. */
+  published?: GridTile[];
   accountName: string;
   logoUrl?: string | null;
-  /** Line under the account name ("12 post a ottobre"). */
+  /** Line under the account name ("6 post del piano"). */
   caption: string;
   /** Name of the list for screen readers. */
   ariaLabel?: string;
@@ -101,7 +149,7 @@ export default function InstagramGrid({
 }) {
   const initial = accountName.trim().charAt(0).toUpperCase() || "?";
   return (
-    <figure className="panel studio-panel mx-auto max-w-3xl space-y-4" data-testid="instagram-grid">
+    <figure className="panel studio-panel mx-auto max-w-xl space-y-4" data-testid="instagram-grid">
       <figcaption className="flex items-center gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft text-base font-semibold text-accent">
           {logoUrl ? (
@@ -118,49 +166,21 @@ export default function InstagramGrid({
       {tiles.length === 0 ? (
         <p className="inset p-4 text-sm text-muted">{emptyText}</p>
       ) : (
+        // One continuous grid, like the profile: the plan's posts (with their status chip) first,
+        // the published ones (no chip) right after, so the rows fall where they will on Instagram.
         <ul className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl bg-surface-sunken p-1" aria-label={ariaLabel}>
-          {tiles.map((tile) => {
-            const inner = (
-              <>
-                <TileMedia tile={tile} />
-                {tile.mediaCount > 1 ? (
-                  <span className="absolute right-1.5 top-1.5 text-white drop-shadow">
-                    <CarouselIcon />
-                  </span>
-                ) : tile.cover?.type === "video" ? (
-                  <span className="absolute right-1.5 top-1.5 text-white drop-shadow">
-                    <ReelIcon />
-                  </span>
-                ) : null}
-                {tile.badge && (
-                  <span className="absolute left-1 top-1 max-w-[70%] truncate rounded bg-black/70 px-1.5 text-[10px] font-medium leading-4 text-white">
-                    {tile.badge}
-                  </span>
-                )}
-                {tile.status && (
-                  <span className={`${CHIP[tile.status.tone]} absolute bottom-1 left-1 !px-1.5 !py-0 !text-[10px] shadow-sm`}>
-                    {tile.status.label}
-                  </span>
-                )}
-                <span className="sr-only">
-                  {tile.title}, {tile.dateLabel}
-                  {tile.status ? `, ${tile.status.label}` : ""}
-                </span>
-              </>
-            );
-            return (
-              <li key={tile.id} className="relative aspect-[3/4] bg-surface-sunken" title={`${tile.dateLabel} · ${tile.title}`}>
-                {tile.href ? (
-                  <Link href={tile.href} className="relative block h-full w-full focus-visible:outline-offset-[-2px]">
-                    {inner}
-                  </Link>
-                ) : (
-                  <div className="relative h-full w-full">{inner}</div>
-                )}
-              </li>
-            );
-          })}
+          {tiles.map((tile) => (
+            <Tile key={tile.id} tile={tile} />
+          ))}
+          {published.map((tile) => (
+            <Tile key={tile.id} tile={tile} published />
+          ))}
         </ul>
+      )}
+      {tiles.length > 0 && published.length > 0 && (
+        <p className="text-xs text-muted" data-testid="instagram-grid-legend">
+          Le caselle con lo stato sono i post del piano; le altre {published.length === 1 ? "è già pubblicata" : `${published.length} sono già pubblicate`} sul profilo.
+        </p>
       )}
     </figure>
   );

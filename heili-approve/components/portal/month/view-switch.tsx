@@ -1,11 +1,12 @@
 /**
- * Segmented control of the month views: "Panoramica · Griglia · Sfoglia".
+ * Segmented control of the month views: "Panoramica · Griglia · Anteprima
+ * Instagram · Sfoglia" (Instagram only for a plan with feed posts).
  * The choice lives in the URL (`?vista=`), so it survives a reload and the
  * way back from a post. Plain links: no client state.
  */
 
 import Link from "next/link";
-import { MONTH_VIEW_LABELS, viewPath, type MonthView } from "@/lib/month-rules";
+import { MONTH_VIEW_LABELS, MONTH_VIEW_SHORT_LABELS, viewPath, type MonthView } from "@/lib/month-rules";
 
 export default function ViewSwitch({
   basePath,
@@ -31,7 +32,16 @@ export default function ViewSwitch({
           data-testid={`view-${item}`}
           className="studio-view-tab inline-flex items-center justify-center whitespace-nowrap"
         >
-          {MONTH_VIEW_LABELS[item]}
+          {MONTH_VIEW_SHORT_LABELS[item] ? (
+            <>
+              <span className="sm:hidden" aria-hidden="true">
+                {MONTH_VIEW_SHORT_LABELS[item]}
+              </span>
+              <span className="max-sm:sr-only">{MONTH_VIEW_LABELS[item]}</span>
+            </>
+          ) : (
+            MONTH_VIEW_LABELS[item]
+          )}
         </Link>
       ))}
     </nav>
