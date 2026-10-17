@@ -14,6 +14,7 @@ import { loadRecentClientIds } from "@/app/(dashboard)/posts/data";
 import ClientPicker from "@/components/posts/client-picker";
 import ImportClientSelect from "@/components/posts/import/client-select";
 import ImportWizard from "@/components/posts/import/import-wizard";
+import SyncCurrentClient from "@/components/sync-current-client";
 import { clientHasService } from "@/lib/clients";
 import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
@@ -51,6 +52,7 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
 
   return (
     <div className="space-y-5">
+      {scoped && <SyncCurrentClient clientId={scoped.id} currentClientId={currentId} />}
       <Link href="/posts" className="text-sm text-muted hover:text-foreground">
         ← Post
       </Link>

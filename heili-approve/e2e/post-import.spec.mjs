@@ -65,6 +65,8 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   await expect(page.getByTestId("import-pick-client")).toBeVisible();
   await page.getByTestId("import-client-option").filter({ hasText: "Caffè Aurora" }).click();
   await expect(page.getByRole("heading", { name: "Importa post per Caffè Aurora" })).toBeVisible();
+  // QA-16: the page's client becomes the menu's client too.
+  await expect(page.getByTestId("client-switcher")).toContainText("Caffè Aurora");
 
   const xlsx = await download(page, page.getByTestId("import-template-xlsx"));
   expect(xlsx.name).toBe("modello-importa-post.xlsx");

@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import type { ContentKind } from "@/app/generated/prisma/client";
 import { loadEditorClients, loadRecentClientIds } from "@/app/(dashboard)/posts/data";
 import ClientPicker from "@/components/posts/client-picker";
+import SyncCurrentClient from "@/components/sync-current-client";
 import ContentEditor from "@/components/posts/content-editor";
 import { addDays, contentWords, dayKeyIn, DEFAULT_TIME_ZONE, isDayKey, newContentHref } from "@/components/posts/helpers";
 import { KindIcon } from "@/components/posts/kind-badge";
@@ -82,7 +83,8 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const kinds = enabledKinds();
   // The client in the URL, else the one picked in the menu.
-  const requestedClient = first(params.clientId) || ((await getCurrentClientId(context.workspaceId)) ?? "");
+  const currentClientId = await getCurrentClientId(context.workspaceId);
+  const requestedClient = first(params.clientId) || (currentClientId ?? "");
   const requestedDay = first(params.data);
   const day = isDayKey(requestedDay) ? requestedDay : null;
   const allClients = await loadEditorClients(context.workspaceId);
@@ -99,6 +101,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
     if (pickedClient) {
       return (
         <div className="space-y-4">
+          <SyncCurrentClient clientId={pickedClient.id} currentClientId={currentClientId} />
           <Link href={backHref} className="text-sm text-muted hover:text-foreground">
             {backLabel}
           </Link>
