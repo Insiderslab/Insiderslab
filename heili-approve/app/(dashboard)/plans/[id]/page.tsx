@@ -16,11 +16,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import InstagramGrid, { type GridTile } from "@/components/plans/instagram-grid";
-import { PlanProgressBar, PlanStatusChip, PlanViews } from "@/components/plans/plan-bits";
+import { PlanProgressBar, PlanStatusChip } from "@/components/plans/plan-bits";
 import PlanCalendar from "@/components/plans/plan-calendar";
 import PlanEditor from "@/components/plans/plan-editor";
 import { AddToPlanButton } from "@/components/plans/plan-post-buttons";
 import PlanSharePanel from "@/components/plans/plan-share-panel";
+import PlanViewSwitch from "@/components/plans/plan-view-switch";
 import { dayKeyIn, formatDateTime, newContentHref, toLocalParts } from "@/components/posts/helpers";
 import StatusBadge from "@/components/status-badge";
 import QuickReviewLink from "@/components/share/quick-review-link";
@@ -35,6 +36,7 @@ import {
   planProgress,
 } from "@/lib/plan-rules";
 import { getPlanForWorkspace, type WorkspacePlan, type WorkspacePlanPost } from "@/lib/plans";
+import { PLAN_LIST_PAGE, parsePlanListLimit, parsePlanView, planViewHref, showMoreLabel } from "@/lib/plan-view";
 import { productName } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
@@ -70,10 +72,20 @@ function tileStatus(post: WorkspacePlanPost): GridTile["status"] {
   return { label: "Bozza", tone: "offline" };
 }
 
-export default async function PlanPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlanPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const context = await getCurrentWorkspaceContext();
   if (!context) redirect("/login");
   const { id } = await params;
+  const query = await searchParams;
+  // QA-09: only the active view is rendered; the list grows 50 rows at a time.
+  const view = parsePlanView(query.vista);
+  const limit = parsePlanListLimit(query.mostra);
   const plan = await loadPlan(id, context.workspaceId);
 
   const zone = plan.client.timezone;
@@ -91,7 +103,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     outside: plan.outside.filter(sendable).length,
     outsideTotal: plan.outside.length,
   };
-  const tiles: GridTile[] = instagramGridOrder(plan.posts.filter((post) => post.networks.includes("instagram"))).map((post) => ({
+  const tiles: GridTile[] = view !== "instagram" ? [] : instagramGridOrder(plan.posts.filter((post) => post.networks.includes("instagram"))).map((post) => ({
     id: post.id,
     title: post.title,
     ...coverOf(post),
@@ -99,13 +111,14 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     status: tileStatus(post),
     href: `/posts/${post.id}`,
   }));
-  const calendarPosts = [...plan.posts, ...plan.outside].map((post) => ({
+  const planIds = new Set(plan.posts.map((p) => p.id));
+  const calendarPosts = view !== "calendario" ? [] : [...plan.posts, ...plan.outside].map((post) => ({
     id: post.id,
     title: post.title,
     status: post.status,
     publishAt: post.publishAt,
     cover: coverOf(post).cover,
-    inPlan: plan.posts.some((p) => p.id === post.id),
+    inPlan: planIds.has(post.id),
   }));
   const dueDate = plan.reviewDueAt ? toLocalParts(plan.reviewDueAt, zone).date : "";
   // "Nuovo post" starts on the 1st of the month, or today when the month has begun.
@@ -170,9 +183,16 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_25rem]">
         <div className="min-w-0">
-          <PlanViews
-            list={
-              <div className="space-y-6">
+          <section className="space-y-4" aria-labelledby="plan-views-title">
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+              <div>
+                <p className="label-caps">Contenuti del piano</p>
+                <h2 id="plan-views-title" className="mt-1 text-xl font-semibold">Scegli come controllarli</h2>
+              </div>
+              <PlanViewSwitch planId={plan.id} view={view} />
+            </div>
+            {view === "elenco" && (
+              <div className="space-y-6" data-testid="plan-panel-list">
                 <section className="space-y-3" aria-labelledby="plan-posts-title">
                   <div>
                     <h3 id="plan-posts-title" className="text-lg font-semibold">Post inclusi ({plan.posts.length})</h3>
@@ -181,9 +201,12 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                   {plan.posts.length === 0 ? (
                     <p className="panel p-5 text-sm text-muted">Il piano non ha ancora post.</p>
                   ) : (
-                    <ol className="panel divide-y divide-border overflow-visible" data-testid="plan-posts">
-                      {plan.posts.map((post) => <PlanPostRow key={post.id} post={post} zone={zone} />)}
-                    </ol>
+                    <>
+                      <ol className="panel divide-y divide-border overflow-visible" data-testid="plan-posts">
+                        {plan.posts.slice(0, limit).map((post) => <PlanPostRow key={post.id} post={post} zone={zone} />)}
+                      </ol>
+                      <ShowMore planId={plan.id} total={plan.posts.length} shown={limit} />
+                    </>
                   )}
                 </section>
 
@@ -202,7 +225,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                       Aggiungerli serve a comporre il piano. Le bozze diventano visibili al cliente solo quando le invii in revisione.
                     </div>
                     <ol className="panel divide-y divide-border overflow-visible">
-                      {plan.outside.map((post) => (
+                      {plan.outside.slice(0, limit).map((post) => (
                         <PlanPostRow
                           key={post.id}
                           post={post}
@@ -211,20 +234,21 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                         />
                       ))}
                     </ol>
+                    <ShowMore planId={plan.id} total={plan.outside.length} shown={limit} />
                   </section>
                 )}
               </div>
-            }
-            calendar={
-              <div className="space-y-3">
+            )}
+            {view === "calendario" && (
+              <div className="space-y-3" data-testid="plan-panel-calendar">
                 <p className="text-sm text-muted">
                   {plan.posts.length} nel piano e {plan.outside.length} da aggiungere. Il calendario è una vista: non invia contenuti.
                 </p>
                 <PlanCalendar month={plan.month} timeZone={zone} posts={calendarPosts} now={now} />
               </div>
-            }
-            instagram={
-              <div className="space-y-3">
+            )}
+            {view === "instagram" && (
+              <div className="space-y-3" data-testid="plan-panel-instagram">
                 <p className="text-sm text-muted">Solo i contenuti Instagram inclusi, dal più recente. Tocca una casella per aprire il post.</p>
                 <InstagramGrid
                   tiles={tiles}
@@ -233,8 +257,8 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                   caption={`${tiles.length} contenuti Instagram del piano`}
                 />
               </div>
-            }
-          />
+            )}
+          </section>
         </div>
 
         <aside className="order-first min-w-0 space-y-6 xl:order-none">
@@ -283,6 +307,21 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
         </aside>
       </div>
     </div>
+  );
+}
+
+function ShowMore({ planId, total, shown }: { planId: string; total: number; shown: number }) {
+  const label = showMoreLabel(total, shown);
+  if (!label) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-3 text-sm text-muted">
+      <span>
+        Mostrati {shown} di {total}.
+      </span>
+      <Link href={planViewHref(planId, "elenco", { show: shown + PLAN_LIST_PAGE })} scroll={false} className="btn btn-sm min-h-11" data-testid="plan-show-more">
+        {label}
+      </Link>
+    </p>
   );
 }
 

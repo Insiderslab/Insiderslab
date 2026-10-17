@@ -94,9 +94,23 @@ test("agenzia: apre il piano dal calendario, controlla la griglia e lo invia", a
   await expect(page.getByTestId("plan-posts").getByTestId("plan-post-row")).toHaveCount(4);
   // Calendar order, the 23:30 post of the last day included.
   await expect(page.getByTestId("plan-posts").getByTestId("plan-post-row").last()).toContainText(posts[3].title);
+  // QA-09: only the active view is in the page; the others load on request.
+  await expect(page.getByTestId("instagram-grid")).toHaveCount(0);
+  await expect(page.getByTestId("plan-panel-calendar")).toHaveCount(0);
+  await page.getByTestId("plan-view-instagram").click();
+  await page.waitForURL(/vista=instagram/);
+  await expect(page.getByTestId("plan-view-instagram")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("plan-posts")).toHaveCount(0);
   await expect(page.getByTestId("instagram-grid").locator("li")).toHaveCount(4);
   // Instagram order: newest first.
   await expect(page.getByTestId("instagram-grid").locator("li").first()).toHaveAttribute("title", new RegExp(posts[3].title));
+  await page.getByTestId("plan-view-calendario").click();
+  await page.waitForURL(/vista=calendario/);
+  await expect(page.getByTestId("plan-panel-calendar")).toBeVisible();
+  await page.getByTestId("plan-view-elenco").click();
+  await page.waitForURL(new RegExp(`/plans/${state.planId}$`));
+  await expect(page.getByTestId("plan-posts").getByTestId("plan-post-row")).toHaveCount(4);
+  await expect(page.getByTestId("plan-show-more")).toHaveCount(0);
   await expect(page.getByTestId("plan-share-hint")).toBeVisible();
 
   await page.getByLabel(/Messaggio per/).fill("Ciao Chiara! Questo mese raccontiamo la cucina e il team. Un post a settimana.");
@@ -131,11 +145,11 @@ test("agenzia: le tre viste del piano stanno intere a 1024, 1280 e 1366 px (QA-1
     const context = await agencyContext(browser, data, { options: { ...DESKTOP, viewport: { width, height: 900 } } });
     const page = await context.newPage();
     await page.goto(`/plans/${state.planId}`);
-    const tabs = page.getByRole("tablist", { name: "Vista del piano" });
-    await expect(tabs.getByRole("tab")).toHaveCount(3);
+    const tabs = page.getByRole("navigation", { name: "Vista del piano" });
+    await expect(tabs.getByRole("link")).toHaveCount(3);
     expect(await tabs.evaluate((el) => el.scrollWidth <= el.clientWidth), `a ${width} px il contenitore scorre`).toBe(true);
     // Every tab is inside the viewport, none cut on the right.
-    for (const tab of await tabs.getByRole("tab").all()) {
+    for (const tab of await tabs.getByRole("link").all()) {
       const box = await tab.boundingBox();
       expect(box.x + box.width, `scheda «${await tab.innerText()}» a ${width} px`).toBeLessThanOrEqual(width);
     }
