@@ -11,7 +11,7 @@ import {
   safeFetchText,
   type LookupAll,
 } from "../lib/website/ssrf";
-import { findReviewTags, verifyInstallation } from "../lib/website/verify";
+import { describeVerification, findReviewTags, verifyInstallation } from "../lib/website/verify";
 
 const KEY = "hs_abcdefghijklmnopqrstuv";
 
@@ -144,6 +144,15 @@ describe("fetch and «Verifica installazione»", () => {
       } else if (req.url === "/locked") {
         res.writeHead(401);
         res.end();
+      } else if (req.url === "/no-key") {
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end('<script src="https://approve.heili.cloud/heili-review.js" data-site="" defer></script>');
+      } else if (req.url === "/missing") {
+        res.writeHead(404);
+        res.end("non trovato");
+      } else if (req.url === "/nothing") {
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end("<html><body><h1>Prova</h1></body></html>");
       } else if (req.url === "/other-key") {
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end('<script src="https://approve.heili.cloud/heili-review.js" data-site="hs_zzzzzzzzzzzzzzzzzzzzzz" defer></script>');
@@ -171,8 +180,36 @@ describe("fetch and «Verifica installazione»", () => {
     expect(await verifyInstallation(`${base}/`, KEY, { allowLocal: true })).toEqual({ found: true, message: "Script trovato sul sito" });
     expect((await verifyInstallation(`${base}/other-key`, KEY, { allowLocal: true })).message).toMatch(/altra chiave/);
     expect((await verifyInstallation(`${base}/locked`, KEY, { allowLocal: true })).message).toMatch(/password/);
+    expect((await verifyInstallation(`${base}/no-key`, KEY, { allowLocal: true })).message).toMatch(/senza chiave/);
+    expect((await verifyInstallation(`${base}/nothing`, KEY, { allowLocal: true })).message).toMatch(/non trovato/);
+    expect((await verifyInstallation(`${base}/missing`, KEY, { allowLocal: true })).message).toBe("Il sito risponde con un errore (404).");
     expect((await verifyInstallation(`${base}/`, KEY)).found).toBe(false);
     expect((await verifyInstallation("http://169.254.169.254/", KEY)).message).toMatch(/non consentito/);
+  });
+
+  it("every message it produces is explained: what happened and what to do", async () => {
+    const messages = [
+      (await verifyInstallation(`${base}/`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/other-key`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/no-key`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/nothing`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/locked`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/missing`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/big`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation(`${base}/loop`, KEY, { allowLocal: true })).message,
+      (await verifyInstallation("http://169.254.169.254/", KEY)).message,
+    ];
+    expect(messages.map((m) => describeVerification(m)?.group)).toEqual([
+      "found",
+      "wrong",
+      "wrong",
+      "missing",
+      "blocked",
+      "unreachable",
+      "unreachable",
+      "unreachable",
+      "address",
+    ]);
   });
 
   it("reads only real review tags", () => {

@@ -103,6 +103,19 @@ test("agenzia: crea il «Sito web», installa la riga e la verifica", async ({ b
   state.siteKey = key;
   await expect(page.getByTestId("site-origins")).toContainText(site.origin);
 
+  // «Dove la metto?»: a tab per platform, three steps each; WordPress has the plugin and the key to copy.
+  await expect(page.getByTestId("site-next-step")).toContainText("Passo 1: installa la riga");
+  await expect(page.getByTestId("site-step")).toHaveCount(3);
+  await expect(page.getByTestId("site-copy-line")).toBeVisible();
+  await page.getByTestId("site-platform-wordpress").click();
+  await expect(page.getByTestId("site-step")).toHaveCount(3);
+  await expect(page.getByTestId("site-plugin-download")).toHaveAttribute("href", "/wordpress/heili-approve-review.zip");
+  expect(await page.getByTestId("site-key").inputValue()).toBe(key);
+  await page.getByTestId("site-platform-gtm").click();
+  await expect(page.getByTestId("site-step")).toHaveCount(3);
+  await expect(page.getByText(/non vede i tag di Tag Manager/)).toBeVisible();
+  await page.getByTestId("site-platform-html").click();
+
   // The tag still has no key → not verified, with what to do; with the key → «Script trovato sul sito».
   await page.getByTestId("site-verify").click();
   await expect(page.getByTestId("site-verify-message")).toContainText("senza chiave");
@@ -174,6 +187,12 @@ test("cliente: «Apri il sito», indica il titolo e un campo, nessun valore esce
   await frame2.getByTestId("embed-send").click();
   await expect(frame2.getByText(/Nota salvata/)).toBeVisible();
 
+  // Esc closes the open panel and the focus goes back to Heili's button.
+  await frame2.locator("#embed-note").focus();
+  await sitePage.keyboard.press("Escape");
+  await expect.poll(() => hostState(sitePage)).toBe("closed");
+  await expect(frame2.getByTestId("embed-launcher")).toBeFocused();
+
   const { rows } = await db.query('select anchor, body from "PostComment" where "postId"=$1 order by "createdAt"', [state.postId]);
   expect(rows).toHaveLength(2);
   expect(rows[0].anchor).toMatchObject({ textSnippet: "Scopri la collezione", tag: "h1", device: "desktop", viewport: { w: 1366 } });
@@ -224,6 +243,48 @@ test("un codice già usato non apre nulla; un'origine non registrata non riceve 
   await second.close();
 });
 
+test("se il collegamento cade, Heili dice cosa non va e «Riprova» lo riapre", async ({ browser }) => {
+  const { code } = fixture("launch", state.postId, state.fixture.reviewerId);
+  const context = await browser.newContext(DESKTOP);
+  // The exchange of the code fails (network): the server never sees the code, so it is still valid.
+  await context.route("**/api/site/v1/exchange", (route) => route.abort());
+  const page = await context.newPage();
+  await page.goto(`${site.origin}/#heili-review=${code}`);
+  const frame = await heiliFrame(page, { connected: false });
+  await expect(frame.getByTestId("embed-launcher")).toHaveAttribute("data-phase", "error", { timeout: 20_000 });
+  // A tap is never a dead button: the message opens, with «Riprova».
+  await frame.getByTestId("embed-launcher").click();
+  await expect(frame.getByText(/Non riesco a collegarmi ad Approve/)).toBeVisible();
+  await expect(frame.getByTestId("embed-retry")).toBeVisible();
+  await context.unroute("**/api/site/v1/exchange");
+  await frame.getByTestId("embed-retry").click();
+  await expect(frame.getByTestId("embed-pick")).toBeVisible({ timeout: 20_000 });
+  await context.close();
+});
+
+test("telefono 390, agenzia: riquadro «Sul sito» senza scorrimento orizzontale e con aree da 44 px", async ({ browser }) => {
+  const context = await agencyContext(browser, data, { options: MOBILE });
+  const page = await context.newPage();
+  await page.goto(`/posts/${state.postId}?tab=modifica`);
+  await expect(page.getByTestId("site-panel")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  for (const id of ["site-platform-html", "site-platform-wordpress", "site-platform-webflow", "site-platform-shopify", "site-platform-gtm", "site-verify", "site-revoke"]) {
+    const box = await page.getByTestId(id).boundingBox();
+    expect(box?.height, id).toBeGreaterThanOrEqual(43.5);
+  }
+  // Every tab keeps the page inside 390 px.
+  for (const id of ["wordpress", "webflow", "shopify", "gtm"]) {
+    await page.getByTestId(`site-platform-${id}`).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), id).toBeLessThanOrEqual(390);
+  }
+  // Revoking asks inline, and «No» leaves the key as it is.
+  await page.getByTestId("site-revoke").click();
+  await expect(page.getByRole("alertdialog")).toContainText("Revocare la chiave?");
+  await page.getByRole("button", { name: "No, lasciala com'è" }).click();
+  await expect(page.getByTestId("site-revoke")).toBeVisible();
+  await context.close();
+});
+
 test("agenzia: «Apri nel punto» trova l'elemento (sola lettura)", async ({ browser }) => {
   const context = await agencyContext(browser, data);
   const page = await context.newPage();
@@ -260,6 +321,9 @@ test("telefono 390: foglio e barra «Tocca l'elemento» senza scorrimento orizzo
   const frame = await heiliFrame(sitePage);
   await frame.getByTestId("embed-launcher").click();
   await expect.poll(() => hostState(sitePage)).toBe("sheet");
+  for (const id of ["embed-pick", "embed-send"]) {
+    expect((await frame.getByTestId(id).boundingBox())?.height, id).toBeGreaterThanOrEqual(43.5);
+  }
   await frame.getByTestId("embed-pick").click();
   await expect.poll(() => hostState(sitePage)).toBe("picking");
   const width = await sitePage.evaluate(() => document.documentElement.scrollWidth);

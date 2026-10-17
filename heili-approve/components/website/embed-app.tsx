@@ -205,11 +205,14 @@ export default function EmbedApp() {
     let handled = false;
 
     let lastHello: { event: MessageEvent; data: Record<string, unknown> } | null = null;
+    /** After a failure the script keeps saying hello for a while: only «Riprova» tries again, not every hello. */
+    let suspended = false;
 
     const fail = (text: string, end: boolean, retry: (() => void) | null = null) => {
       setPhase("error");
       setMessage(text);
       retryRef.current = retry;
+      suspended = Boolean(retry);
       setRetryable(Boolean(retry));
       if (end && hostRef.current) post("end");
     };
@@ -275,6 +278,7 @@ export default function EmbedApp() {
           // Not a refusal: keep the session and the code, «Riprova» tries again.
           handled = false;
           fail(e instanceof Error ? e.message : NETWORK_MESSAGE, false, () => {
+            suspended = false;
             setPhase("waiting");
             setMessage(null);
             if (lastHello) void handleHello(lastHello.event, lastHello.data);
@@ -296,6 +300,7 @@ export default function EmbedApp() {
       if (!data || typeof data !== "object" || data.v !== 1 || data.c !== channel || typeof data.type !== "string") return;
       if (data.type === "hello") {
         lastHello = lastHello ?? { event, data };
+        if (suspended) return;
         if (!origins) pending.push(event);
         else void handleHello(event, data);
         return;
@@ -349,6 +354,8 @@ export default function EmbedApp() {
           origins = result.origins;
           setPhase((current) => (current === "error" ? "waiting" : current));
           for (const event of pending.splice(0)) onMessage(event);
+          // A hello that came while the list of addresses was failing was set aside.
+          if (lastHello && !handled) void handleHello(lastHello.event, lastHello.data);
         })
         .catch((e: Partial<ApiError>) => {
           if (e.retryable && attempts < 3) {
@@ -357,6 +364,7 @@ export default function EmbedApp() {
           }
           if (!e.retryable) return fail("Questo sito non è collegato ad Approve: avvisa l'agenzia.", false);
           fail(e.message ?? NETWORK_MESSAGE, false, () => {
+            suspended = false;
             setPhase("waiting");
             setMessage(null);
             attempts = 0;
