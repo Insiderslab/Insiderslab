@@ -495,6 +495,14 @@ export function formatPlanSlot(date: Date, timeZone: string | null | undefined):
 }
 
 /**
+ * Whether the agency's message of a plan needs «Leggi tutto» (shown in four
+ * lines, K-09): a first guess for the server render, before the browser measures it.
+ */
+export function messageLooksLong(text: string): boolean {
+  return text.trim().split("\n").length > 4 || text.trim().length > 160;
+}
+
+/**
  * The home page's one primary action (the big button) and, identical, the Guida's
  * «Prossimo passo»: Heili reinforces the page's path, it never contradicts it (QA-17).
  * The monthly plan comes first, then the post waiting.

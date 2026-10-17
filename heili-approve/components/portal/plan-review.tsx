@@ -17,14 +17,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { addPlanCommentAction, approvePlanAction } from "@/components/portal/safe-actions";
 import { PlanProgressBar, PlanViews } from "@/components/plans/plan-bits";
 import DictationButton from "@/components/voice/dictation-button";
 import { NETWORK_LABELS } from "@/lib/domain";
 import { SKIP_REASON_LABELS, planProgress, selectApproveAll, type ApproveAllSkipReason } from "@/lib/plan-rules";
 import BottomSheet from "./bottom-sheet";
-import { portalStatusLabel, portalTone } from "./helpers";
+import { messageLooksLong, portalStatusLabel, portalTone } from "./helpers";
 import { DecisionBar, SheetButtons, SheetError } from "./review-pieces";
 import type { PortalPlan, PortalPlanPost } from "./types";
 
@@ -172,12 +172,7 @@ export default function PlanReview({
             {plan.heading}
           </h1>
         </div>
-        {plan.intro && (
-          <div className="inset space-y-1 p-4">
-            <p className="label-caps">Il messaggio dell&apos;agenzia</p>
-            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed">{plan.intro}</p>
-          </div>
-        )}
+        {plan.intro && <AgencyMessage text={plan.intro} />}
         <PlanProgressBar progress={progress} />
         {waiting > 0 && plan.dueLabel && (
           <p className="text-sm font-medium text-warning">Ti chiediamo di rispondere entro {plan.dueLabel}.</p>
@@ -328,6 +323,51 @@ export default function PlanReview({
           confirmClass="bg-success text-white hover:opacity-90"
         />
       </BottomSheet>
+    </div>
+  );
+}
+
+/**
+ * The agency's message for the month, four lines at most with «Leggi tutto»:
+ * on a phone the way into the review («Sfoglia i post, uno alla volta») stays
+ * in the first screen (K-09). The whole text is in the page, only clamped.
+ */
+function AgencyMessage({ text }: { text: string }) {
+  const id = useId();
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  // First guess for the server render; the measure below corrects it.
+  const [long, setLong] = useState(() => messageLooksLong(text));
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || expanded || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setLong(element.scrollHeight > element.clientHeight + 1));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  return (
+    <div className="inset space-y-1 p-4" data-testid="plan-intro">
+      <p className="label-caps">Il messaggio dell&apos;agenzia</p>
+      <p
+        ref={ref}
+        id={`${id}-text`}
+        className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-base leading-relaxed ${expanded ? "" : "line-clamp-4"}`}
+      >
+        {text}
+      </p>
+      {(long || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          aria-expanded={expanded}
+          aria-controls={`${id}-text`}
+          className="-mb-2 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline underline-offset-2"
+        >
+          {expanded ? "Mostra meno" : "Leggi tutto"}
+        </button>
+      )}
     </div>
   );
 }
