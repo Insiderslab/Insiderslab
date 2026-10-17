@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { firstOfList, messageLooksLong } from "@/components/portal/helpers";
 import { guideStatusSentence } from "@/components/portal/heili/rules";
 import { channelsLabel } from "@/components/portal/month/month-grid";
+import { voiceOffMessage } from "@/components/review/assistant-panel";
 import { MONTH_VIEW_LABELS, parseMonthView, parsePostReturn, planViews, postLinkQuery, viewPath } from "@/lib/month-rules";
 import { isInstagramFeedPost } from "@/lib/plan-rules";
 import { instagramFormatOf } from "@/lib/posts";
@@ -51,6 +52,18 @@ describe("K-13: Griglia and Anteprima Instagram are two different views", () => 
     expect(guideStatusSentence({ page: "plan-instagram", title: "Piano social di novembre" })).toBe(
       "Sei nell'anteprima Instagram del piano social di novembre."
     );
+  });
+});
+
+describe("K-12: with the voice off Heili says it in one line", () => {
+  it("tells what to do instead, without «su questo servizio»", () => {
+    for (const reason of ["media-analysis-off", "not-configured", null] as const) {
+      const text = voiceOffMessage(reason);
+      expect(text).toMatch(/non è disponibile/);
+      expect(text).toMatch(/scrivi o detta il messaggio qui sotto\.$/);
+      expect(text).not.toMatch(/su questo servizio/);
+    }
+    expect(voiceOffMessage("media-analysis-off")).toMatch(/immagini o video/);
   });
 });
 

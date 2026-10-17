@@ -72,7 +72,7 @@ import {
   type AssistantVoiceAvailability,
   type Readiness,
   type ReviewInputModeValue,
-  voiceUnavailableMessage,
+  type VoiceUnavailableReason,
 } from "@/lib/review-assistant/shared";
 
 export interface AssistantPanelProps {
@@ -237,6 +237,16 @@ export function liveStatus(
 
 /** Quanto resta acceso «Heili sta parlando» dopo l'ultimo frammento ricevuto. */
 const SPEAKING_MS = 1600;
+
+/**
+ * The one line shown instead of «Parla a voce» when the voice is off for this
+ * content (K-12): what to do instead, without the three steps of a call.
+ */
+export function voiceOffMessage(reason: VoiceUnavailableReason | null): string {
+  return reason === "media-analysis-off"
+    ? "La conversazione a voce non è disponibile per i contenuti con immagini o video: scrivi o detta il messaggio qui sotto."
+    : "La conversazione a voce non è disponibile per questo contenuto: scrivi o detta il messaggio qui sotto.";
+}
 
 /** Il passo del flusso 1 Parla · 2 Controlla · 3 Invia (U-03). */
 export function assistantStep(state: { completed: boolean; submitting: boolean; done: boolean }): 1 | 2 | 3 {
@@ -554,6 +564,8 @@ export function AssistantPanel({
     dictating: speechInput.listening,
   });
   const voiceNotice = voiceTapRefused ? voiceBlocker : null;
+  // Talking with Heili is possible here: server configuration, content and browser (K-12).
+  const voiceOn = liveVoice && voice.available && !live.supportProblem;
 
   function startConversation() {
     if (voiceBusy) return;
@@ -829,24 +841,16 @@ export function AssistantPanel({
         </header>
       )}
 
-      {/* No voice on this instance at all: nothing to offer, nothing to explain. */}
-      {liveVoice && !loading && done === null && canChat && voice.reason !== "not-configured" && (
+      {/* No voice on this instance at all: nothing to offer, nothing to explain. Voice off for
+          this content or this browser: one line, no «Parla a voce» card and no steps (K-12). */}
+      {liveVoice && !loading && done === null && canChat && voice.reason !== "not-configured" && !voiceOn && (
+        <p className="text-sm text-muted" data-testid={live.supportProblem && voice.available ? "voice-unsupported" : "voice-unavailable"}>
+          {live.supportProblem && voice.available ? VOICE_SUPPORT_MESSAGES[live.supportProblem] : voiceOffMessage(voice.reason)}
+        </p>
+      )}
+      {voiceOn && !loading && done === null && canChat && (
         <div className="space-y-2 rounded-lg border border-border bg-surface p-3" aria-label="Parla a voce" data-testid="voice-box">
-          {!voice.available && voice.reason ? (
-            <div className="space-y-1">
-              <p className="text-sm font-semibold">Parla a voce</p>
-              <p className="text-xs text-muted" data-testid="voice-unavailable">
-                {voiceUnavailableMessage(voice.reason)}
-              </p>
-            </div>
-          ) : live.supportProblem ? (
-            <div className="space-y-1">
-              <p className="text-sm font-semibold">Parla a voce</p>
-              <p className="text-xs text-muted" data-testid="voice-unsupported">
-                {VOICE_SUPPORT_MESSAGES[live.supportProblem]}
-              </p>
-            </div>
-          ) : !voiceBusy ? (
+          {!voiceBusy ? (
             <div className="space-y-1.5">
               <button
                 type="button"
@@ -935,7 +939,8 @@ export function AssistantPanel({
         </div>
       )}
 
-      {!loading && done === null && (
+      {/* «1 Parla · 2 Controlla · 3 Invia» only when talking is possible here (K-12). */}
+      {voiceOn && !loading && done === null && (
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" aria-label={feedbackMode ? "Passi: parla, controlla, aggiungi" : "Passi: parla, controlla, invia"} data-testid="assistant-steps">
           {(
             [

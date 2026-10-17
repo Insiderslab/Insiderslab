@@ -289,6 +289,14 @@ test("QA-17: la Guida rafforza il percorso della pagina: stesso prossimo passo, 
   await page.getByRole("button", { name: "Chiudi Heili" }).click();
 
   // After «Chiedi modifiche» the last of the three steps is the gesture that closes the flow.
+  // The steps are those of a voice conversation (K-12): this server has no media analysis,
+  // so the state says the voice is available, as an instance with it would.
+  await page.route(/\/api\/review\/[^/]+\/assistant\?/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.data.voice = { available: true, reason: null };
+    await route.fulfill({ response, json: body });
+  });
   await page.goto(postUrl(state.fixture.askedId));
   await page.getByTestId("heili-dock-button").click();
   await expect(dock.getByTestId("assistant-steps")).toContainText("3 Aggiungi");

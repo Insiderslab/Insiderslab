@@ -478,8 +478,15 @@ test("se la voce non può funzionare su questo contenuto il riquadro lo spiega; 
     body.data.voice = { available: false, reason };
     await route.fulfill({ response, json: body });
   });
-  const dock = await openVoice(page, state.fixture.blogId);
-  await expect(dock.getByTestId("voice-unavailable")).toHaveText(/immagini o video la conversazione a voce non è attiva/);
+  // K-12: the line replaces the «Parla a voce» card, so the dock is opened without waiting for it.
+  await page.goto(postUrl(state.fixture.blogId));
+  await page.getByTestId("heili-dock-button").click();
+  const dock = page.getByTestId("heili-dock");
+  await expect(dock).toBeVisible();
+  await expect(dock.getByTestId("voice-unavailable")).toHaveText(/conversazione a voce non è disponibile per i contenuti con immagini o video/);
+  // K-12: no «Parla a voce» card and no «1 Parla · 2 Controlla · 3 Invia» steps when talking is not possible.
+  await expect(dock.getByTestId("voice-box")).toHaveCount(0);
+  await expect(dock.getByTestId("assistant-steps")).toHaveCount(0);
   await expect(dock.getByTestId("voice-start")).toHaveCount(0);
   await page.getByRole("button", { name: "Chiudi Heili" }).click();
 
