@@ -10,7 +10,7 @@
  */
 
 import type { RawRow } from "./rows";
-import { MAX_IMPORT_ROWS } from "./rows";
+import { MAX_SHEET_ROWS } from "./rows";
 
 /** Italian message safe to show: the file cannot be read as a sheet of posts. */
 export class ImportParseError extends Error {
@@ -121,8 +121,8 @@ export function tableToRows(table: Table): ParsedSheet {
   }
 
   if (body.length === 0) throw new ImportParseError("Il file ha solo l'intestazione: aggiungi le righe dei post.");
-  if (body.length > MAX_IMPORT_ROWS) {
-    throw new ImportParseError(`Troppe righe: ne puoi importare ${MAX_IMPORT_ROWS} alla volta (il file ne ha ${body.length}).`);
+  if (body.length > MAX_SHEET_ROWS) {
+    throw new ImportParseError(`Troppe righe: un foglio ne può avere al massimo ${MAX_SHEET_ROWS} (questo ne ha ${body.length}). Dividilo in due file.`);
   }
 
   const rows = body.map(({ cells, row }) => {
@@ -322,7 +322,7 @@ export async function readXlsx(data: ArrayBuffer | Uint8Array): Promise<Table> {
     const rowAttrs = attributes(rowMatch[1]);
     const rowIndex = rowAttrs.r ? Number(rowAttrs.r) - 1 : nextRow;
     nextRow = rowIndex + 1;
-    if (rowIndex > MAX_IMPORT_ROWS + 1000) throw new ImportParseError("Il foglio ha troppe righe.");
+    if (rowIndex > MAX_SHEET_ROWS + 1000) throw new ImportParseError("Il foglio ha troppe righe.");
     const values: string[] = [];
     for (const cellMatch of (rowMatch[2] ?? "").matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       if (++cells > MAX_CELLS) throw new ImportParseError("Il foglio è troppo grande per essere letto.");

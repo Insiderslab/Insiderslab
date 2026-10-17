@@ -205,8 +205,11 @@ describe("columns", () => {
     expect(() => tableToRows([["Data", "Testo"], ["15/10", "x"]])).toThrow(/mancano le colonne: Reti/);
     expect(() => tableToRows([])).toThrow(ImportParseError);
     expect(() => tableToRows([["Data", "Ora", "Reti", "Testo"]])).toThrow(/solo l'intestazione/);
-    const many = [["Data", "Ora", "Reti", "Testo"], ...Array.from({ length: 201 }, () => ["15/10", "10:00", "Instagram", "x"])];
-    expect(() => tableToRows(many)).toThrow(/Troppe righe/);
+    // QA-11: a long sheet is read whole (and created in batches); only a huge one is refused.
+    const long = [["Data", "Ora", "Reti", "Testo"], ...Array.from({ length: 500 }, () => ["15/10", "10:00", "Instagram", "x"])];
+    expect(tableToRows(long).rows).toHaveLength(500);
+    const many = [["Data", "Ora", "Reti", "Testo"], ...Array.from({ length: 2001 }, () => ["15/10", "10:00", "Instagram", "x"])];
+    expect(() => tableToRows(many)).toThrow(/Troppe righe: un foglio ne può avere al massimo 2000 \(questo ne ha 2001\)/);
   });
 });
 

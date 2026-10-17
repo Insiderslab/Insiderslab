@@ -200,6 +200,48 @@ test("importare di nuovo lo stesso foglio non duplica i post", async ({ browser 
   await context.close();
 });
 
+test("450 righe incollate: lette tutte, create a gruppi con l'avanzamento, nessun doppione (QA-11)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const context = await agencyContext(browser, data);
+  const page = await context.newPage();
+  await page.goto(`/posts/import?clientId=${client.id}`);
+  const day = dmy(610);
+  const list = Array.from({ length: 450 }, (_, i) => [day, `${String(8 + Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}`, "Facebook", `E2E import lungo ${i + 1}`]);
+  // Row 431 repeats row 3 (same time, same text): it sits in the third batch and is caught anyway.
+  list[430] = [...list[2]];
+  await page.getByTestId("import-paste").fill(sheet(list));
+  await page.getByTestId("import-paste-read").click();
+  await expect(page.getByTestId("import-source")).toContainText("Righe incollate · 450 righe");
+  await expect(page.getByTestId("import-error")).toHaveCount(0);
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…", { timeout: 60_000 });
+  await expect(page.getByTestId("import-summary")).toContainText("449 righe pronte");
+  await expect(page.getByTestId("import-summary")).toContainText("1 riga da correggere");
+  await expect(page.getByText("Uguale alla riga 4: creerebbe una bozza identica")).toBeVisible();
+  await expect(page.getByTestId("import-batches-note")).toContainText("le creo a gruppi di 200");
+  await expect(page.getByTestId("import-create")).toHaveText("Crea 449 bozze");
+
+  await page.getByTestId("import-create").click();
+  await expect(page.getByTestId("import-progress")).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Bozze create" })).toBeVisible();
+  await expect(page.getByTestId("import-result-title")).toHaveText("Create 449 bozze", { timeout: 300_000 });
+  const { rows: made } = await db.query(
+    `select count(*)::int as n, count(*) filter (where status <> 'DRAFT')::int as other from "Post" where title like 'E2E import lungo %'`
+  );
+  expect(made[0]).toEqual({ n: 449, other: 0 });
+
+  // The same 450 rows again: all recognised, nothing created.
+  await page.goto(`/posts/import?clientId=${client.id}`);
+  await page.getByTestId("import-paste").fill(sheet(list));
+  await page.getByTestId("import-paste-read").click();
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…", { timeout: 60_000 });
+  await expect(page.getByTestId("import-summary")).toContainText("449 già importate");
+  await expect(page.getByTestId("import-create")).toBeDisabled();
+  const { rows: again } = await db.query(`select count(*)::int as n from "Post" where title like 'E2E import lungo %'`);
+  expect(again[0].n).toBe(449);
+  await db.query(`delete from "Post" where title like 'E2E import lungo %'`);
+  await context.close();
+});
+
 test("righe in due mesi: il piano non viene proposto", async ({ browser }) => {
   const context = await agencyContext(browser, data);
   const page = await context.newPage();
