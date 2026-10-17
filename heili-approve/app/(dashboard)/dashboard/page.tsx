@@ -55,12 +55,12 @@ const postSelect = {
   _count: { select: { comments: { where: { authorType: "CLIENT" as const, resolvedAt: null } } } },
 } as const;
 
-/** Stages of the per-kind cards; "Fatti" = scheduled on Metricool or published / delivered. */
+/** Stages of the per-kind cards; "Completati" = scheduled on Metricool or published / delivered. */
 const KIND_STAGES: Array<{ label: string; statuses: PostStatus[]; tone: string }> = [
   { label: "In revisione", statuses: ["IN_REVIEW"], tone: "" },
   { label: "Modifiche richieste", statuses: ["CHANGES_REQUESTED"], tone: "text-warning" },
   { label: "Approvati", statuses: ["APPROVED", "SCHEDULING"], tone: "" },
-  { label: "Fatti", statuses: ["SCHEDULED", "DELIVERED"], tone: "text-success" },
+  { label: "Completati", statuses: ["SCHEDULED", "DELIVERED"], tone: "text-success" },
 ];
 
 export default async function DashboardPage() {
@@ -166,7 +166,7 @@ export default async function DashboardPage() {
       ? "Pubblicati questa settimana"
       : "Consegnati questa settimana"
     : multiKind
-      ? "Fatti questa settimana"
+      ? "Completati questa settimana"
       : "Programmati questa settimana";
 
   const counters = [
@@ -336,7 +336,7 @@ export default async function DashboardPage() {
                         className="flex min-h-11 items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-surface sm:min-h-0 sm:items-baseline"
                       >
                         <dt className="text-sm text-muted">
-                          {stage.label === "Fatti" && kind !== "SOCIAL_POST" ? KIND_CONFIG[kind].deliveredLabel : stage.label}
+                          {stage.label === "Completati" && kind !== "SOCIAL_POST" ? KIND_CONFIG[kind].deliveredLabel : stage.label}
                         </dt>
                         <dd className={`tabular text-base font-semibold ${value > 0 && stage.tone ? stage.tone : "text-foreground"}`}>
                           {value}

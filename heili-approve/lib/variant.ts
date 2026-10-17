@@ -289,7 +289,7 @@ export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
     { label: "Dashboard", href: "/dashboard", kind: null },
     ...VARIANT_KINDS[variant].map((kind) => ({ label: KIND_UI[kind].navLabel, href: postsHref(kind, variant), kind })),
     { label: "Calendario", href: "/calendar", kind: null },
-    ...(VARIANT_KINDS[variant].includes("SOCIAL_POST") ? [{ label: "Piani", href: "/plans", kind: null }] : []),
+    ...(VARIANT_KINDS[variant].includes("SOCIAL_POST") ? [{ label: "Piani del mese", href: "/plans", kind: null }] : []),
     { label: "Clienti", href: "/clients", kind: null },
     { label: "Impostazioni", href: "/settings", kind: null },
     { label: "Guida", href: "/guida", kind: null },

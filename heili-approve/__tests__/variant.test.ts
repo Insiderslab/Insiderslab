@@ -120,7 +120,7 @@ describe("navigation", () => {
       ["Dashboard", "/dashboard"],
       ["Post", "/posts"],
       ["Calendario", "/calendar"],
-      ["Piani", "/plans"],
+      ["Piani del mese", "/plans"],
       ["Clienti", "/clients"],
       ["Impostazioni", "/settings"],
       ["Guida", "/guida"],
