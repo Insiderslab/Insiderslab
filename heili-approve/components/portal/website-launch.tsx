@@ -43,7 +43,7 @@ export default function WebsiteLaunch({
     setBusy(false);
     if (!result.ok) {
       win?.close();
-      setError(`${result.error} Puoi comunque scrivere le note qui nel portale.`);
+      setError(`${result.error} Tocca «Riprova», oppure scrivi le note qui nel portale.`);
       return;
     }
     if (win) {
@@ -54,7 +54,7 @@ export default function WebsiteLaunch({
     }
   }
 
-  const label = compact ? "Apri questa pagina" : "Apri il sito";
+  const label = error ? "Riprova" : compact ? "Apri questa pagina" : "Apri il sito";
   const control = withHeili ? (
     <button
       type="button"

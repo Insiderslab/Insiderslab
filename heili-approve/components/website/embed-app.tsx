@@ -102,20 +102,33 @@ function storageKey(siteKey: string): string {
   return `heili-site-session:${siteKey}`;
 }
 
+type ApiError = Error & { code?: string; retryable: boolean };
+
+const NETWORK_MESSAGE = "Non riesco a collegarmi ad Approve. Controlla la connessione e tocca «Riprova».";
+
 async function api<T>(url: string, init: RequestInit & { session?: string } = {}): Promise<T> {
   const { session, ...rest } = init;
-  const response = await fetch(url, {
-    ...rest,
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      ...(session ? { Authorization: `Bearer ${session}` } : {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...rest,
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session ? { Authorization: `Bearer ${session}` } : {}),
+      },
+    });
+  } catch {
+    const error = new Error(NETWORK_MESSAGE) as ApiError;
+    error.retryable = true;
+    throw error;
+  }
   const json = (await response.json().catch(() => null)) as { success: boolean; data?: T; error?: string; code?: string } | null;
   if (!response.ok || !json?.success) {
-    const error = new Error(json?.error || "Si è verificato un errore. Riprova.") as Error & { code?: string };
+    const error = new Error(json?.error || "Si è verificato un errore. Tocca «Riprova».") as ApiError;
     error.code = json?.code;
+    // No code = not a refusal of the server (network, 5xx): worth another try. «rate» = too many requests, wait a moment.
+    error.retryable = !json?.code || json.code === "rate";
     throw error;
   }
   return json.data as T;
@@ -142,6 +155,15 @@ export default function EmbedApp() {
   const openPending = useRef(false);
   const pageRef = useRef<PageInfo | null>(null);
   const assistant = useRef<AssistantPanelHandle | null>(null);
+  /** «Riprova» after a failure that is worth another try (network, server). */
+  const retryRef = useRef<(() => void) | null>(null);
+  const [retryable, setRetryable] = useState(false);
+  const openRef = useRef(false);
+  const wasOpen = useRef(false);
+  /** After «Indica un punto» the cursor goes to the note field, not to the top of the panel. */
+  const focusNote = useRef(false);
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const post = useCallback((type: string, data: Record<string, unknown> = {}) => {
     const host = hostRef.current;
@@ -182,9 +204,13 @@ export default function EmbedApp() {
     const pending: MessageEvent[] = [];
     let handled = false;
 
-    const fail = (text: string, end: boolean) => {
+    let lastHello: { event: MessageEvent; data: Record<string, unknown> } | null = null;
+
+    const fail = (text: string, end: boolean, retry: (() => void) | null = null) => {
       setPhase("error");
       setMessage(text);
+      retryRef.current = retry;
+      setRetryable(Boolean(retry));
       if (end && hostRef.current) post("end");
     };
 
@@ -245,6 +271,16 @@ export default function EmbedApp() {
           setUi(true);
         }
       } catch (e) {
+        if ((e as Partial<ApiError>).retryable === true) {
+          // Not a refusal: keep the session and the code, «Riprova» tries again.
+          handled = false;
+          fail(e instanceof Error ? e.message : NETWORK_MESSAGE, false, () => {
+            setPhase("waiting");
+            setMessage(null);
+            if (lastHello) void handleHello(lastHello.event, lastHello.data);
+          });
+          return;
+        }
         try {
           sessionStorage.removeItem(storageKey(siteKey));
         } catch {
@@ -259,6 +295,7 @@ export default function EmbedApp() {
       const data = event.data as Record<string, unknown> | null;
       if (!data || typeof data !== "object" || data.v !== 1 || data.c !== channel || typeof data.type !== "string") return;
       if (data.type === "hello") {
+        lastHello = lastHello ?? { event, data };
         if (!origins) pending.push(event);
         else void handleHello(event, data);
         return;
@@ -277,6 +314,7 @@ export default function EmbedApp() {
         if (picked) {
           setPick(picked);
           setTab("note");
+          focusNote.current = true;
           setOpen(true);
           setNotice(picked.field ? "Questo campo non si può commentare: ho scelto il riquadro che lo contiene." : null);
         }
@@ -288,26 +326,67 @@ export default function EmbedApp() {
       }
     };
 
-    // Esc cancels «Indica un punto» also when the keyboard focus stayed in this iframe.
+    // Esc cancels «Indica un punto» also when the keyboard focus stayed in this iframe;
+    // with the panel open it closes the panel (the focus goes back to Heili's button).
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !pickingRef.current) return;
-      pickingRef.current = false;
-      post("pick:cancel");
-      setOpen(true);
+      if (event.key !== "Escape") return;
+      if (pickingRef.current) {
+        pickingRef.current = false;
+        post("pick:cancel");
+        setOpen(true);
+      } else if (openRef.current) {
+        setOpen(false);
+        post("ui", { state: "closed" });
+      }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("message", onMessage);
-    api<{ origins: string[] }>(`/api/site/v1/site?key=${encodeURIComponent(siteKey)}`)
-      .then((result) => {
-        origins = result.origins;
-        for (const event of pending.splice(0)) onMessage(event);
-      })
-      .catch(() => fail("Questo sito non è collegato ad Approve.", false));
+    let attempts = 0;
+    const loadOrigins = () => {
+      attempts += 1;
+      api<{ origins: string[] }>(`/api/site/v1/site?key=${encodeURIComponent(siteKey)}`)
+        .then((result) => {
+          origins = result.origins;
+          setPhase((current) => (current === "error" ? "waiting" : current));
+          for (const event of pending.splice(0)) onMessage(event);
+        })
+        .catch((e: Partial<ApiError>) => {
+          if (e.retryable && attempts < 3) {
+            window.setTimeout(loadOrigins, 1500 * attempts);
+            return;
+          }
+          if (!e.retryable) return fail("Questo sito non è collegato ad Approve: avvisa l'agenzia.", false);
+          fail(e.message ?? NETWORK_MESSAGE, false, () => {
+            setPhase("waiting");
+            setMessage(null);
+            attempts = 0;
+            loadOrigins();
+          });
+        });
+    };
+    loadOrigins();
     return () => {
       window.removeEventListener("message", onMessage);
       window.removeEventListener("keydown", onKey);
     };
   }, [post, setUi, showMarkers]);
+
+  useEffect(() => {
+    openRef.current = open;
+    if (open) {
+      wasOpen.current = true;
+      // Keyboard and screen reader users land in the panel (or in the note after «Indica un punto»).
+      requestAnimationFrame(() => {
+        const note = focusNote.current ? document.getElementById("embed-note") : null;
+        focusNote.current = false;
+        (note ?? panelRef.current)?.focus();
+      });
+    } else if (wasOpen.current) {
+      wasOpen.current = false;
+      // Closed (button, Esc) or off to «Indica un punto»: back to Heili's button, so Esc keeps working.
+      requestAnimationFrame(() => launcherRef.current?.focus());
+    }
+  }, [open]);
 
   // ─── Comments ──────────────────────────────────────────────────────────────
 
@@ -370,17 +449,31 @@ export default function EmbedApp() {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-transparent">
         <button
+          ref={launcherRef}
           type="button"
           onClick={() => {
             if (phase === "ready") setUi(true);
-            else openPending.current = true;
+            else if (phase === "error") {
+              // The panel can open once the site is known; before that a tap is a retry.
+              if (hostRef.current) setUi(true);
+              else retryRef.current?.();
+            } else openPending.current = true;
           }}
-          aria-label={phase === "ready" ? "Apri Heili" : "Heili"}
+          aria-label={phase === "ready" ? "Apri Heili" : phase === "error" ? "Heili: qualcosa non va, tocca per i dettagli" : "Heili"}
           title={message ?? "Heili"}
-          className="flex h-16 w-16 items-center justify-center rounded-full shadow-lg focus-visible:outline-2"
+          className="relative flex h-16 w-16 items-center justify-center rounded-full shadow-lg"
           data-testid="embed-launcher"
+          data-phase={phase}
         >
           <HeiliAssistantIcon className="h-16 w-16 rounded-full" />
+          {phase === "error" && (
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-error text-sm font-bold text-white"
+            >
+              !
+            </span>
+          )}
         </button>
       </div>
     );
@@ -392,23 +485,40 @@ export default function EmbedApp() {
   const device = page ? (page.viewport.w < 768 ? "phone" : "desktop") : null;
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground" data-testid="embed-panel">
+    <div
+      ref={panelRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-label="Heili, revisione del sito"
+      className="flex h-screen flex-col bg-background text-foreground outline-none"
+      data-testid="embed-panel"
+    >
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <HeiliAssistantIcon className="h-8 w-8" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Heili</p>
           <p className="truncate text-xs text-muted">{ctx ? `${ctx.post.title} · Giro ${ctx.post.round}` : "Revisione del sito"}</p>
         </div>
-        <button type="button" onClick={() => setUi(false)} className="btn btn-quiet btn-sm" aria-label="Chiudi Heili">
+        <button type="button" onClick={() => setUi(false)} className="btn btn-quiet btn-sm" aria-label="Chiudi Heili (Esc)">
           Chiudi
         </button>
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {phase !== "ready" || !ctx ? (
-          <p className="text-sm" role="status">
-            {message ?? "Collegamento in corso…"}
-          </p>
+          <div className="space-y-3">
+            <p className={`text-sm ${phase === "error" ? "text-error" : ""}`} role={phase === "error" ? "alert" : "status"}>
+              {message ?? "Collegamento in corso…"}
+            </p>
+            {phase === "error" && retryable && (
+              <button type="button" className="btn btn-primary w-full" onClick={() => retryRef.current?.()} data-testid="embed-retry">
+                Riprova
+              </button>
+            )}
+            {phase === "error" && !retryable && (
+              <p className="text-sm text-muted">Torna al portale e tocca di nuovo «Apri il sito».</p>
+            )}
+          </div>
         ) : ctx.role === "AGENCY" ? (
           <AgencyFocus ctx={ctx} method={focusMethod} />
         ) : (
@@ -458,7 +568,7 @@ export default function EmbedApp() {
                     </p>
                     <p className="break-words font-medium">{pick.textSnippet ? `«${pick.textSnippet}»` : `<${pick.tag || "elemento"}>`}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className="btn btn-quiet btn-sm" onClick={() => setPick(null)}>
+                      <button type="button" className="btn btn-sm" onClick={() => setPick(null)}>
                         Togli il punto
                       </button>
                       {ctx.assistantEnabled && (
@@ -549,14 +659,14 @@ export default function EmbedApp() {
               {device && <p className="text-xs text-muted">Stai guardando da {DEVICE_LABELS[device].toLowerCase()}.</p>}
             </section>
 
-            <p className="rounded-lg bg-surface p-3 text-sm">
-              {DECIDE_IN_PORTAL}{" "}
+            <div className="space-y-2 rounded-lg bg-surface p-3 text-sm">
+              <p>{DECIDE_IN_PORTAL}</p>
               {ctx.portalUrl && (
-                <a href={ctx.portalUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline">
+                <a href={ctx.portalUrl} target="_blank" rel="noopener noreferrer" className="btn w-full" data-testid="embed-portal">
                   Apri il portale
                 </a>
               )}
-            </p>
+            </div>
           </>
         )}
       </div>

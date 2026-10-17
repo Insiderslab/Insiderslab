@@ -119,7 +119,7 @@ export default function WebsiteReview({
                 href={content.siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="break-all text-sm text-accent hover:underline"
+                className="inline-flex min-h-11 items-center break-all text-sm text-accent hover:underline sm:min-h-0"
               >
                 {content.siteUrl}
               </a>
@@ -140,7 +140,7 @@ export default function WebsiteReview({
                     href={page.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="break-all text-xs text-accent hover:underline"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-end break-all text-xs text-accent hover:underline sm:min-h-0 sm:min-w-0"
                   >
                     {pagePath(page.url)}
                   </a>

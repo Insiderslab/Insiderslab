@@ -75,9 +75,8 @@ export default function OriginsEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">Indirizzi consentiti</p>
       <p className="text-xs text-muted">
-        Solo indirizzi esatti, come https://prova.cliente.it (niente asterischi). Lo script funziona solo qui.
+        Lo script funziona solo sugli indirizzi di questo elenco. Scrivili esatti, come https://prova.cliente.it (niente asterischi).
       </p>
       <ul className="space-y-2" data-testid="site-origins">
         {entries.map((entry) => (
@@ -96,7 +95,9 @@ export default function OriginsEditor({
             </span>
           </li>
         ))}
-        {entries.length === 0 && <li className="text-sm text-muted">Nessun indirizzo: aggiungi quello del sito di prova.</li>}
+        {entries.length === 0 && (
+          <li className="text-sm text-muted">Nessun indirizzo ancora: scrivi qui sotto quello del sito di prova e premi «Aggiungi».</li>
+        )}
       </ul>
       {entries.length < MAX_SITE_ORIGINS && (
         <div className="space-y-2">
@@ -116,6 +117,7 @@ export default function OriginsEditor({
               Aggiungi
             </button>
           </div>
+          {!draft.trim() && <p className="text-xs text-muted">«Aggiungi» si attiva quando scrivi un indirizzo.</p>}
           {isHttpNonLocal(draft) && (
             <label className="flex min-h-11 items-center gap-2 text-sm">
               <input type="checkbox" className="h-5 w-5 accent-accent" checked={draftTest} onChange={(e) => setDraftTest(e.target.checked)} />

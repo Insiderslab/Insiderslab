@@ -232,7 +232,7 @@ export default function WebsiteEditor({
                     type="button"
                     onClick={() => movePage(index, -1)}
                     disabled={disabled || index === 0}
-                    className="btn btn-quiet btn-sm"
+                    className="btn btn-quiet btn-sm min-w-11"
                     aria-label={`Sposta su la pagina ${index + 1}`}
                   >
                     ↑
@@ -241,7 +241,7 @@ export default function WebsiteEditor({
                     type="button"
                     onClick={() => movePage(index, 1)}
                     disabled={disabled || index === value.pages.length - 1}
-                    className="btn btn-quiet btn-sm"
+                    className="btn btn-quiet btn-sm min-w-11"
                     aria-label={`Sposta giù la pagina ${index + 1}`}
                   >
                     ↓
