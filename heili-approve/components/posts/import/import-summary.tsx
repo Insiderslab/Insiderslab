@@ -4,6 +4,17 @@ export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** "12 bozze create · 2 da sistemare · 3 già presenti" */
+export function importSummaryLine(result: { created: number; existing: number; failed: number }): string {
+  return [
+    plural(result.created, "bozza creata", "bozze create"),
+    result.failed > 0 ? `${result.failed} da sistemare` : null,
+    result.existing > 0 ? plural(result.existing, "già presente", "già presenti") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export default function ImportSummary({
   ready,
   already,

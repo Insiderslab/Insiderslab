@@ -40,6 +40,7 @@ import {
   weekDays,
 } from "@/components/posts/helpers";
 import { KindBadge, KindIcon } from "@/components/posts/kind-badge";
+import { WEEK_LIMIT, loadDaySlices } from "@/lib/calendar-query";
 import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, STATUS_LABELS, isNetwork, statusLabelFor } from "@/lib/domain";
@@ -102,32 +103,55 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const week = weekDays(weekStart);
   const grid = buildMonthGrid(month);
 
-  // One query covers both the month grid and the week list.
-  const rangeStart = grid[0][0] < weekStart ? grid[0][0] : weekStart;
+  // D-04: the month grid gets the first CELL_LIMIT items of each day and the
+  // day's total from the database; the week list loads its seven days. (One
+  // query with `take: 1000` over six weeks hid the later days past 1,000.)
   const gridEnd = grid[grid.length - 1][6];
-  const rangeEnd = addDays(gridEnd > week[6] ? gridEnd : week[6], 1);
-
-  const posts = await prisma.post.findMany({
-    where: {
-      workspaceId: context.workspaceId,
-      kind: kindFilter ? kindFilter : { in: kinds },
-      status: { not: "CANCELLED" },
-      ...(client ? { clientId: client.id } : {}),
-      publishAt: { gte: startOfDayUtc(rangeStart, timezone), lt: startOfDayUtc(rangeEnd, timezone) },
-    },
-    orderBy: { publishAt: "asc" },
-    take: 1000,
-    select: {
-      id: true,
-      title: true,
-      kind: true,
-      status: true,
-      publishAt: true,
-      networks: true,
-      client: { select: { name: true } },
-    },
-  });
-  const byDay = groupByDay(posts, (p) => p.publishAt, timezone);
+  const scope = { workspaceId: context.workspaceId, kinds: kindFilter ? [kindFilter] : kinds, clientId: client?.id ?? null };
+  const select = {
+    id: true,
+    title: true,
+    kind: true,
+    status: true,
+    publishAt: true,
+    networks: true,
+    client: { select: { name: true } },
+  } as const;
+  const [slices, weekPosts] = await Promise.all([
+    loadDaySlices(
+      scope,
+      { start: startOfDayUtc(grid[0][0], timezone), end: startOfDayUtc(addDays(gridEnd, 1), timezone) },
+      timezone,
+      CELL_LIMIT
+    ),
+    prisma.post.findMany({
+      where: {
+        workspaceId: context.workspaceId,
+        kind: { in: scope.kinds },
+        status: { not: "CANCELLED" },
+        ...(client ? { clientId: client.id } : {}),
+        publishAt: { gte: startOfDayUtc(week[0], timezone), lt: startOfDayUtc(addDays(week[6], 1), timezone) },
+      },
+      orderBy: [{ publishAt: "asc" }, { id: "asc" }],
+      take: WEEK_LIMIT + 1,
+      select,
+    }),
+  ]);
+  const weekTruncated = weekPosts.length > WEEK_LIMIT;
+  const byDay = groupByDay(weekPosts.slice(0, WEEK_LIMIT), (p) => p.publishAt, timezone);
+  const gridIds = [...slices.values()].flatMap((slice) => slice.ids);
+  const gridPosts = new Map(
+    (gridIds.length > 0
+      ? await prisma.post.findMany({ where: { id: { in: gridIds }, workspaceId: context.workspaceId }, select })
+      : []
+    ).map((post) => [post.id, post])
+  );
+  type CalendarPost = (typeof weekPosts)[number];
+  const cellOf = (day: string): { items: CalendarPost[]; total: number } => {
+    const slice = slices.get(day);
+    if (!slice) return { items: [], total: 0 };
+    return { items: slice.ids.flatMap((id) => (gridPosts.has(id) ? [gridPosts.get(id) as CalendarPost] : [])), total: slice.total };
+  };
 
   // "Piano di ottobre": the monthly social plan of the selected client and month.
   const planMonth = monthKey(month);
@@ -152,7 +176,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const legendKinds = kindFilter ? [kindFilter] : kinds;
   const usedStatuses = statusesForKinds(legendKinds).filter((s) => s !== "CANCELLED");
   // A single kind words the statuses its own way ("Pubblicato" for articles).
-  const statusLabel = (status: (typeof posts)[number]["status"], kind: (typeof posts)[number]["kind"]) =>
+  const statusLabel = (status: CalendarPost["status"], kind: CalendarPost["kind"]) =>
     statusLabelFor(kind, status);
 
   return (
@@ -207,7 +231,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
             <div key={days[0]} className="grid grid-cols-7 border-t border-border">
               {days.map((day) => {
                 const inMonth = day.startsWith(monthKey(month));
-                const items = byDay.get(day) ?? [];
+                const { items, total } = cellOf(day);
                 const isToday = day === today;
                 return (
                   <div
@@ -248,10 +272,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           </Link>
                         </li>
                       ))}
-                      {items.length > CELL_LIMIT && (
+                      {total > CELL_LIMIT && (
                         <li>
-                          <Link href={keep({ settimana: startOfWeek(day) })} className="px-1.5 text-xs text-muted hover:text-foreground">
-                            +{items.length - CELL_LIMIT} altri
+                          <Link href={keep({ settimana: startOfWeek(day) })} className="px-1.5 text-xs text-muted hover:text-foreground" data-testid={`calendar-more-${day}`}>
+                            +{total - CELL_LIMIT} altri
                           </Link>
                         </li>
                       )}
@@ -291,6 +315,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
 
+        {weekTruncated && (
+          <p className="rounded-xl bg-warning-soft p-3 text-sm" role="status">
+            Questa settimana ha più di {WEEK_LIMIT} contenuti: ne mostro i primi {WEEK_LIMIT}, in ordine di orario. Filtra per cliente o per tipo per vedere gli altri.
+          </p>
+        )}
         <ol className="space-y-2">
           {week.map((day) => {
             const items = byDay.get(day) ?? [];

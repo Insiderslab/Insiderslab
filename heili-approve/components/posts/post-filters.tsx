@@ -120,7 +120,7 @@ export default function PostFilters({
         type="search"
         value={q}
         onChange={(event) => setQ(event.target.value)}
-        placeholder="Cerca per titolo"
+        placeholder="Cerca per titolo, poi Invio"
         aria-label="Cerca per titolo"
         className={`${selectClass} sm:w-56`}
       />

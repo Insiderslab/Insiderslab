@@ -63,11 +63,18 @@ const agencyContext = (browser) => loggedInContext(browser, data);
 async function fillNewPost(page, { title, text, format }) {
   await page.goto(`/posts/new?kind=social&clientId=${state.aurora.id}`);
   await expect(page.locator("#post-client")).toHaveValue(state.aurora.id);
+  // The title is optional, in «Altre opzioni».
+  await page.getByTestId("post-more-options").locator("summary").click();
   await page.locator("#post-title").fill(title);
   await page.getByLabel("Data di pubblicazione").fill(romeDate(6));
   await page.getByLabel("Ora di pubblicazione").fill("10:30");
   const instagram = page.getByLabel("Instagram", { exact: true });
   if (!(await instagram.isChecked())) await instagram.check();
+  // The networks of the client's last post may be preselected: this flow is about Instagram only.
+  for (const other of ["Facebook", "LinkedIn"]) {
+    const box = page.getByLabel(other, { exact: true });
+    if ((await box.count()) && (await box.isChecked())) await box.uncheck();
+  }
   if (format) await page.getByLabel("Formato per Instagram").selectOption(format);
   await page.locator("#post-text").fill(text);
 }

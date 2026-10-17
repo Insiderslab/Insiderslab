@@ -31,7 +31,11 @@ export function pageTitleFor(pathname: string, kinds: readonly ContentKind[], re
   const matches = (prefix: string) => pathname === prefix || pathname.startsWith(prefix + "/");
   if (matches("/posts")) {
     const kind = kinds.length === 1 ? kinds[0] : requestedKind && kinds.includes(requestedKind) ? requestedKind : null;
-    if (matches("/posts/new")) return kind ? KIND_UI[kind].newTitle : "Nuovo contenuto";
+    if (matches("/posts/new")) {
+      // Without ?kind= social posts get the "Carica contenuti" choice (app/(dashboard)/posts/new).
+      const newKind = requestedKind && kinds.includes(requestedKind) ? requestedKind : kind !== "SOCIAL_POST" ? kind : null;
+      return newKind ? KIND_UI[newKind].newTitle : "Carica contenuti";
+    }
     if (matches("/posts/import")) return "Importa post";
     return kind ? KIND_UI[kind].navLabel : "Contenuti";
   }
@@ -100,7 +104,8 @@ export default function TopBar({
             <button
               type="button"
               onClick={onMenuClick}
-              className="block max-w-full truncate text-left text-xs font-semibold text-accent lg:hidden"
+              // 44 px to tap, without making the bar taller: the padding is cancelled by the margin.
+              className="relative -my-3.5 block max-w-full truncate py-3.5 text-left text-xs font-semibold text-accent lg:hidden"
             >
               {currentClientName} · cambia
             </button>

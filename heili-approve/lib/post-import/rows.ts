@@ -24,8 +24,39 @@ import {
   type ValidationField,
 } from "@/lib/metricool/payload";
 
-/** Rows per import: one sitting's work, and a bound for the server action. */
+/**
+ * Rows per server request (check or create): the bound of the server action.
+ * A longer sheet is read whole and sent in batches of this size (QA-11).
+ */
 export const MAX_IMPORT_ROWS = 200;
+/** Rows one sheet may have; above this the file is refused with a clear message. */
+export const MAX_SHEET_ROWS = 2000;
+
+/** Splits rows into the batches the server accepts, in order. */
+export function importBatches<T>(items: readonly T[], size: number = MAX_IMPORT_ROWS): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * For each draft, the index of an earlier draft of the same sheet that would
+ * create the very same post (null if none). The server flags these within a
+ * batch; this covers the whole sheet when it is sent in several batches.
+ */
+export function sheetDuplicates(clientId: string, drafts: ReadonlyArray<RowDraft | null>): Array<number | null> {
+  const first = new Map<string, number>();
+  return drafts.map((draft, index) => {
+    if (!draft) return null;
+    const fingerprint = draftFingerprint(clientId, draft);
+    const seen = first.get(fingerprint);
+    if (seen === undefined) {
+      first.set(fingerprint, index);
+      return null;
+    }
+    return seen;
+  });
+}
 /** Same as MAX_MEDIA_PER_POST in lib/posts.ts (a test keeps them equal). */
 export const MAX_IMAGES_PER_ROW = 20;
 /** Same as MAX_UPLOAD_BYTES in lib/storage.ts (a test keeps them equal). */

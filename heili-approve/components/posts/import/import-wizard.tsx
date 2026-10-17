@@ -15,25 +15,35 @@
  * 3. "Crea N bozze": the pictures of the ready rows are uploaded through
  *    /api/uploads, then the server validates once more and creates DRAFTS
  *    (createImportAction). Nothing is sent to the client or scheduled.
+ *
+ * A sheet longer than one server request (MAX_IMPORT_ROWS) is read whole and
+ * checked and created in batches, with a progress bar (QA-11). Each batch is
+ * the same action with the same checks; a batch that fails stops the run, and
+ * "Riprova" goes on from there: rows already created are recognised, not
+ * duplicated.
  */
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { checkImportAction, createImportAction } from "@/app/(dashboard)/posts/import/actions";
 import DropZone from "@/components/posts/import/drop-zone";
-import ImportSummary, { plural } from "@/components/posts/import/import-summary";
+import ImportSummary, { importSummaryLine, plural } from "@/components/posts/import/import-summary";
 import ImportRow, { type DroppedFile, type EditableRow } from "@/components/posts/import/import-row";
+import TemplateHelp from "@/components/posts/import/template-help";
 import { formatBytes } from "@/components/posts/helpers";
 import { ToneChip } from "@/components/status-badge";
 import { ACCEPTED_MEDIA, readVideoDuration, uploadMedia } from "@/components/posts/upload";
 import type { MediaItem } from "@/lib/domain";
 import { planMonthLabel } from "@/lib/plan-rules";
-import { describeFile, draftMonth, evaluateRow, fileKey, type RawRow } from "@/lib/post-import/rows";
+import { batchProgressLabel, mergeImportResults, type BatchResult } from "@/lib/post-import/batches";
+import { MAX_IMPORT_ROWS, describeFile, draftMonth, evaluateRow, fileKey, importBatches, sheetDuplicates, type RawRow } from "@/lib/post-import/rows";
 import { ImportParseError, parsePastedRows, parseSheetFile, type ParsedSheet } from "@/lib/post-import/table";
 import type { ImportResult, PlanOutcome, RowCheck } from "@/lib/post-import/service";
 
 interface Props {
   client: { id: string; name: string; timezone: string; networks: string[] };
+  /** "Incolla righe dal foglio" (from Carica contenuti): the paste box comes first, focused. */
+  startWith?: "file" | "paste";
 }
 
 type Notice = { tone: "info" | "warning"; text: string };
@@ -69,7 +79,7 @@ function toRaw(row: EditableRow): RawRow {
   };
 }
 
-export default function ImportWizard({ client }: Props) {
+export default function ImportWizard({ client, startWith = "file" }: Props) {
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [files, setFiles] = useState<DroppedFile[]>([]);
   const [source, setSource] = useState<string | null>(null);
@@ -79,6 +89,8 @@ export default function ImportWizard({ client }: Props) {
   const [serverChecks, setServerChecks] = useState<Record<number, RowCheck>>({});
   const [withPlan, setWithPlan] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Rows created so far over the rows being created, while a long sheet goes in batches. */
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [finished, setFinished] = useState<Finished | null>(null);
   // Read once: what "past" means for this session (the server decides again on its own clock).
   const [now] = useState(() => new Date());
@@ -121,21 +133,31 @@ export default function ImportWizard({ client }: Props) {
     const run = ++checkRun.current;
     if (nextRows.length === 0) return;
     checkTimer.current = setTimeout(async () => {
-      const result = await checkImportAction({
-        clientId: client.id,
-        rows: nextRows.map(toRaw),
-        files: nextFiles.map((f) => f.ref),
-      });
-      if (run !== checkRun.current) return;
-      if (result.ok) setServerChecks(Object.fromEntries(nextRows.map((row, i) => [row.id, result.data[i]])));
-      else setError(result.error);
+      // One request per batch of rows (a long sheet is checked in several).
+      const checks: Record<number, RowCheck> = {};
+      for (const batch of importBatches(nextRows)) {
+        const result = await checkImportAction({
+          clientId: client.id,
+          rows: batch.map(toRaw),
+          files: nextFiles.map((f) => f.ref),
+        });
+        if (run !== checkRun.current) return;
+        if (!result.ok) return setError(result.error);
+        batch.forEach((row, i) => (checks[row.id] = result.data[i]));
+      }
+      setServerChecks(checks);
     }, 600);
   }
 
+  // The server flags identical rows within a batch; this covers the whole sheet.
+  const duplicates = useMemo(() => sheetDuplicates(client.id, evaluations.map((e) => e.draft)), [client.id, evaluations]);
   const states = rows.map((row, i) => {
     const check = serverChecks[row.id];
     const evaluation = evaluations[i];
-    const extra = check && !check.existing ? check.issues : [];
+    const dup = duplicates[i];
+    const dupIssue = dup === null ? [] : [{ field: "row" as const, message: `Uguale alla riga ${rows[dup].sourceRow}: creerebbe una bozza identica` }];
+    const serverIssues = check && !check.existing ? check.issues : [];
+    const extra = [...serverIssues, ...dupIssue.filter((d) => !serverIssues.some((x) => x.message === d.message))];
     const invalid = evaluation.issues.length > 0 || extra.some((x) => !evaluation.issues.some((y) => y.message === x.message));
     return { row, evaluation, extra, existing: Boolean(check?.existing) && !invalid, invalid };
   });
@@ -281,83 +303,103 @@ export default function ImportWizard({ client }: Props) {
     setError(null);
     const toSend = states.filter((s) => !s.invalid);
     if (ready.length === 0) return;
+    const batches = importBatches(toSend);
+    const total = toSend.length;
+    const uploaded: Record<string, MediaItem> = {};
+    const failedUploads = new Map<string, string>();
+    const items: ResultItem[] = [];
+    const sentAll: typeof toSend = [];
+    const answers: BatchResult[] = [];
+    let done = 0;
     setBusy("Controllo le righe…");
+    if (batches.length > 1) setProgress({ done: 0, total });
     try {
-      const request = {
-        clientId: client.id,
-        rows: toSend.map((s) => toRaw(s.row)),
-        files: fileRefs,
-      };
-      // The server's word, with nothing written yet: what the person saw must still hold.
-      const checked = await checkImportAction(request);
-      if (!checked.ok) return setError(checked.error);
-      const refused = toSend.filter((_, i) => !checked.data[i].ok);
-      if (refused.length > 0) {
-        setServerChecks((current) => ({ ...current, ...Object.fromEntries(toSend.map((s, i) => [s.row.id, checked.data[i]])) }));
-        return setError("Alcune righe non passano i controlli del server: le ho segnate in rosso.");
-      }
-
-      // Upload each needed file once; rows whose file fails are left out.
-      const needed = new Map<string, DroppedFile>();
-      toSend.forEach((s, i) => {
-        if (checked.data[i].existing) return;
-        for (const file of s.evaluation.draft?.files ?? []) {
-          const dropped = fileMap.get(fileKey(file.name));
-          if (dropped) needed.set(dropped.key, dropped);
+      for (const batch of batches) {
+        const request = { clientId: client.id, rows: batch.map((s) => toRaw(s.row)), files: fileRefs };
+        // The server's word, with nothing written yet: what the person saw must still hold.
+        const checked = await checkImportAction(request);
+        if (!checked.ok) return setError(stoppedMessage(checked.error, done, total));
+        const refused = batch.filter((_, i) => !checked.data[i].ok);
+        if (refused.length > 0) {
+          setServerChecks((current) => ({ ...current, ...Object.fromEntries(batch.map((s, i) => [s.row.id, checked.data[i]])) }));
+          return setError(stoppedMessage("Alcune righe non passano i controlli del server: le ho segnate in rosso.", done, total));
         }
-      });
-      const uploaded: Record<string, MediaItem> = {};
-      const failedUploads = new Map<string, string>();
-      const queue = [...needed.values()];
-      let done = 0;
-      const worker = async () => {
-        for (let dropped = queue.shift(); dropped; dropped = queue.shift()) {
-          try {
-            const durationSec = await readVideoDuration(dropped.file);
-            uploaded[dropped.key] = await uploadMedia(dropped.file, { durationSec });
-          } catch (e) {
-            failedUploads.set(dropped.key, e instanceof Error ? e.message : "Caricamento non riuscito.");
+
+        // Upload each needed file once (a file shared by two batches goes up once); rows whose file fails are left out.
+        const needed = new Map<string, DroppedFile>();
+        batch.forEach((s, i) => {
+          if (checked.data[i].existing) return;
+          for (const file of s.evaluation.draft?.files ?? []) {
+            const dropped = fileMap.get(fileKey(file.name));
+            if (dropped && !uploaded[dropped.key] && !failedUploads.has(dropped.key)) needed.set(dropped.key, dropped);
           }
-          setBusy(`Carico le immagini: ${++done} di ${needed.size}…`);
+        });
+        const queue = [...needed.values()];
+        let uploadedNow = 0;
+        const worker = async () => {
+          for (let dropped = queue.shift(); dropped; dropped = queue.shift()) {
+            try {
+              const durationSec = await readVideoDuration(dropped.file);
+              uploaded[dropped.key] = await uploadMedia(dropped.file, { durationSec });
+            } catch (e) {
+              failedUploads.set(dropped.key, e instanceof Error ? e.message : "Caricamento non riuscito.");
+            }
+            setBusy(`Carico le immagini: ${++uploadedNow} di ${needed.size}…`);
+          }
+        };
+        if (needed.size > 0) {
+          setBusy(`Carico le immagini: 0 di ${needed.size}…`);
+          await Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, needed.size) }, worker));
         }
-      };
-      if (needed.size > 0) {
-        setBusy(`Carico le immagini: 0 di ${needed.size}…`);
-        await Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, needed.size) }, worker));
-      }
 
-      const items: ResultItem[] = [];
-      const sent: typeof toSend = [];
-      toSend.forEach((s, i) => {
-        const missing = checked.data[i].existing
-          ? undefined
-          : (s.evaluation.draft?.files ?? []).find((file) => failedUploads.has(fileKey(file.name)));
-        if (missing) {
-          items.push({
-            id: s.row.id,
-            sourceRow: s.row.sourceRow,
-            title: s.evaluation.title,
-            status: "failed",
-            error: `«${missing.name}» non è stato caricato: ${failedUploads.get(fileKey(missing.name))}`,
+        const sent: typeof toSend = [];
+        batch.forEach((s, i) => {
+          const missing = checked.data[i].existing
+            ? undefined
+            : (s.evaluation.draft?.files ?? []).find((file) => failedUploads.has(fileKey(file.name)));
+          if (missing) {
+            items.push({
+              id: s.row.id,
+              sourceRow: s.row.sourceRow,
+              title: s.evaluation.title,
+              status: "failed",
+              error: `«${missing.name}» non è stato caricato: ${failedUploads.get(fileKey(missing.name))}`,
+            });
+          } else sent.push(s);
+        });
+
+        setBusy(batches.length > 1 ? batchProgressLabel(done, total) : "Creo le bozze…");
+        if (sent.length > 0) {
+          const result = await createImportAction({
+            clientId: client.id,
+            rows: sent.map((s) => toRaw(s.row)),
+            files: fileRefs,
+            uploaded,
+            plan: withPlan && planMonth !== null,
           });
-        } else sent.push(s);
-      });
-
-      setBusy("Creo le bozze…");
-      const result = await createImportAction({
-        clientId: client.id,
-        rows: sent.map((s) => toRaw(s.row)),
-        files: fileRefs,
-        uploaded,
-        plan: withPlan && planMonth !== null,
-      });
-      if (!result.ok) return setError(result.error);
-      sendOutcome(result.data, sent, items);
+          if (!result.ok) return setError(stoppedMessage(result.error, done, total));
+          answers.push({ offset: sentAll.length, result: result.data });
+          sentAll.push(...sent);
+        }
+        done += batch.length;
+        if (batches.length > 1) {
+          setProgress({ done, total });
+          setBusy(batchProgressLabel(done, total));
+        }
+      }
+      sendOutcome(mergeImportResults(answers), sentAll, items);
     } catch {
-      setError("Qualcosa è andato storto. Controlla la connessione e riprova: le bozze già create non si duplicano.");
+      setError(stoppedMessage("Qualcosa è andato storto. Controlla la connessione e riprova: le bozze già create non si duplicano.", done, total));
     } finally {
       setBusy(null);
+      setProgress(null);
     }
+  }
+
+  /** The error of a stopped run, saying how far a long sheet got. */
+  function stoppedMessage(message: string, done: number, total: number): string {
+    if (done === 0) return message;
+    return `${message} Le prime ${done} righe su ${total} sono già bozze: premi di nuovo «Crea» per continuare, non si duplicano.`;
   }
 
   function sendOutcome(result: ImportResult, sent: typeof states, items: ResultItem[]) {
@@ -388,16 +430,20 @@ export default function ImportWizard({ client }: Props) {
         <div className="panel space-y-4 p-5 sm:p-6">
           <div className="space-y-1">
             <h2 id="import-done" tabIndex={-1} className="text-xl font-semibold outline-none" data-testid="import-result-title">
-              {finished.created === 0 ? "Nessuna nuova bozza" : finished.created === 1 ? "Creata 1 bozza" : `Create ${finished.created} bozze`}
+              {importSummaryLine(finished)}
             </h2>
             <p className="text-sm text-muted">
               Per {client.name}.
               {finished.existing > 0 ? ` ${plural(finished.existing, "riga era", "righe erano")} già importata: non ${finished.existing === 1 ? "è stata duplicata" : "sono state duplicate"}.` : ""}
-              {finished.failed > 0 ? ` ${plural(finished.failed, "riga non è stata creata", "righe non sono state create")}.` : ""}
+              {finished.failed > 0 ? ` ${plural(finished.failed, "riga non è stata creata", "righe non sono state create")}: le trovi in rosso qui sotto.` : ""}
             </p>
           </div>
           <p className="inset p-3 text-sm">
-            Sono bozze: il cliente non vede ancora nulla. Quando sono pronte, le mandi in revisione tu.
+            <strong className="font-semibold">Passo successivo:</strong>{" "}
+            {finished.plan?.status === "ok"
+              ? "apri il piano e premi «Invia il piano al cliente»: riceve un solo messaggio per tutto il mese."
+              : "controlla le bozze e inviale al cliente (puoi sceglierle tutte insieme nell'elenco)."}{" "}
+            Fino ad allora il cliente non vede nulla.
           </p>
 
           {finished.plan?.status === "ok" && (
@@ -409,7 +455,7 @@ export default function ImportWizard({ client }: Props) {
 
           <div className="flex flex-wrap gap-2">
             <Link href={reviewHref} className="btn btn-primary" data-testid="import-send-review">
-              Manda in revisione
+              {finished.plan?.status === "ok" ? "Apri il piano e invialo al cliente" : "Invia al cliente"}
             </Link>
             {finished.plan?.status === "ok" ? (
               <Link href={`/posts?clientId=${client.id}`} className="btn">
@@ -428,7 +474,7 @@ export default function ImportWizard({ client }: Props) {
                   scheduleCheck(rows, files);
                 }}
               >
-                Torna alle righe
+                {finished.failed === 1 ? "Sistema la riga da correggere" : `Sistema le ${finished.failed} righe da correggere`}
               </button>
             )}
           </div>
@@ -450,7 +496,7 @@ export default function ImportWizard({ client }: Props) {
               </span>
               {item.status === "created" && <ToneChip tone="success">Bozza creata</ToneChip>}
               {item.status === "existing" && <ToneChip tone="neutral">Già presente</ToneChip>}
-              {item.status === "failed" && <ToneChip tone="error">Non creata</ToneChip>}
+              {item.status === "failed" && <ToneChip tone="error">Da sistemare</ToneChip>}
             </li>
           ))}
         </ul>
@@ -469,11 +515,39 @@ export default function ImportWizard({ client }: Props) {
       )}
 
       {noRows ? (
-        <>
+        startWith === "paste" ? (
+          <>
+          <section className="panel space-y-3 p-4 sm:p-6" aria-labelledby="import-paste">
+            <div className="space-y-1">
+              <h2 id="import-paste" className="text-base font-semibold">
+                Incolla le righe
+              </h2>
+              <p className="text-sm text-muted">
+                Copia le celle da Excel o Google Fogli (anche con l&apos;intestazione) e incollale qui sotto.
+              </p>
+            </div>
+            <label htmlFor="import-paste-box" className="sr-only">
+              Righe copiate da Excel o Google Fogli
+            </label>
+            <textarea
+              id="import-paste-box"
+              className="field min-h-32 font-mono text-sm"
+              rows={5}
+              value={paste}
+              onChange={(e) => setPaste(e.target.value)}
+              placeholder={"Data\tOra\tReti\tTesto\n15/10/2026\t10:30\tInstagram, Facebook\tIl testo del post"}
+              spellCheck={false}
+              autoFocus
+              data-testid="import-paste"
+            />
+            <button type="button" className="btn btn-primary" disabled={!paste.trim()} onClick={readPasted} data-testid="import-paste-read">
+              Leggi le righe
+            </button>
+          </section>
           <section className="panel space-y-4 p-4 sm:p-6" aria-labelledby="import-file">
             <div className="space-y-1">
               <h2 id="import-file" className="text-base font-semibold">
-                1. Carica il foglio
+                Oppure carica il foglio
               </h2>
               <p className="text-sm text-muted">
                 Trascina qui il file Excel o CSV con i post. Se ci sono immagini o video, trascina anche quelli: li abbino alle righe dal nome del file.
@@ -489,12 +563,44 @@ export default function ImportWizard({ client }: Props) {
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted">Non hai il foglio?</span>
               <a href="/posts/import/modello" className="btn btn-sm" download data-testid="import-template-xlsx">
-                Scarica il modello
+                Scarica il modello (con 2 esempi)
               </a>
               <a href="/posts/import/modello?formato=csv" className="btn btn-quiet btn-sm" download data-testid="import-template-csv">
                 Modello CSV
               </a>
             </div>
+            <TemplateHelp />
+          </section>
+
+          </>
+        ) : (
+          <>
+          <section className="panel space-y-4 p-4 sm:p-6" aria-labelledby="import-file">
+            <div className="space-y-1">
+              <h2 id="import-file" className="text-base font-semibold">
+                Carica il foglio
+              </h2>
+              <p className="text-sm text-muted">
+                Trascina qui il file Excel o CSV con i post. Se ci sono immagini o video, trascina anche quelli: li abbino alle righe dal nome del file.
+              </p>
+            </div>
+            <DropZone
+              onFiles={handleFiles}
+              accept={ACCEPT}
+              title="Trascina qui il foglio e le immagini"
+              hint="Excel (.xlsx) o CSV, più foto e video (JPG, PNG, WebP, GIF, MP4, MOV, WebM). Non servono i percorsi: contano i nomi dei file."
+              testId="import-drop"
+            />
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">Non hai il foglio?</span>
+              <a href="/posts/import/modello" className="btn btn-sm" download data-testid="import-template-xlsx">
+                Scarica il modello (con 2 esempi)
+              </a>
+              <a href="/posts/import/modello?formato=csv" className="btn btn-quiet btn-sm" download data-testid="import-template-csv">
+                Modello CSV
+              </a>
+            </div>
+            <TemplateHelp />
           </section>
 
           <section className="panel space-y-3 p-4 sm:p-6" aria-labelledby="import-paste">
@@ -523,7 +629,8 @@ export default function ImportWizard({ client }: Props) {
               Leggi le righe
             </button>
           </section>
-        </>
+          </>
+        )
       ) : (
         <>
           <section className="panel space-y-3 p-4 sm:p-5" aria-label="Origine e file">
@@ -589,6 +696,27 @@ export default function ImportWizard({ client }: Props) {
           {/* Compact on phones (QA-02): the bar stays over the rows, so each line it adds is a line of the sheet hidden. */}
           <section className="panel sticky bottom-3 z-10 space-y-2 p-3 sm:space-y-3 sm:p-4" aria-label="Crea le bozze" data-testid="import-bar">
             <ImportSummary ready={ready.length} already={already.length} invalid={invalidCount} awaiting={awaiting} />
+            {progress ? (
+              <div className="space-y-1" data-testid="import-progress">
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-surface-sunken"
+                  role="progressbar"
+                  aria-label="Bozze create"
+                  aria-valuemin={0}
+                  aria-valuemax={progress.total}
+                  aria-valuenow={progress.done}
+                >
+                  <span className="block h-full bg-accent" style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
+                </div>
+                <p className="text-xs text-muted">Tieni aperta la pagina fino alla fine.</p>
+              </div>
+            ) : (
+              ready.length > MAX_IMPORT_ROWS && (
+                <p className="text-xs text-muted" data-testid="import-batches-note">
+                  Il foglio ha {ready.length} righe pronte: le creo a gruppi di {MAX_IMPORT_ROWS}. Tieni aperta la pagina fino alla fine.
+                </p>
+              )
+            )}
             {sendable.length > 0 &&
               (planMonth ? (
                 <label className="flex min-h-11 items-center gap-3 text-sm">

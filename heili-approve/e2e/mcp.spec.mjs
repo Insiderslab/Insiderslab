@@ -226,6 +226,10 @@ test("Impostazioni: la scheda «Collega la tua AI (MCP)» a 1366 e 390 px", asyn
   await expect(card).toContainText("/mcp");
   await expect(card.getByTestId("mcp-oauth-status")).toContainText(/configurato|non configurato/);
   await expect(card.getByRole("button", { name: "Copia indirizzo" })).toBeVisible();
+  // QA-17: in view only what it does and the button; the technical part is closed.
+  await expect(card.getByTestId("mcp-details")).not.toHaveAttribute("open", "");
+  await expect(card.getByText("Dettagli per chi configura")).toBeVisible();
+  expect(await card.innerText()).not.toMatch(/Bearer|OAuth|variabil|bearer_token_env_var/);
   // OAuth is off here (QA-08): no step sends the reader to an account login that does not work.
   if ((await card.getByTestId("mcp-oauth-status").innerText()).includes("non configurato")) {
     expect(await card.innerText()).not.toMatch(/Accedi con il tuo account quando richiesto|OAuth e accedi/);

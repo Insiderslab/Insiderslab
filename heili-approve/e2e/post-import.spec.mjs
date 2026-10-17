@@ -58,13 +58,18 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   const context = await agencyContext(browser, data);
   const page = await context.newPage();
   await page.goto("/posts");
-  await page.getByTestId("posts-import-link").click();
-  await page.waitForURL(/\/posts\/import$/);
-
-  // No client picked in the menu: the page asks for one.
-  await expect(page.getByTestId("import-pick-client")).toBeVisible();
-  await page.getByTestId("import-client-option").filter({ hasText: "Caffè Aurora" }).click();
+  // One way in: «Carica contenuti» → client → «Importa da Excel o CSV».
+  await page.getByTestId("posts-load-link").click();
+  await page.waitForURL(/\/posts\/new$/);
+  await expect(page.getByRole("heading", { name: "Per quale cliente?" })).toBeVisible();
+  await page.getByRole("link", { name: /Caffè Aurora/ }).first().click();
+  await expect(page.getByRole("heading", { name: "Carica contenuti per Caffè Aurora" })).toBeVisible();
+  await expect(page.getByTestId("load-options").getByRole("link")).toHaveText([/Crea un post/, /Importa da Excel o CSV/, /Incolla righe dal foglio/]);
+  await page.getByTestId("load-import").click();
+  await page.waitForURL(/\/posts\/import\?clientId=/);
   await expect(page.getByRole("heading", { name: "Importa post per Caffè Aurora" })).toBeVisible();
+  // QA-16: the page's client becomes the menu's client too.
+  await expect(page.getByTestId("client-switcher")).toContainText("Caffè Aurora");
 
   const xlsx = await download(page, page.getByTestId("import-template-xlsx"));
   expect(xlsx.name).toBe("modello-importa-post.xlsx");
@@ -73,6 +78,22 @@ test("dalla lista dei post: scelta cliente e modello scaricabile", async ({ brow
   expect(csv.name).toBe("modello-importa-post.csv");
   expect(csv.buffer.toString("utf8")).toContain("Data;Ora;Reti;Testo;Primo commento;Titolo;Immagini");
   state.template = xlsx.buffer;
+  // How pictures are matched, in one line; the columns explained on request.
+  await expect(page.getByTestId("import-images-hint")).toContainText("le abbino per nome");
+  await page.getByTestId("import-columns-help").getByText("Cosa scrivere in ogni colonna").click();
+  await expect(page.getByTestId("import-columns-help")).toContainText("Una o più reti separate da virgola");
+  await context.close();
+});
+
+test("«Incolla righe dal foglio» apre la pagina con l'incolla per primo, già attivo", async ({ browser }) => {
+  const context = await agencyContext(browser, data);
+  const page = await context.newPage();
+  await page.goto(`/posts/new?clientId=${client.id}`);
+  await page.getByTestId("load-paste").click();
+  await page.waitForURL(/modo=incolla/);
+  await expect(page.getByRole("heading", { name: "Incolla le righe" })).toBeVisible();
+  await expect(page.getByTestId("import-paste")).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Oppure carica il foglio" })).toBeVisible();
   await context.close();
 });
 
@@ -85,8 +106,8 @@ test("il modello compilato si rilegge, con le immagini abbinate per nome", async
     { ...IMAGE, name: "Collezione-1.JPG" },
     { ...IMAGE, name: "collezione-2.jpg" },
   ]);
-  await expect(page.getByTestId("import-source")).toContainText("modello.xlsx · 1 riga");
-  const row = page.getByTestId("import-row");
+  await expect(page.getByTestId("import-source")).toContainText("modello.xlsx · 2 righe");
+  const row = page.getByTestId("import-row").first();
   // Sheet and pictures dropped together: the debounced server check must see the
   // pictures too (QA-01). The row is "Controllo…" until the answer, then stays ready.
   await expect(page.getByTestId("import-summary")).toContainText("Controllo le righe…");
@@ -95,7 +116,9 @@ test("il modello compilato si rilegge, con le immagini abbinate per nome", async
   await expect(row.getByText("Trovato")).toHaveCount(2);
   await expect(row.getByText("Immagine non trovata")).toHaveCount(0);
   await expect(row.getByLabel("Reti")).toHaveValue("Instagram, Facebook");
-  await expect(page.getByTestId("import-create")).toHaveText("Crea 1 bozza");
+  // The second example (text only, Facebook) is ready as it is.
+  await expect(page.getByTestId("import-row").nth(1)).toHaveAttribute("data-state", "ready");
+  await expect(page.getByTestId("import-create")).toHaveText("Crea 2 bozze");
   await expect(page.getByTestId("import-create")).toBeEnabled();
   await context.close();
 });
@@ -153,7 +176,7 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   await expect(page.getByText(/Crea anche il piano di \w+ \d{4}/)).toBeVisible();
   await page.getByTestId("import-create").click();
 
-  await expect(page.getByTestId("import-result-title")).toHaveText("Create 3 bozze", { timeout: 60_000 });
+  await expect(page.getByTestId("import-result-title")).toHaveText("3 bozze create", { timeout: 60_000 });
   // The agency shell scrolls inside <main>: after creating, the result is at the top (QA-03).
   await expect(page.getByTestId("import-result-title")).toBeInViewport();
   await expect(page.getByTestId("import-result-list").getByText("Bozza creata")).toHaveCount(3);
@@ -169,7 +192,8 @@ test("righe incollate: errori per riga, correzione, bozze e piano del mese", asy
   expect(new Set(posts.map((p) => p.planId)).size).toBe(1);
   expect(posts[0].planId).toBeTruthy();
 
-  // "Manda in revisione" goes to the plan, where the plan is sent to the client.
+  // The summary and the next step: the plan, where the plan is sent to the client.
+  await expect(page.getByTestId("import-send-review")).toHaveText("Apri il piano e invialo al cliente");
   const href = await page.getByTestId("import-send-review").getAttribute("href");
   expect(href).toBe(`/plans/${posts[0].planId}`);
   await page.getByTestId("import-send-review").click();
@@ -197,6 +221,48 @@ test("importare di nuovo lo stesso foglio non duplica i post", async ({ browser 
   await expect(page.getByTestId("import-create")).toBeDisabled();
   const { rows: count } = await db.query(`select count(*)::int as n from "Post" where title like 'E2E import %'`);
   expect(count[0].n).toBe(3);
+  await context.close();
+});
+
+test("450 righe incollate: lette tutte, create a gruppi con l'avanzamento, nessun doppione (QA-11)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const context = await agencyContext(browser, data);
+  const page = await context.newPage();
+  await page.goto(`/posts/import?clientId=${client.id}`);
+  const day = dmy(610);
+  const list = Array.from({ length: 450 }, (_, i) => [day, `${String(8 + Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}`, "Facebook", `E2E import lungo ${i + 1}`]);
+  // Row 431 repeats row 3 (same time, same text): it sits in the third batch and is caught anyway.
+  list[430] = [...list[2]];
+  await page.getByTestId("import-paste").fill(sheet(list));
+  await page.getByTestId("import-paste-read").click();
+  await expect(page.getByTestId("import-source")).toContainText("Righe incollate · 450 righe");
+  await expect(page.getByTestId("import-error")).toHaveCount(0);
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…", { timeout: 60_000 });
+  await expect(page.getByTestId("import-summary")).toContainText("449 righe pronte");
+  await expect(page.getByTestId("import-summary")).toContainText("1 riga da correggere");
+  await expect(page.getByText("Uguale alla riga 4: creerebbe una bozza identica")).toBeVisible();
+  await expect(page.getByTestId("import-batches-note")).toContainText("le creo a gruppi di 200");
+  await expect(page.getByTestId("import-create")).toHaveText("Crea 449 bozze");
+
+  await page.getByTestId("import-create").click();
+  await expect(page.getByTestId("import-progress")).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Bozze create" })).toBeVisible();
+  await expect(page.getByTestId("import-result-title")).toHaveText("449 bozze create", { timeout: 300_000 });
+  const { rows: made } = await db.query(
+    `select count(*)::int as n, count(*) filter (where status <> 'DRAFT')::int as other from "Post" where title like 'E2E import lungo %'`
+  );
+  expect(made[0]).toEqual({ n: 449, other: 0 });
+
+  // The same 450 rows again: all recognised, nothing created.
+  await page.goto(`/posts/import?clientId=${client.id}`);
+  await page.getByTestId("import-paste").fill(sheet(list));
+  await page.getByTestId("import-paste-read").click();
+  await expect(page.getByTestId("import-summary")).not.toContainText("Controllo le righe…", { timeout: 60_000 });
+  await expect(page.getByTestId("import-summary")).toContainText("449 già importate");
+  await expect(page.getByTestId("import-create")).toBeDisabled();
+  const { rows: again } = await db.query(`select count(*)::int as n from "Post" where title like 'E2E import lungo %'`);
+  expect(again[0].n).toBe(449);
+  await db.query(`delete from "Post" where title like 'E2E import lungo %'`);
   await context.close();
 });
 
@@ -235,7 +301,7 @@ test("la colonna «Formato» arriva fino alla bozza: un Reel resta un Reel, e si
   await expect(row).toHaveAttribute("data-state", "ready");
   await expect(row.getByTestId("import-format-read")).toContainText("Instagram: Reel");
   await page.getByTestId("import-create").click();
-  await expect(page.getByTestId("import-result-title")).toHaveText("Creata 1 bozza", { timeout: 60_000 });
+  await expect(page.getByTestId("import-result-title")).toHaveText("1 bozza creata", { timeout: 60_000 });
   const { rows } = await db.query(`select "networkOptions" from "Post" where title = 'E2E import Reel'`);
   expect(rows).toHaveLength(1);
   expect(rows[0].networkOptions).toEqual({ instagramData: { type: "REEL" } });

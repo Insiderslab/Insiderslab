@@ -134,8 +134,9 @@ test("agenzia: nuovo contenuto offre solo i servizi del cliente", async ({ brows
   await page.goto("/posts/new");
   await expect(page.getByRole("heading", { name: "Per quale cliente?" })).toBeVisible();
   await page.getByRole("link", { name: new RegExp(data.multi.client.name) }).click();
-  await expect(page.getByRole("heading", { name: `Cosa vuoi preparare per ${data.multi.client.name}?` })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Nuovo post/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Carica contenuti per ${data.multi.client.name}` })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Crea un post/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Importa da Excel o CSV/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Nuovo articolo/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Nuova creatività/ })).toBeVisible();
 

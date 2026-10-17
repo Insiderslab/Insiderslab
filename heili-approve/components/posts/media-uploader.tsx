@@ -7,12 +7,17 @@
  * reorder (drag, or the arrow buttons on touch screens), remove, and edit the
  * alternative text. Files upload one at a time in drop order, so the media
  * end up in the order the agency chose them.
+ *
+ * A file that cannot go (too big, wrong format) is said before uploading; a
+ * failed upload keeps its file and offers "Riprova". With `catchPageDrops`
+ * (one uploader per page: the post editor) files dropped anywhere on the page
+ * land here instead of making the browser open them.
  */
 
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { formatTimecode, type MediaItem } from "@/lib/domain";
 import { formatBytes, moveItem } from "./helpers";
-import { ACCEPTED_MEDIA, MAX_UPLOAD_MB, readVideoDuration, uploadMedia } from "./upload";
+import { ACCEPTED_MEDIA, MAX_UPLOAD_MB, readVideoDuration, uploadMedia, uploadProblem } from "./upload";
 
 /** Same cap as lib/posts (MAX_MEDIA_PER_POST). */
 const MAX_MEDIA = 20;
@@ -24,6 +29,8 @@ interface PendingUpload {
   progress: number;
   error: string | null;
   controller: AbortController | null;
+  /** Kept for "Riprova"; null when the file can never go (too big, wrong format). */
+  file: File | null;
 }
 
 interface MediaUploaderProps {
@@ -32,12 +39,14 @@ interface MediaUploaderProps {
   /** True while at least one file is uploading (the editor blocks saving). */
   onBusyChange?: (busy: boolean) => void;
   disabled?: boolean;
+  /** Files dropped anywhere on the page come here (only one uploader per page). */
+  catchPageDrops?: boolean;
 }
 
 const smallButton =
   "inline-flex h-11 min-w-11 items-center justify-center rounded-xl border border-border bg-background px-2 text-sm text-muted hover:text-foreground disabled:opacity-40";
 
-export default function MediaUploader({ media, onChange, onBusyChange, disabled = false }: MediaUploaderProps) {
+export default function MediaUploader({ media, onChange, onBusyChange, disabled = false, catchPageDrops = false }: MediaUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const dragIndexRef = useRef<number | null>(null);
   const [pending, setPending] = useState<PendingUpload[]>([]);
@@ -63,20 +72,28 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
     }
     if (accepted.length === 0) return;
 
-    const entries: Array<{ file: File; item: PendingUpload }> = accepted.map((file, i) => ({
-      file,
-      item: {
-        id: `${Date.now()}-${i}-${file.name}`,
-        name: file.name,
-        size: file.size,
-        progress: 0,
-        error: null,
-        controller: new AbortController(),
-      },
-    }));
+    const entries: Array<{ file: File; item: PendingUpload }> = accepted.map((file, i) => {
+      const problem = uploadProblem(file);
+      return {
+        file,
+        item: {
+          id: `${Date.now()}-${i}-${file.name}`,
+          name: file.name,
+          size: file.size,
+          progress: 0,
+          error: problem,
+          controller: problem ? null : new AbortController(),
+          file: problem ? null : file,
+        },
+      };
+    });
     setPending((list) => [...list, ...entries.map((e) => e.item)]);
-    onBusyChange?.(true);
+    await uploadAll(entries.filter((e) => e.item.error === null));
+  }
 
+  async function uploadAll(entries: Array<{ file: File; item: PendingUpload }>) {
+    if (entries.length === 0) return;
+    onBusyChange?.(true);
     for (const { file, item } of entries) {
       if (item.controller?.signal.aborted) continue;
       try {
@@ -101,6 +118,46 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
     }
     onBusyChange?.(false);
   }
+
+  /** "Riprova": the same file again, at the end of the list (it can be moved after). */
+  function retry(upload: PendingUpload) {
+    if (!upload.file || disabled) return;
+    const item: PendingUpload = { ...upload, progress: 0, error: null, controller: new AbortController() };
+    setPending((list) => list.map((p) => (p.id === upload.id ? item : p)));
+    void uploadAll([{ file: upload.file, item }]);
+  }
+
+  // Files dropped outside the zone would make the browser open them (and leave the editor).
+  const addFilesRef = useRef(addFiles);
+  useEffect(() => {
+    addFilesRef.current = addFiles;
+  });
+  useEffect(() => {
+    if (!catchPageDrops) return;
+    const hasFiles = (event: globalThis.DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const onOver = (event: globalThis.DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      setDropActive(true);
+    };
+    const onDrop = (event: globalThis.DragEvent) => {
+      if (!hasFiles(event) || event.defaultPrevented) return;
+      event.preventDefault();
+      setDropActive(false);
+      if (event.dataTransfer?.files.length) void addFilesRef.current(event.dataTransfer.files);
+    };
+    const onLeave = (event: globalThis.DragEvent) => {
+      if (event.relatedTarget === null) setDropActive(false);
+    };
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("drop", onDrop);
+    window.addEventListener("dragleave", onLeave);
+    return () => {
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragleave", onLeave);
+    };
+  }, [catchPageDrops]);
 
   function cancelUpload(upload: PendingUpload) {
     if (upload.controller) upload.controller.abort();
@@ -186,7 +243,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
         } ${disabled ? "opacity-60" : ""}`}
       >
         <p className="text-muted">
-          Trascina qui immagini o video, oppure{" "}
+          Trascina qui foto o video (anche più di uno, nell&apos;ordine del carosello), oppure{" "}
           <button
             type="button"
             disabled={disabled}
@@ -197,7 +254,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
           </button>
         </p>
         <p className="mt-1 text-xs text-muted">
-          JPG, PNG, WebP, GIF, MP4, MOV, WebM · fino a {MAX_UPLOAD_MB} MB per file · massimo {MAX_MEDIA} media
+          JPG, PNG, WebP, GIF, MP4, MOV, WebM · fino a {MAX_UPLOAD_MB} MB per file · massimo {MAX_MEDIA} media · l&apos;ordine si cambia trascinando le miniature
         </p>
         <input
           ref={inputRef}
@@ -225,7 +282,7 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
                 <span className="shrink-0 text-muted">{formatBytes(upload.size)}</span>
               </div>
               {upload.error ? (
-                <p className="mt-1 text-xs text-error">{upload.error}</p>
+                <p className="mt-1 text-xs text-error" role="alert">{upload.error}</p>
               ) : (
                 <div
                   className="mt-2 h-1.5 overflow-hidden rounded bg-surface-hover"
@@ -238,9 +295,14 @@ export default function MediaUploader({ media, onChange, onBusyChange, disabled 
                   <div className="h-full bg-accent" style={{ width: `${Math.round(upload.progress * 100)}%` }} />
                 </div>
               )}
-              <div className="mt-2 flex justify-end">
-                <button type="button" onClick={() => cancelUpload(upload)} className="btn btn-quiet btn-sm">
-                  {upload.error ? "Chiudi" : "Annulla"}
+              <div className="mt-2 flex justify-end gap-2">
+                {upload.error && upload.file && (
+                  <button type="button" onClick={() => retry(upload)} className="btn btn-sm min-h-11" disabled={disabled}>
+                    Riprova
+                  </button>
+                )}
+                <button type="button" onClick={() => cancelUpload(upload)} className="btn btn-quiet btn-sm min-h-11">
+                  {upload.error ? "Rimuovi" : "Annulla"}
                 </button>
               </div>
             </li>

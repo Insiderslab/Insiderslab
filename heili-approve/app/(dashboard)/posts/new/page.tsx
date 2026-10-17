@@ -1,18 +1,22 @@
 /**
- * New Post Page
+ * New Post Page — "Carica contenuti"
  *
- * Empty editor of the chosen kind: `?kind=social|blog|ads`. On instances
- * with several kinds and no kind given, the page first asks for the client
- * (`?clientId=`, also preselected from the clients pages), then offers only
- * that client's services — none to choose when it has exactly one. With a
- * kind, the client select lists only the clients with that service.
- * `?data=YYYY-MM-DD` preselects the day (from the calendar).
+ * Empty editor of the chosen kind: `?kind=social|blog|ads`. Without a kind
+ * this is the one way in to load content: the page first asks for the client
+ * (`?clientId=`, or the menu's client, or the only client), then offers what
+ * can be loaded for it: for social posts "Crea un post", "Importa da Excel o
+ * CSV" and "Incolla righe dal foglio" (the importer), then the client's other
+ * services. A client whose only service is not social goes straight to its
+ * editor. With a kind, the client select lists only the clients with that
+ * service. `?data=YYYY-MM-DD` preselects the day (from the calendar).
  */
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ContentKind } from "@/app/generated/prisma/client";
-import { loadEditorClients } from "@/app/(dashboard)/posts/data";
+import { loadEditorClients, loadRecentClientIds } from "@/app/(dashboard)/posts/data";
+import ClientPicker from "@/components/posts/client-picker";
+import SyncCurrentClient from "@/components/sync-current-client";
 import ContentEditor from "@/components/posts/content-editor";
 import { addDays, contentWords, dayKeyIn, DEFAULT_TIME_ZONE, isDayKey, newContentHref } from "@/components/posts/helpers";
 import { KindIcon } from "@/components/posts/kind-badge";
@@ -24,21 +28,70 @@ import { emptyWebsiteContent } from "@/lib/content/website";
 import { isNetwork } from "@/lib/domain";
 import { KIND_UI, enabledKinds, parseKindParam, postsHref, productName } from "@/lib/variant";
 import { getCurrentClientId } from "@/lib/current-client";
+import { prisma } from "@/lib/db/client";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 type SearchParams = { kind?: string | string[]; clientId?: string | string[]; data?: string | string[] };
 
-/** The kind requested in the URL: the requested enabled one, the only one, or null. */
+/**
+ * The kind requested in the URL (if enabled), else the only enabled kind when
+ * it is not social posts (social posts have the "Carica contenuti" choice:
+ * one post, a sheet or pasted rows), else null.
+ */
 function requestedKind(value: string | string[] | undefined): ContentKind | null {
   const kinds = enabledKinds();
-  if (kinds.length === 1) return kinds[0];
   const requested = parseKindParam(value);
-  return requested && kinds.includes(requested) ? requested : null;
+  if (requested && kinds.includes(requested)) return requested;
+  return kinds.length === 1 && kinds[0] !== "SOCIAL_POST" ? kinds[0] : null;
 }
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const kind = requestedKind((await searchParams).kind);
-  return { title: `${kind ? KIND_UI[kind].newTitle : "Nuovo contenuto"} - ${productName()}` };
+  return { title: `${kind ? KIND_UI[kind].newTitle : "Carica contenuti"} - ${productName()}` };
+}
+
+/** "Crea un post · Importa da Excel o CSV · Incolla righe": the three ways to load social posts. */
+function SocialLoadCards({ clientId, day }: { clientId: string; day: string | null }) {
+  const importHref = `/posts/import?clientId=${encodeURIComponent(clientId)}`;
+  const options = [
+    {
+      href: newContentHref("SOCIAL_POST", { clientId, day }),
+      title: "Crea un post",
+      text: "Uno alla volta: foto o video, testo e anteprima per ogni rete.",
+      testId: "load-create",
+    },
+    {
+      href: importHref,
+      title: "Importa da Excel o CSV",
+      text: "Tanti post insieme da un foglio, con le loro immagini abbinate per nome.",
+      testId: "load-import",
+    },
+    {
+      href: `${importHref}&modo=incolla`,
+      title: "Incolla righe dal foglio",
+      text: "Copia le celle da Excel o Google Fogli e incollale: diventano bozze.",
+      testId: "load-paste",
+    },
+  ];
+  return (
+    <ul className="grid gap-3 md:grid-cols-3" data-testid="load-options">
+      {options.map((option) => (
+        <li key={option.testId}>
+          <Link
+            href={option.href}
+            className="panel flex h-full min-h-11 flex-col gap-2 rounded p-4 hover:border-border-hover"
+            data-testid={option.testId}
+          >
+            <span className="flex items-center gap-2 text-base font-semibold text-foreground">
+              <KindIcon kind="SOCIAL_POST" className="h-5 w-5 text-accent" />
+              {option.title}
+            </span>
+            <span className="text-sm text-muted">{option.text}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -81,15 +134,19 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const kinds = enabledKinds();
   // The client in the URL, else the one picked in the menu.
-  const requestedClient = first(params.clientId) || ((await getCurrentClientId(context.workspaceId)) ?? "");
+  const currentClientId = await getCurrentClientId(context.workspaceId);
+  const requestedClient = first(params.clientId) || (currentClientId ?? "");
   const requestedDay = first(params.data);
   const day = isDayKey(requestedDay) ? requestedDay : null;
   const allClients = await loadEditorClients(context.workspaceId);
-  const pickedClient = allClients.find((c) => c.id === requestedClient) ?? null;
+  // The client in the URL or the menu; with a single client, that one.
+  const pickedClient = allClients.find((c) => c.id === requestedClient) ?? (allClients.length === 1 ? allClients[0] : null);
+  const socialForPicked = Boolean(pickedClient?.services.includes("SOCIAL_POST"));
 
-  // The kind: from the URL, or the picked client's only service.
+  // The kind: from the URL, or the picked client's only service (social posts keep the choice of how to load them).
   const kind =
-    requestedKind(params.kind) ?? (pickedClient && pickedClient.services.length === 1 ? pickedClient.services[0] : null);
+    requestedKind(params.kind) ??
+    (pickedClient && pickedClient.services.length === 1 && !socialForPicked ? pickedClient.services[0] : null);
   const backHref = kind ? postsHref(kind) : "/posts";
   const backLabel = kind ? `← ${contentWords([kind]).all}` : "← Tutti i contenuti";
 
@@ -98,11 +155,17 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
     if (pickedClient) {
       return (
         <div className="space-y-4">
+          <SyncCurrentClient clientId={pickedClient.id} currentClientId={currentClientId} />
           <Link href={backHref} className="text-sm text-muted hover:text-foreground">
             {backLabel}
           </Link>
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Cosa vuoi preparare per {pickedClient.name}?</h2>
+            <h2 className="text-lg font-semibold">Carica contenuti per {pickedClient.name}</h2>
+            <p className="text-sm text-muted">Si creano sempre bozze: il cliente non vede nulla finché non le invii tu.</p>
+            {socialForPicked && <SocialLoadCards clientId={pickedClient.id} day={day} />}
+            {socialForPicked && pickedClient.services.length > 1 && (
+              <h3 className="pt-2 text-base font-semibold text-muted">Altri contenuti</h3>
+            )}
             {pickedClient.services.length === 0 ? (
               <p className="panel rounded p-4 text-sm text-muted">
                 {pickedClient.name} non ha servizi attivi.{" "}
@@ -112,7 +175,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
                 .
               </p>
             ) : (
-              <KindCards kinds={pickedClient.services} clientId={pickedClient.id} day={day} />
+              <KindCards kinds={pickedClient.services.filter((s) => s !== "SOCIAL_POST")} clientId={pickedClient.id} day={day} />
             )}
             <p className="text-sm">
               <Link href={newContentHref(null, { day })} className="text-muted hover:text-foreground">
@@ -140,28 +203,18 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
               .
             </p>
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {allClients.map((option) => (
-                <li key={option.id}>
-                  <Link
-                    href={newContentHref(null, { clientId: option.id, day })}
-                    className="panel flex h-full flex-col gap-2 rounded p-4 hover:border-border-hover"
-                  >
-                    <span className="text-base font-semibold text-foreground">{option.name}</span>
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                      {option.services.length === 0
-                        ? "Nessun servizio attivo"
-                        : option.services.map((service) => (
-                            <span key={service} className="inline-flex items-center gap-1">
-                              <KindIcon kind={service} className="h-3.5 w-3.5" />
-                              {KIND_UI[service].serviceLabel}
-                            </span>
-                          ))}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <ClientPicker
+              clients={allClients.map((option) => ({
+                id: option.id,
+                name: option.name,
+                href: newContentHref(null, { clientId: option.id, day }),
+                detail:
+                  option.services.length === 0
+                    ? "Nessun servizio attivo"
+                    : option.services.map((service) => KIND_UI[service].serviceLabel).join(" · "),
+              }))}
+              recentIds={await loadRecentClientIds(context.workspaceId)}
+            />
           )}
         </section>
         <section className="space-y-3">
@@ -217,8 +270,21 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
     );
   }
 
-  // A client with exactly one network gets it preselected.
+  // Networks preselected: the client's only one, else those of its latest
+  // social post (what the agency usually picks for it). YouTube and Pinterest
+  // need fields of their own, so they are never preselected.
   const clientNetworks = (client?.networks ?? []).filter(isNetwork);
+  const lastPost =
+    client && clientNetworks.length !== 1
+      ? await prisma.post.findFirst({
+          where: { workspaceId: context.workspaceId, clientId: client.id, kind: "SOCIAL_POST" },
+          orderBy: { createdAt: "desc" },
+          select: { networks: true },
+        })
+      : null;
+  const usual = (lastPost?.networks ?? [])
+    .filter(isNetwork)
+    .filter((n) => n !== "youtube" && n !== "pinterest" && (clientNetworks.length === 0 || clientNetworks.includes(n)));
 
   return (
     <div className="space-y-4">
@@ -234,7 +300,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
           title: "",
           date,
           time: "10:00",
-          networks: clientNetworks.length === 1 ? clientNetworks : [],
+          networks: clientNetworks.length === 1 ? clientNetworks : usual,
           networkOptions: {},
           text: "",
           firstCommentText: "",

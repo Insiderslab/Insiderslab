@@ -10,8 +10,11 @@
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { loadRecentClientIds } from "@/app/(dashboard)/posts/data";
+import ClientPicker from "@/components/posts/client-picker";
 import ImportClientSelect from "@/components/posts/import/client-select";
 import ImportWizard from "@/components/posts/import/import-wizard";
+import SyncCurrentClient from "@/components/sync-current-client";
 import { clientHasService } from "@/lib/clients";
 import { getCurrentClientId, resolveClientScope } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
@@ -22,7 +25,7 @@ export async function generateMetadata() {
   return { title: `Importa post - ${productName()}` };
 }
 
-type SearchParams = { clientId?: string | string[] };
+type SearchParams = { clientId?: string | string[]; modo?: string | string[] };
 
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
@@ -49,6 +52,7 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
 
   return (
     <div className="space-y-5">
+      {scoped && <SyncCurrentClient clientId={scoped.id} currentClientId={currentId} />}
       <Link href="/posts" className="text-sm text-muted hover:text-foreground">
         ← Post
       </Link>
@@ -76,7 +80,10 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
           </Link>
         </div>
       ) : scoped ? (
-        <ImportWizard client={{ id: scoped.id, name: scoped.name, timezone: scoped.timezone, networks: scoped.networks }} />
+        <ImportWizard
+          client={{ id: scoped.id, name: scoped.name, timezone: scoped.timezone, networks: scoped.networks }}
+          startWith={first(params.modo) === "incolla" ? "paste" : "file"}
+        />
       ) : (
         <section className="panel space-y-4 p-4 sm:p-6" aria-labelledby="pick-client" data-testid="import-pick-client">
           <div className="space-y-1">
@@ -89,15 +96,15 @@ export default async function ImportPostsPage({ searchParams }: { searchParams: 
               </p>
             )}
           </div>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {eligible.map((c) => (
-              <li key={c.id}>
-                <Link href={`/posts/import?clientId=${encodeURIComponent(c.id)}`} className="btn w-full justify-start" data-testid="import-client-option">
-                  {c.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <ClientPicker
+            clients={eligible.map((c) => ({
+              id: c.id,
+              name: c.name,
+              href: `/posts/import?clientId=${encodeURIComponent(c.id)}${first(params.modo) === "incolla" ? "&modo=incolla" : ""}`,
+            }))}
+            recentIds={await loadRecentClientIds(context.workspaceId)}
+            testId="import-client-option"
+          />
         </section>
       )}
     </div>

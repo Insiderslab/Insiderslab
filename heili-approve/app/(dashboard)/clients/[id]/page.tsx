@@ -38,6 +38,8 @@ import { summarizeVersionForList } from "@/lib/posts";
 import { getReviewUrl } from "@/lib/reviewers";
 import { KIND_UI, enabledKinds, isMetricoolEnabled, kindParam, productName, servicesSentence, sortKinds } from "@/lib/variant";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
+import { getCurrentClientId } from "@/lib/current-client";
+import SyncCurrentClient from "@/components/sync-current-client";
 
 export async function generateMetadata() {
   return { title: `Cliente - ${productName()}` };
@@ -143,8 +145,11 @@ export default async function ClientDetailPage({
     .filter((r) => r.active)
     .map(({ id, name, email, reviewUrl, lastSeenLabel }) => ({ id, name, email, reviewUrl, lastSeenLabel }));
 
+  const currentClientId = await getCurrentClientId(context.workspaceId);
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      {!client.archivedAt && <SyncCurrentClient clientId={client.id} currentClientId={currentClientId} />}
       <Link href="/clients" className="text-sm text-muted hover:text-foreground">
         ← Clienti
       </Link>

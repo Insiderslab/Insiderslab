@@ -3,6 +3,10 @@
  * Code to this workspace through the remote MCP server (docs/COLLEGARE-AI-MCP.md).
  * Server component: it only shows the public MCP address and whether OAuth is
  * configured (never any configuration value). The copy buttons are client islands.
+ *
+ * QA-17: the card is read by social media managers too. In view: what it
+ * does and one button; addresses, account login, terminal commands, Bearer
+ * keys and environment variables wait in «Dettagli per chi configura».
  */
 
 import CopyButton from "@/components/clients/copy-button";
@@ -47,9 +51,17 @@ export default function McpSettings({
         </p>
       ) : (
         <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <CopyButton value={url} label="Copia indirizzo" className="btn btn-primary min-h-11 self-start" />
+            <p className="text-sm text-muted">Incollalo tra i connettori della tua AI. Se non sai come, chiedi a chi la configura.</p>
+          </div>
+
+          <details className="rounded-xl bg-surface-hover px-4 py-2" data-testid="mcp-details">
+            <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold">Dettagli per chi configura</summary>
+            <div className="space-y-4 pb-3 pt-1">
           <div className="space-y-1">
             <p className="text-sm font-medium">Indirizzo del connettore</p>
-            <Command value={url} label="Copia indirizzo" />
+            <code className="inset block whitespace-pre-wrap break-all p-3 text-[13px] leading-5">{url}</code>
           </div>
 
           <p className="text-sm" data-testid="mcp-oauth-status">
@@ -124,6 +136,8 @@ export default function McpSettings({
               </div>
             </details>
           </div>
+            </div>
+          </details>
         </>
       )}
     </section>

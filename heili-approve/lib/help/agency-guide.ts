@@ -92,7 +92,7 @@ export function agencyGuideSteps(kinds: readonly ContentKind[]): GuideStep[] {
       id: "piano",
       title: "Piano del mese",
       body: "In «Piani» scegli cliente e mese: i post già preparati diventano un solo percorso di revisione. «Controlla e invia il piano» li manda insieme; il cliente li rivede uno per uno o con «Approva tutto il piano».",
-      links: [{ label: "Piani", href: "/plans" }],
+      links: [{ label: "Piani del mese", href: "/plans" }],
     });
   } else {
     steps.push({

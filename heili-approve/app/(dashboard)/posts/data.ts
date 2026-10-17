@@ -58,3 +58,18 @@ export function toNetworkOptions(value: unknown): NetworkOptions {
   }
   return result;
 }
+
+/**
+ * Clients the workspace worked on most recently (latest content change in
+ * the last 60 days), newest first: "Usati di recente" in the client pickers.
+ */
+export async function loadRecentClientIds(workspaceId: string, limit = 3): Promise<string[]> {
+  const rows = await prisma.post.groupBy({
+    by: ["clientId"],
+    where: { workspaceId, updatedAt: { gte: new Date(Date.now() - 60 * 86_400_000) }, client: { archivedAt: null } },
+    _max: { updatedAt: true },
+    orderBy: { _max: { updatedAt: "desc" } },
+    take: limit,
+  });
+  return rows.map((row) => row.clientId);
+}

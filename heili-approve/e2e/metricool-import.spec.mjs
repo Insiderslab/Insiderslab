@@ -106,6 +106,12 @@ test("importa: abbinamento per nome, un clic per il resto, seconda volta tutto g
   await expect(osteria.getByText("Fuso orario Europe/Rome")).toBeVisible();
   await expect(osteria.getByRole("img")).toHaveCount(0); // decorative logo: no alt text
   await expect(osteria.locator("img")).toHaveAttribute("src", /\/fake-brands\/brand-2\.svg$/);
+  // D-02: nothing is picked at first; the page says nothing is created before the button.
+  await expect(osteria.getByRole("radio", { name: "Ignora" })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Importa clienti" })).toBeDisabled();
+  await expect(page.getByTestId("import-help")).toHaveText("Scegli quali brand diventano clienti. Nessun cliente viene creato finché non premi «Importa N clienti».");
+  // «Seleziona tutti» applies the suggestions: create, or link by name.
+  await page.getByRole("button", { name: "Seleziona tutti" }).click();
   await expect(osteria.getByRole("radio", { name: "Crea nuovo cliente" })).toBeChecked();
 
   // Name match: linked to the existing client, not created.
@@ -162,7 +168,9 @@ test("importa: abbinamento per nome, un clic per il resto, seconda volta tutto g
   await expect(rows.filter({ hasText: "Casa Mediterranea" }).getByRole("radio")).toHaveCount(0);
   await shot(page, "agenzia-importa-metricool-rifatto.png");
 
-  // Import the last one: now nothing is left to import, and nothing is duplicated.
+  // Import the last one (chosen explicitly): now nothing is left to import, and nothing is duplicated.
+  await expect(page.getByRole("button", { name: "Importa clienti" })).toBeDisabled();
+  await rows.filter({ hasText: "Tech4Kids Academy" }).getByText("Crea nuovo cliente", { exact: true }).click();
   await page.getByRole("button", { name: "Importa 1 cliente" }).click();
   await expect(page.getByTestId("import-headline")).toHaveText("1 cliente creato");
   await page.goto("/clients/import");
@@ -184,7 +192,7 @@ test("importa: da telefono, senza scorrimento orizzontale", async ({ browser }) 
   await page.goto("/clients/import");
   await expect(page.getByTestId("import-row")).toHaveCount(10);
   await expectNoHorizontalScroll(page);
-  await page.getByRole("button", { name: "Importa 10 clienti" }).scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "Importa clienti" }).scrollIntoViewIfNeeded();
   await shot(page, "agenzia-importa-metricool-mobile.png");
   await context.close();
 });

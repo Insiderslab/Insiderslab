@@ -259,7 +259,7 @@ export default async function PostDetailPage({
       : first(query.inviato) === "errore"
         ? "Bozza salvata, ma l'invio al cliente non è riuscito: riprova con Invia in revisione."
         : first(query.salvato) === "1"
-          ? "Bozza salvata."
+          ? "Bozza salvata: il cliente non la vede ancora. Quando è pronta, premi «Invia in revisione»."
           : null;
   const showSharePanel =
     !client.archivedAt &&
