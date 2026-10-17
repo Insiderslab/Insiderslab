@@ -2,7 +2,7 @@
  * "Link del piano": per active reviewer of the client, the link straight to
  * the plan page of their portal (/review/<token>/piani/<planId>) with a
  * ready WhatsApp message ("Ciao Chiara, ecco il piano social di ottobre per
- * …: 12 post da rivedere. <url>").
+ * …: 12 post da approvare. <url>").
  *
  * Server component: it decrypts the reviewers' tokens, so it must only be
  * rendered on pages that already checked the signed-in agency workspace.

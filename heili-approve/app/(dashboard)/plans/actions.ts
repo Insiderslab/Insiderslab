@@ -139,8 +139,8 @@ export async function sendPlanAction(
     const linkOnly = result.clientsWithoutReviewers.length === 0 && nobodyEmailed(recipients);
     const posts = count === 1 ? "1 post" : `${count} post`;
     const head = linkOnly
-      ? `Piano pronto per il cliente: ${posts} da rivedere. Manda il link qui sotto.`
-      : `Piano inviato: ${posts} da rivedere${result.emailed > 0 ? `, ${result.emailed === 1 ? "1 email" : `${result.emailed} email`} al cliente` : ""}.`;
+      ? `Piano pronto per il cliente: ${posts} da approvare. Manda il link qui sotto.`
+      : `Piano inviato: ${posts} da approvare${result.emailed > 0 ? `, ${result.emailed === 1 ? "1 email" : `${result.emailed} email`} al cliente` : ""}.`;
     // The missing-brand warning always shows; the reviewer/email hints are already
     // covered by "Manda il link qui sotto" when nobody was emailed.
     const followUp = submitFollowUp(
