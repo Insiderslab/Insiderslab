@@ -28,6 +28,7 @@ import {
 } from "@/components/posts/helpers";
 import GettingStarted from "@/components/help/getting-started";
 import { KindIcon, KindStatusBadge } from "@/components/posts/kind-badge";
+import { countOpenTasks } from "@/lib/activity";
 import { getCurrentClientId } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, isNetwork } from "@/lib/domain";
@@ -102,7 +103,7 @@ export default async function DashboardPage() {
     attentionWhere.push({ kind: { in: internalKinds }, status: "APPROVED" });
   }
 
-  const [grouped, doneThisWeek, clientCount, currentClient, attention, upcoming, startFacts] = await Promise.all([
+  const [grouped, doneThisWeek, clientCount, currentClient, attention, upcoming, startFacts, openTasks] = await Promise.all([
     prisma.post.groupBy({
       by: ["kind", "status"],
       where: { workspaceId, ...scope, kind: { in: kinds }, status: { not: "CANCELLED" } },
@@ -145,6 +146,8 @@ export default async function DashboardPage() {
     }),
     // «Per iniziare»: the whole workspace, whatever client is picked.
     getGettingStartedFacts(workspaceId, kinds),
+    // Open tasks of the user (assigned to me plus unassigned), for the banner.
+    countOpenTasks(workspaceId, context.userId),
   ]);
   const startSteps = gettingStartedSteps(startFacts, kinds);
 
@@ -280,6 +283,19 @@ export default async function DashboardPage() {
       </div>
 
       <GettingStarted workspaceId={workspaceId} steps={startSteps} />
+
+      {openTasks > 0 && (
+        <Link
+          href="/attivita"
+          className="flex min-h-11 items-center gap-3 rounded-lg bg-warning-soft px-4 py-2 text-sm font-semibold text-warning transition-colors hover:brightness-95"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          </svg>
+          Hai {openTasks === 1 ? "1 compito" : `${openTasks} compiti`} in Attività
+        </Link>
+      )}
 
       <section
         aria-label="Riepilogo"
