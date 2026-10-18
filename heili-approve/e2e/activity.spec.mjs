@@ -80,13 +80,6 @@ async function menuCount(page, mobile) {
 /** The row of the list that mentions `title`. */
 const rowOf = (page, title) => page.getByRole("listitem").filter({ hasText: title });
 
-/** The page was just loaded: waits until the «Da fare (n)» tab shows `n`. */
-async function todoCount(page) {
-  const tab = page.getByRole("navigation", { name: "Attività" }).getByRole("link", { name: /^Da fare/ });
-  await expect(tab).toBeVisible();
-  return Number((await tab.innerText()).match(/\((\d+)\)/)[1]);
-}
-
 async function scenario(browser, { label, agencyOptions }) {
   const mobile = agencyOptions === MOBILE;
   const suffix = `${uniq()}${mobile ? "m" : "d"}`;
