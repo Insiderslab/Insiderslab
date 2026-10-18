@@ -19,6 +19,8 @@ interface DashboardShellProps {
   /** Clients for the selector in the menu (not archived), and the one picked. */
   clients: SwitcherClient[];
   currentClientId: string | null;
+  /** Open tasks (mine + unassigned) shown next to "Attività" in the menu. */
+  activityCount: number;
   /** Active services of the selected client; all variant kinds when viewing every client. */
   currentClientServices?: readonly ContentKind[];
 }
@@ -31,6 +33,7 @@ export default function DashboardShell({
   variant,
   clients,
   currentClientId,
+  activityCount,
   currentClientServices,
 }: DashboardShellProps) {
   const currentClient = clients.find((c) => c.id === currentClientId) ?? null;
@@ -62,6 +65,7 @@ export default function DashboardShell({
         variant={variant}
         clients={clients}
         currentClientId={currentClientId}
+        activityCount={activityCount}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

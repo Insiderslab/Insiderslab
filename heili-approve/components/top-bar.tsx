@@ -16,6 +16,7 @@ import { KIND_UI, enabledKinds, isMetricoolEnabled, parseKindParam, type AppVari
 
 const pageTitles: Array<[prefix: string, title: string]> = [
   ["/dashboard", "Dashboard"],
+  ["/attivita", "Attività"],
   ["/calendar", "Calendario"],
   ["/plans", "Piani del mese"],
   ["/clients", "Clienti"],
@@ -115,7 +116,7 @@ export default function TopBar({
 
       <div className="flex shrink-0 items-center gap-3">
         {needsAttention > 0 && (
-          <Link href="/posts?status=attention" className="chip chip-stale !min-h-11 !px-3 hover:underline">
+          <Link href="/attivita" className="chip chip-stale !min-h-11 !px-3 hover:underline">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
               <path d="M12 8v5M12 16.5v.01" />
               <circle cx="12" cy="12" r="9" />

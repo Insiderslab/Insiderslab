@@ -27,11 +27,15 @@ interface SidebarProps {
   variant: AppVariant;
   clients: SwitcherClient[];
   currentClientId: string | null;
+  /** Open tasks (mine + unassigned) shown next to "Attività". */
+  activityCount: number;
 }
 
 /** Line icons (24 grid, 1.75 stroke) for the fixed menu entries. */
 const NAV_ICONS: Record<string, string[]> = {
   "/dashboard": ["M4 4h7v9H4z", "M13 4h7v5h-7z", "M13 11h7v9h-7z", "M4 15h7v5H4z"],
+  // Attività: a bell (notifications) plus a check (tasks to do).
+  "/attivita": ["M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9", "M10.3 21a1.94 1.94 0 0 0 3.4 0"],
   "/calendar": ["M4 6h16v14H4z", "M4 10h16", "M8 3v4", "M16 3v4", "M8 14h3"],
   // Monthly plan: a calendar page with a 3×2 grid of posts.
   "/plans": ["M4 4h16v16H4z", "M4 9h16", "M9.5 9v11", "M14.5 9v11", "M4 14.5h16"],
@@ -79,9 +83,10 @@ interface NavListProps {
   variant: AppVariant;
   activeKind: ContentKind | null;
   onClose: () => void;
+  activityCount: number;
 }
 
-function NavList({ variant, activeKind, onClose }: NavListProps) {
+function NavList({ variant, activeKind, onClose, activityCount }: NavListProps) {
   const pathname = usePathname();
   const singleKind = enabledKinds(variant).length === 1;
 
@@ -103,6 +108,11 @@ function NavList({ variant, activeKind, onClose }: NavListProps) {
           >
             <NavIcon item={item} />
             {item.label}
+            {item.href === "/attivita" && activityCount > 0 && (
+              <span className="ml-auto rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">
+                {activityCount}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -129,7 +139,7 @@ function ClientSwitcherFallback({ clients, currentClientId }: { clients: Switche
   );
 }
 
-export default function Sidebar({ isOpen, onClose, workspaceName, variant, clients, currentClientId }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, workspaceName, variant, clients, currentClientId, activityCount }: SidebarProps) {
   const asideRef = useRef<HTMLElement>(null);
   // The drawer exists below lg only; on desktop the rail is always visible.
   const [isDesktop, setIsDesktop] = useState(true);
@@ -183,8 +193,8 @@ export default function Sidebar({ isOpen, onClose, workspaceName, variant, clien
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-label="Menu principale">
-          <Suspense fallback={<NavList variant={variant} activeKind={null} onClose={onClose} />}>
-            <NavListWithKind variant={variant} onClose={onClose} />
+          <Suspense fallback={<NavList variant={variant} activeKind={null} onClose={onClose} activityCount={activityCount} />}>
+            <NavListWithKind variant={variant} onClose={onClose} activityCount={activityCount} />
           </Suspense>
         </nav>
 

@@ -280,13 +280,15 @@ export interface NavItem {
 }
 
 /**
- * Sidebar entries: Dashboard, one per enabled kind, Calendario, Piani (the
- * monthly social plans, only with social posts), Clienti, Impostazioni, Guida
- * (how to use the app, /guida).
+ * Sidebar entries: Dashboard, Attività (the agency's tasks and notifications,
+ * /attivita), one per enabled kind, Calendario, Piani (the monthly social
+ * plans, only with social posts), Clienti, Impostazioni, Guida (how to use
+ * the app, /guida).
  */
 export function navItems(variant: AppVariant = getAppVariant()): NavItem[] {
   return [
     { label: "Dashboard", href: "/dashboard", kind: null },
+    { label: "Attività", href: "/attivita", kind: null },
     ...VARIANT_KINDS[variant].map((kind) => ({ label: KIND_UI[kind].navLabel, href: postsHref(kind, variant), kind })),
     { label: "Calendario", href: "/calendar", kind: null },
     ...(VARIANT_KINDS[variant].includes("SOCIAL_POST") ? [{ label: "Piani del mese", href: "/plans", kind: null }] : []),

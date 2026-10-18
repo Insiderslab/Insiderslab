@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/dashboard-shell";
+import { countOpenTasks } from "@/lib/activity";
 import { auth } from "@/lib/auth";
 import { getCurrentClientId } from "@/lib/current-client";
 import { prisma } from "@/lib/db/client";
@@ -30,35 +31,27 @@ export default async function DashboardLayout({
   // per instance) and handed to the client shell as a prop.
   const variant = getAppVariant();
 
-  // Items waiting on the agency: the client asked for changes, or scheduling
-  // on Metricool failed. Only kinds this instance handles. Shown as a counter
-  // in the top bar.
-  // The client picked in the menu scopes the counter too.
-  const [clients, currentClientId] = await Promise.all([
+  // Items waiting on the agency: open tasks (assigned to me plus unassigned),
+  // shown in the menu and in the top bar, which now leads to /attivita.
+  const [clients, currentClientId, openTasks] = await Promise.all([
     prisma.client.findMany({
       where: { workspaceId: workspace.id, archivedAt: null },
       select: { id: true, name: true, logoUrl: true, services: true },
       orderBy: { name: "asc" },
     }),
     getCurrentClientId(workspace.id),
+    countOpenTasks(workspace.id, session.user.id),
   ]);
-  const needsAttention = await prisma.post.count({
-    where: {
-      workspaceId: workspace.id,
-      kind: { in: enabledKinds(variant) },
-      status: { in: ["CHANGES_REQUESTED", "FAILED"] },
-      ...(currentClientId ? { clientId: currentClientId } : {}),
-    },
-  });
 
   return (
     <DashboardShell
       workspaceName={workspace.name}
       metricoolConnected={Boolean(workspace.metricoolTokenEncrypted)}
-      needsAttention={needsAttention}
+      needsAttention={openTasks}
       variant={variant}
       clients={clients}
       currentClientId={currentClientId}
+      activityCount={openTasks}
       currentClientServices={clients.find((client) => client.id === currentClientId)?.services.filter((kind) => enabledKinds(variant).includes(kind))}
     >
       {children}
