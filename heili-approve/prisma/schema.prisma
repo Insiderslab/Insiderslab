@@ -36,6 +36,8 @@ model User {
   plansCreated     ContentPlan[]         @relation("PlanCreatedBy")
   planComments     ContentPlanComment[]
   automationTokens AutomationToken[]
+  ownedClients     Client[]              @relation("ClientOwner")
+  assignedActivities AgencyActivity[]    @relation("ActivityAssignee")
 }
 
 model Account {
@@ -103,6 +105,7 @@ model Workspace {
   automationUploads AutomationUploadReservation[]
   mediaAnalysisAttempts MediaAnalysisAttempt[]
   websiteSites WebsiteSite[]
+  activities AgencyActivity[]
 
   @@index([ownerId])
 }
@@ -183,11 +186,17 @@ model Client {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  /// Social media manager responsible: receives this client's tasks.
+  /// Null = unassigned (everyone sees them).
+  ownerUserId String?
+
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User?            @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   reviewers ClientReviewer[]
   posts     Post[]
   plans     ContentPlan[]
   websiteSites WebsiteSite[]
+  activities AgencyActivity[]
 
   @@index([workspaceId])
 }
@@ -297,6 +306,7 @@ model Post {
   reviewSessions    ReviewSession[]
   creativeDecisions CreativeDecision[]
   websiteSessions   WebsiteSession[]
+  activities        AgencyActivity[]
   plan              ContentPlan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, kind, status])
@@ -731,6 +741,7 @@ model ContentPlan {
   createdBy User?                @relation("PlanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   posts     Post[]
   comments  ContentPlanComment[]
+  activities AgencyActivity[]
 
   @@unique([clientId, kind, month])
   @@index([workspaceId, month])
@@ -827,4 +838,61 @@ model WebsiteSession {
 
   @@index([postId])
   @@index([launchExpiresAt])
+}
+
+// ─── Attività: notifiche e compiti dell'agenzia (docs/ATTIVITA.md) ───────────
+
+enum ActivityKind {
+  TASK // serve un'azione dell'agenzia
+  INFO // solo informazione
+}
+
+enum ActivityStatus {
+  OPEN
+  DONE
+}
+
+enum ActivityType {
+  CHANGES_REQUESTED // il cliente ha chiesto modifiche a un contenuto        → TASK
+  CLIENT_COMMENT // commento del cliente su contenuto senza decisione     → TASK
+  PLAN_COMMENT // commento del cliente sul piano del mese               → TASK
+  WEBSITE_NOTES // note «Sul sito» inviate con «Chiedi modifiche»        → TASK
+  SCHEDULE_FAILED // programmazione Metricool fallita                   → TASK
+  APPROVED // contenuto approvato                                       → INFO
+  PLAN_APPROVED // piano del mese approvato                              → INFO
+}
+
+/// Una riga = una notifica o un compito accumulato per l'agenzia. Nasce quando
+/// il cliente chiede una modifica (o fa altro che richiede un'azione) e diventa
+/// un compito assegnato al social media manager del cliente.
+model AgencyActivity {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  clientId       String
+  postId         String?
+  planId         String?
+  type           ActivityType
+  kind           ActivityKind
+  status         ActivityStatus @default(OPEN)
+  title          String
+  summary        String         @default("")
+  versionNumber  Int?
+  assigneeUserId String?
+  dedupeKey      String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  doneAt         DateTime?
+  doneByUserId   String?
+  readAt         DateTime?
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  post      Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  plan      ContentPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  assignee  User?        @relation("ActivityAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, status, kind, createdAt])
+  @@index([assigneeUserId, status])
+  @@index([postId])
 }
