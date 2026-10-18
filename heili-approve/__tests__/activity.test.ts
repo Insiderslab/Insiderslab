@@ -31,6 +31,7 @@ import {
   activityKindOf,
   assign,
   cleanSummary,
+  closeInfoActivity,
   closeTasksForPost,
   countOpenTasks,
   listActivities,
@@ -146,6 +147,17 @@ describe("closeTasksForPost", () => {
     await expect(closeTasksForPost("post-1", "me")).resolves.toBe(2);
     expect(mock.updateMany).toHaveBeenCalledWith({
       where: { postId: "post-1", kind: "TASK", status: "OPEN" },
+      data: { status: "DONE", doneAt: expect.any(Date), doneByUserId: "me" },
+    });
+  });
+});
+
+describe("closeInfoActivity", () => {
+  it("marks the INFO of a dedupeKey as done (an approval undone)", async () => {
+    mock.updateMany.mockResolvedValue({ count: 1 });
+    await expect(closeInfoActivity("ws-1", "approved:post-1:v2", "me")).resolves.toBe(1);
+    expect(mock.updateMany).toHaveBeenCalledWith({
+      where: { workspaceId: "ws-1", dedupeKey: "approved:post-1:v2", kind: "INFO" },
       data: { status: "DONE", doneAt: expect.any(Date), doneByUserId: "me" },
     });
   });
