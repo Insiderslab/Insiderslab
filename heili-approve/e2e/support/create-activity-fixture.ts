@@ -162,6 +162,11 @@ async function main() {
     expires
   );
   await prisma.agencyActivity.deleteMany({ where: { workspaceId: empty.workspace.id } });
+  const emptyClient =
+    (await prisma.client.findFirst({ where: { workspaceId: empty.workspace.id, name: "Cliente dell'agenzia vuota" } })) ??
+    (await prisma.client.create({
+      data: { workspaceId: empty.workspace.id, name: "Cliente dell'agenzia vuota", networks: ["instagram"], services: ["SOCIAL_POST"] },
+    }));
 
   console.log(
     `RESULT ${JSON.stringify({
@@ -173,7 +178,11 @@ async function main() {
       secondId: second.id,
       secondTitle: second.title,
       marta: { id: marta.id, name: "Marta Bianchi", sessionToken: martaToken },
-      empty: { sessionToken: "dev-session-empty-agency-0000000001" },
+      empty: {
+        workspaceId: empty.workspace.id,
+        clientId: emptyClient.id,
+        sessionToken: "dev-session-empty-agency-0000000001",
+      },
       other: {
         clientId: otherClient.id,
         sessionToken: "dev-session-other-agency-0000000001",

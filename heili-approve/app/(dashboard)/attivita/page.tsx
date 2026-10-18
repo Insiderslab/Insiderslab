@@ -73,13 +73,15 @@ const tabBaseClass =
 const tabClass = (active: boolean) =>
   `${tabBaseClass} ${active ? "border-accent font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"}`;
 
+const bottomLinkClass = "inline-flex min-h-11 items-center text-accent hover:underline";
+
 const scopeClass = (active: boolean) =>
   `inline-flex min-h-11 items-center rounded-md px-3 text-sm ${active ? "bg-surface font-medium text-foreground shadow-sm" : "text-muted hover:text-foreground"}`;
 
 export default async function AttivitaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string | string[]; scope?: string | string[]; clientId?: string | string[]; chiuse?: string | string[] }>;
+  searchParams: Promise<{ tab?: string | string[]; scope?: string | string[]; clientId?: string | string[]; chiuse?: string | string[]; dopo?: string | string[] }>;
 }) {
   const context = await getCurrentWorkspaceContext();
   if (!context) redirect("/login");
@@ -91,6 +93,8 @@ export default async function AttivitaPage({
   const scope: "mine" | "all" = first(params.scope) === "all" ? "all" : "mine";
   const clientId = first(params.clientId);
   const showCompleted = first(params.chiuse) === "1";
+  // Cursor of the next page of 30 (the list is long when nobody closes tasks).
+  const cursor = first(params.dopo)?.slice(0, 64) || undefined;
 
   const [clients, members, openTasks, unread] = await Promise.all([
     prisma.client.findMany({
@@ -107,6 +111,7 @@ export default async function AttivitaPage({
     workspaceId,
     userId,
     scope,
+    cursor,
     clientId: clientId && clients.some((c) => c.id === clientId) ? clientId : undefined,
   };
   const page = isNotifications
@@ -125,6 +130,7 @@ export default async function AttivitaPage({
       scope: scope === "all" ? "all" : undefined,
       clientId: listInput.clientId,
       chiuse: showCompleted && !isNotifications ? "1" : undefined,
+      dopo: undefined,
       ...overrides,
     };
     for (const [key, value] of Object.entries(source)) {
@@ -187,9 +193,14 @@ export default async function AttivitaPage({
                         <span className="font-semibold text-foreground">{item.client.name}</span>
                         {" · "}
                         {ACTIVITY_TYPE_LABELS[item.type]}
+                        {isNotifications && item.readAt === null && (
+                          <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 font-semibold text-accent">Nuova</span>
+                        )}
                       </p>
-                      <p className="mt-0.5 leading-snug font-semibold">{item.title}</p>
-                      {item.summary && <p className="mt-0.5 line-clamp-2 text-sm text-muted">{item.summary}</p>}
+                      <p className="mt-0.5 leading-snug font-semibold [overflow-wrap:anywhere]">{item.title}</p>
+                      {item.summary && (
+                        <p className="mt-0.5 line-clamp-2 text-sm text-muted [overflow-wrap:anywhere]">{item.summary}</p>
+                      )}
                       <p className="mt-1 text-xs text-muted">
                         {assigneeLabel ? `Assegnato a ${assigneeLabel}` : "Non assegnato"}
                         {" · "}
@@ -217,15 +228,31 @@ export default async function AttivitaPage({
         </ul>
       )}
 
+      {/* Next page (30 at a time) and back to the start */}
+      {(page.nextCursor || cursor) && (
+        <p className="flex flex-wrap items-center gap-x-4 text-sm">
+          {page.nextCursor && (
+            <Link href={href({ dopo: page.nextCursor })} className={bottomLinkClass}>
+              Mostra altre
+            </Link>
+          )}
+          {cursor && (
+            <Link href={href({})} className={bottomLinkClass}>
+              Torna all&apos;inizio
+            </Link>
+          )}
+        </p>
+      )}
+
       {/* "Mostra completate" at the bottom of the todo list */}
       {!isNotifications && (
         <p className="text-sm text-muted">
           {showCompleted ? (
-            <Link href={href({ chiuse: undefined })} className="text-accent hover:underline">
+            <Link href={href({ chiuse: undefined })} className={bottomLinkClass}>
               Torna ai compiti aperti
             </Link>
           ) : (
-            <Link href={href({ chiuse: "1" })} className="text-accent hover:underline">
+            <Link href={href({ chiuse: "1" })} className={bottomLinkClass}>
               Mostra completate
             </Link>
           )}

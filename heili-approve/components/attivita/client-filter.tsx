@@ -24,6 +24,7 @@ export default function ClientFilter({
     if (value) params.set("clientId", value);
     else params.delete("clientId");
     params.delete("chiuse");
+    params.delete("dopo");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname);
   }

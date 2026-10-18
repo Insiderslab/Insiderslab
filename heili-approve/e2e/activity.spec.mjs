@@ -190,6 +190,8 @@ async function scenario(browser, { label, agencyOptions }) {
   await expect(notification.getByRole("link", { name: "Apri", exact: true })).toBeVisible();
   // Information only: no «Fatto» / «Assegna a».
   await expect(notification.getByRole("button", { name: "Fatto" })).toHaveCount(0);
+  // Unread entries say so with a word.
+  await expect(notification.getByText("Nuova", { exact: true })).toBeVisible();
   const unreadTab = page.getByRole("navigation", { name: "Attività" }).getByRole("link", { name: /^Notifiche/ });
   expect(Number((await unreadTab.innerText()).match(/\((\d+)\)/)[1])).toBeGreaterThanOrEqual(1);
   if (mobile) await expectNoHorizontalScroll(page);
@@ -199,6 +201,7 @@ async function scenario(browser, { label, agencyOptions }) {
   await expect(page.getByRole("button", { name: "Segna tutte come lette" })).toHaveCount(0);
   // The entry stays in the list: read, not deleted.
   await expect(rowOf(page, `Approvato: ${fx.postTitle}`)).toHaveCount(1);
+  await expect(rowOf(page, `Approvato: ${fx.postTitle}`).getByText("Nuova", { exact: true })).toHaveCount(0);
 
   // ── 5. A comment with no decision: task, «Fatto», «Riapri», «Assegna a…» ──
   await portal.goto(`${fx.reviewUrl}/posts/${fx.secondId}`);
@@ -276,6 +279,43 @@ async function scenario(browser, { label, agencyOptions }) {
   await shot(emptyPage, shots("vuota"));
   await emptyPage.goto("/attivita?tab=notifiche");
   await expect(emptyPage.getByText("Nessuna notifica.")).toBeVisible();
+
+  // A long list shows 30 at a time; an unbreakable word stays inside its card.
+  const emptyRows = emptyPage.getByRole("listitem").filter({ hasText: "Cliente dell'agenzia vuota" });
+  await db.query(`delete from "AgencyActivity" where "dedupeKey" like 'e2e-page:%'`);
+  await db.query(
+    `insert into "AgencyActivity" (id, "workspaceId", "clientId", type, kind, status, title, summary, "dedupeKey", "createdAt", "updatedAt")
+     select 'e2e-page-' || i || '-' || $3::text, $1::text, $2::text, 'CLIENT_COMMENT', 'TASK', 'OPEN', 'Compito ' || i,
+            case when i = 1 then repeat('x', 200) else 'Nota ' || i end,
+            'e2e-page:' || i || ':' || $3::text, now() - (i || ' minutes')::interval, now()
+     from generate_series(1, 35) i`,
+    [fx.empty.workspaceId, fx.empty.clientId, suffix]
+  );
+  try {
+    await emptyPage.goto("/attivita");
+    await expect(emptyPage.getByRole("navigation", { name: "Attività" }).getByRole("link", { name: /^Da fare/ })).toHaveText("Da fare (35)");
+    await expect(emptyRows).toHaveCount(30);
+    const overflow = await emptyPage.evaluate(() => {
+      const card = [...document.querySelectorAll("main li")].find((li) => li.textContent.includes("xxxxxxxxxx"));
+      const right = card.getBoundingClientRect().right;
+      return [...card.querySelectorAll("p")].map((p) => p.getBoundingClientRect().right - right).filter((d) => d > 1);
+    });
+    expect(overflow).toEqual([]);
+    if (mobile) await expectNoHorizontalScroll(emptyPage);
+    await emptyPage.getByRole("link", { name: "Mostra altre" }).click();
+    await expect(emptyPage).toHaveURL(/dopo=/);
+    await expect(emptyRows).toHaveCount(5);
+    await expect(emptyPage.getByRole("link", { name: "Mostra altre" })).toHaveCount(0);
+    await emptyPage.getByRole("link", { name: "Torna all'inizio" }).click();
+    await expect(emptyPage.getByRole("link", { name: "Mostra altre" })).toBeVisible();
+    // «Mostra completate» is a real touch target on a phone.
+    if (mobile) {
+      const box = await emptyPage.getByRole("link", { name: "Mostra completate" }).boundingBox();
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+  } finally {
+    await db.query(`delete from "AgencyActivity" where "dedupeKey" like 'e2e-page:%'`);
+  }
   await emptyContext.close();
 
   await phone.close();
