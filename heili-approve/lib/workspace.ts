@@ -99,3 +99,28 @@ export async function getPrimaryWorkspace(userId: string): Promise<Workspace | n
   const membership = await getWorkspaceMembership(userId);
   return membership?.workspace ?? null;
 }
+
+/** A workspace member as needed by the client form and the assign menus. */
+export type WorkspaceMemberLite = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+};
+
+/**
+ * The members of a workspace, owner first. Used to pick the "Social media
+ * manager" of a client and to assign an activity; every caller is already
+ * scoped to the caller's workspace.
+ */
+export async function listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberLite[]> {
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId },
+    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+    select: { userId: true, user: { select: { name: true, email: true } } },
+  });
+  return members.map((member) => ({
+    userId: member.userId,
+    name: member.user.name,
+    email: member.user.email,
+  }));
+}

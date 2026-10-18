@@ -161,6 +161,24 @@ export interface ActivityPage {
   nextCursor: string | null;
 }
 
+async function queryActivityPage(where: Prisma.AgencyActivityWhereInput, cursor?: string): Promise<ActivityPage> {
+  const rows = await prisma.agencyActivity.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: PAGE_SIZE + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    include: {
+      client: { select: { id: true, name: true } },
+      assignee: { select: { id: true, name: true } },
+      post: { select: { id: true, title: true, kind: true, status: true } },
+    },
+  });
+
+  const hasMore = rows.length > PAGE_SIZE;
+  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+  return { items, nextCursor: hasMore ? items[items.length - 1].id : null };
+}
+
 /** Paginated (30), most recent first. "mine" = assigned to me plus unassigned. */
 export async function listActivities(input: ListActivitiesInput): Promise<ActivityPage> {
   const where: Prisma.AgencyActivityWhereInput = { workspaceId: input.workspaceId };
@@ -175,21 +193,35 @@ export async function listActivities(input: ListActivitiesInput): Promise<Activi
     where.OR = [{ assigneeUserId: input.userId }, { assigneeUserId: null }];
   }
 
-  const rows = await prisma.agencyActivity.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: PAGE_SIZE + 1,
-    ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-    include: {
-      client: { select: { id: true, name: true } },
-      assignee: { select: { id: true, name: true } },
-      post: { select: { id: true, title: true, kind: true, status: true } },
-    },
-  });
+  return queryActivityPage(where, input.cursor);
+}
 
-  const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  return { items, nextCursor: hasMore ? items[items.length - 1].id : null };
+/** How far back "Mostra completate" looks (docs/ATTIVITA.md). */
+export const COMPLETED_WINDOW_DAYS = 30;
+
+export interface ListCompletedInput {
+  workspaceId: string;
+  userId: string;
+  scope?: "mine" | "all";
+  clientId?: string;
+  cursor?: string;
+}
+
+/** Closed tasks of the last 30 days, most recent first ("Mostra completate"). */
+export async function listCompletedTasks(input: ListCompletedInput): Promise<ActivityPage> {
+  const since = new Date(Date.now() - COMPLETED_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const where: Prisma.AgencyActivityWhereInput = {
+    workspaceId: input.workspaceId,
+    kind: "TASK",
+    status: "DONE",
+    doneAt: { gte: since },
+  };
+  if (input.clientId) where.clientId = input.clientId;
+  if ((input.scope ?? "mine") === "mine") {
+    where.OR = [{ assigneeUserId: input.userId }, { assigneeUserId: null }];
+  }
+
+  return queryActivityPage(where, input.cursor);
 }
 
 /** Open tasks for the menu counter (assigned to me plus unassigned). */
@@ -199,6 +231,18 @@ export async function countOpenTasks(workspaceId: string, userId: string): Promi
       workspaceId,
       kind: "TASK",
       status: "OPEN",
+      OR: [{ assigneeUserId: userId }, { assigneeUserId: null }],
+    },
+  });
+}
+
+/** Unread notifications for the tab label (assigned to me plus unassigned). */
+export async function countUnreadNotifications(workspaceId: string, userId: string): Promise<number> {
+  return prisma.agencyActivity.count({
+    where: {
+      workspaceId,
+      kind: "INFO",
+      readAt: null,
       OR: [{ assigneeUserId: userId }, { assigneeUserId: null }],
     },
   });
