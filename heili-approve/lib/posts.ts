@@ -80,6 +80,7 @@ import {
 import { clientHasService, serviceNotActiveMessage } from "@/lib/clients";
 import { recordEvent, type DbClient } from "@/lib/events";
 import { getNetworkFormat, validateForNetworks } from "@/lib/metricool/payload";
+import { closeTasksForPost, recordActivity } from "@/lib/activity";
 import { notifyApproved, notifyChangesRequested, notifyReviewRequested } from "@/lib/notifications";
 import { loadSubmittedSessionIds } from "@/lib/review-assistant/submitted";
 import { MAX_VIDEO_DURATION_SEC, mediaItemForAsset, storageKeyFromMediaUrl } from "@/lib/storage";
@@ -2256,6 +2257,32 @@ export async function recordClientView(postId: string, reviewer: ReviewerRef): P
 
 // ─── Comments ────────────────────────────────────────────────────────────────
 
+/** Records a client comment as an activity, never throwing (the comment already happened). */
+async function recordClientCommentSafe(input: {
+  workspaceId: string;
+  clientId: string;
+  postId: string;
+  planId: string | null;
+  title: string;
+  commentId: string;
+  body: string;
+}): Promise<void> {
+  try {
+    await recordActivity({
+      workspaceId: input.workspaceId,
+      clientId: input.clientId,
+      postId: input.postId,
+      planId: input.planId,
+      type: "CLIENT_COMMENT",
+      title: `Commento del cliente: ${input.title}`,
+      summary: input.body,
+      dedupeKey: `comment:${input.commentId}`,
+    });
+  } catch (error) {
+    console.error(`[posts] Failed to record client comment activity:`, error);
+  }
+}
+
 export interface AddCommentInput {
   postId: string;
   actor: Actor;
@@ -2322,7 +2349,7 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
   const { actor } = input;
   if (actor.kind === "system") throw new ForbiddenError();
 
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     // Serialize with plan-wide approval and assistant writes.
     await tx.$executeRaw`SELECT 1 FROM "Post" WHERE "id" = ${data.postId} FOR UPDATE`;
     const post = await tx.post.findUnique({ where: { id: data.postId } });
@@ -2441,8 +2468,21 @@ export async function addComment(input: AddCommentInput): Promise<PostComment> {
         ...(time.timeEndSec !== null ? { timeEndSec: time.timeEndSec } : {}),
       },
     });
-    return comment;
+    return { comment, post };
   });
+
+  if (actor.kind === "reviewer") {
+    await recordClientCommentSafe({
+      workspaceId: saved.post.workspaceId,
+      clientId: saved.post.clientId,
+      postId: saved.post.id,
+      planId: saved.post.planId ?? null,
+      title: saved.post.title,
+      commentId: saved.comment.id,
+      body: saved.comment.body,
+    });
+  }
+  return saved.comment;
 }
 
 /** Marks a comment resolved (or reopens it with `resolved = false`). Agency only. */

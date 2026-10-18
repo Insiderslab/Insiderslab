@@ -16,6 +16,7 @@
  */
 
 import type { Client, ClientReviewer, ContentKind, Post } from "@/app/generated/prisma/client";
+import { recordActivity, type RecordActivityInput } from "@/lib/activity";
 import { DEVICE_LABELS, pagePath, parseWebsiteAnchor } from "@/lib/content/website";
 import { prisma } from "@/lib/db/client";
 import { KIND_CONFIG, NETWORK_LABELS, formatTimeRange, isNetwork, type Network } from "@/lib/domain";
@@ -292,6 +293,15 @@ async function sendToAgency(
 
 function logFailure(name: string, error: unknown) {
   console.error(`[notifications] ${name} failed:`, error);
+}
+
+/** Records an activity without ever failing the caller (the email must go out). */
+async function recordActivitySafe(input: RecordActivityInput): Promise<void> {
+  try {
+    await recordActivity(input);
+  } catch (error) {
+    logFailure("recordActivity", error);
+  }
 }
 
 // ─── Client side ─────────────────────────────────────────────────────────────
@@ -591,6 +601,19 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       onlyUnlocated: Array.isArray(metadata.actionCommentIds),
     });
 
+    const isWebsite = post.kind === "WEBSITE";
+    await recordActivitySafe({
+      workspaceId: post.workspaceId,
+      clientId: post.clientId,
+      postId: post.id,
+      planId: post.planId ?? null,
+      type: isWebsite ? "WEBSITE_NOTES" : "CHANGES_REQUESTED",
+      title: `${isWebsite ? "Note sul sito" : "Modifiche richieste"}: ${post.title}`,
+      summary: comment?.body ?? session?.summary ?? "",
+      versionNumber: post.currentVersionNumber,
+      dedupeKey: `changes:${post.id}:v${post.currentVersionNumber}`,
+    });
+
     await sendToAgency(post.workspaceId, `Modifiche richieste: ${post.title}`, {
       heading: "Il cliente ha chiesto modifiche",
       paragraphs,
@@ -607,6 +630,16 @@ export async function notifyApproved(postId: string): Promise<void> {
   try {
     const post = await loadPost(postId);
     if (!post) return;
+    await recordActivitySafe({
+      workspaceId: post.workspaceId,
+      clientId: post.clientId,
+      postId: post.id,
+      planId: post.planId ?? null,
+      type: "APPROVED",
+      title: `Approvato: ${post.title}`,
+      versionNumber: post.currentVersionNumber,
+      dedupeKey: `approved:${post.id}:v${post.currentVersionNumber}`,
+    });
     const reviewer = post.approvedByReviewerId
       ? await prisma.clientReviewer.findUnique({ where: { id: post.approvedByReviewerId }, select: { name: true } })
       : null;
@@ -722,6 +755,17 @@ export async function notifyScheduleFailed(postId: string): Promise<void> {
   try {
     const post = await loadPost(postId);
     if (!post) return;
+    await recordActivitySafe({
+      workspaceId: post.workspaceId,
+      clientId: post.clientId,
+      postId: post.id,
+      planId: post.planId ?? null,
+      type: "SCHEDULE_FAILED",
+      title: `Programmazione non riuscita: ${post.title}`,
+      summary: post.lastError ?? "",
+      versionNumber: post.currentVersionNumber,
+      dedupeKey: `schedule-failed:${post.id}:v${post.currentVersionNumber}`,
+    });
     await sendToAgency(post.workspaceId, `Programmazione non riuscita: ${post.title}`, {
       heading: "Programmazione non riuscita",
       paragraphs: [
@@ -845,6 +889,14 @@ export async function notifyPlanApproved(planId: string, reviewerId: string, app
     if (approvedPostIds.length === 0) return;
     const plan = await loadPlan(planId);
     if (!plan) return;
+    await recordActivitySafe({
+      workspaceId: plan.workspaceId,
+      clientId: plan.clientId,
+      planId: plan.id,
+      type: "PLAN_APPROVED",
+      title: `Piano approvato: ${planShortName(plan.month)}`,
+      dedupeKey: `plan-approved:${plan.id}`,
+    });
     const reviewer = await prisma.clientReviewer.findUnique({ where: { id: reviewerId }, select: { name: true } });
     const who = `${reviewer?.name ?? plan.client.name} (${plan.client.name})`;
     const name = planShortName(plan.month);
@@ -880,6 +932,14 @@ export async function notifyPlanDecided(planId: string): Promise<boolean> {
   try {
     const plan = await loadPlan(planId);
     if (!plan) return false;
+    await recordActivitySafe({
+      workspaceId: plan.workspaceId,
+      clientId: plan.clientId,
+      planId: plan.id,
+      type: "PLAN_APPROVED",
+      title: `Piano approvato: ${planShortName(plan.month)}`,
+      dedupeKey: `plan-approved:${plan.id}`,
+    });
     const summary = planOutcomeSummary(plan.posts.map((p) => p.status));
     const name = planShortName(plan.month);
     const changes = byPublishAsc(plan.posts.filter((p) => p.status === "CHANGES_REQUESTED"));
@@ -919,6 +979,15 @@ export async function notifyPlanComment(commentId: string): Promise<void> {
     const plan = comment.plan;
     const name = planShortName(plan.month);
     const who = comment.reviewer?.name ?? plan.client.name;
+    await recordActivitySafe({
+      workspaceId: plan.workspaceId,
+      clientId: plan.clientId,
+      planId: plan.id,
+      type: "PLAN_COMMENT",
+      title: `Commento sul piano: ${plan.client.name}`,
+      summary: comment.body,
+      dedupeKey: `plan-comment:${comment.id}`,
+    });
     await sendToAgency(plan.workspaceId, `Commento sul ${name.charAt(0).toLowerCase()}${name.slice(1)}: ${plan.client.name}`, {
       heading: "Commento sul piano",
       paragraphs: [`${who} (${plan.client.name}) ha scritto un commento sul ${name.charAt(0).toLowerCase()}${name.slice(1)}.`],

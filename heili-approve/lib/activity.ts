@@ -122,6 +122,23 @@ export async function closeTasksForPost(postId: string, userId?: string | null):
   return count;
 }
 
+/**
+ * Marks an INFO activity as DONE by its dedupeKey: called when the client
+ * undoes an approval (`approved:<postId>:v<version>` is no longer true).
+ * Returns how many rows were closed.
+ */
+export async function closeInfoActivity(
+  workspaceId: string,
+  dedupeKey: string,
+  userId?: string | null
+): Promise<number> {
+  const { count } = await prisma.agencyActivity.updateMany({
+    where: { workspaceId, dedupeKey, kind: "INFO" },
+    data: { status: "DONE", doneAt: new Date(), doneByUserId: userId ?? null },
+  });
+  return count;
+}
+
 // ─── Listing and counting ────────────────────────────────────────────────────
 
 export interface ListActivitiesInput {

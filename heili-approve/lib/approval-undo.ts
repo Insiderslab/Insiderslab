@@ -28,6 +28,7 @@
 
 import type { Post, Prisma } from "@/app/generated/prisma/client";
 import { reviewerActor } from "@/lib/actor";
+import { closeInfoActivity } from "@/lib/activity";
 import { prisma } from "@/lib/db/client";
 import { CLIENT_VISIBLE_STATUSES, assertTransition } from "@/lib/domain";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -102,7 +103,7 @@ export async function undoApproval(
 ): Promise<Post> {
   if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new ValidationError("Versione non valida");
 
-  const outcome = await prisma.$transaction(async (tx): Promise<{ refused: UndoRefusal } | { refused: null; approvedAtMs: number }> => {
+  const outcome = await prisma.$transaction(async (tx): Promise<{ refused: UndoRefusal } | { refused: null; approvedAtMs: number; workspaceId: string }> => {
     await lockPost(tx, postId);
     const post = await tx.post.findUnique({
       where: { id: postId },
@@ -113,6 +114,7 @@ export async function undoApproval(
         currentVersionNumber: true,
         approvedAt: true,
         approvedByReviewerId: true,
+        workspaceId: true,
       },
     });
     const visible = post !== null && CLIENT_VISIBLE_STATUSES.includes(post.status) && isKindEnabled(post.kind);
@@ -164,13 +166,19 @@ export async function undoApproval(
         elapsedMs: now.getTime() - post.approvedAt.getTime(),
       },
     });
-    return { refused: null, approvedAtMs: post.approvedAt.getTime() };
+    return { refused: null, approvedAtMs: post.approvedAt.getTime(), workspaceId: post.workspaceId };
   });
 
   if (outcome.refused) throw refusalError(outcome.refused);
 
   // The pending job would only find nothing to do; removing it keeps Redis tidy.
   await removeApprovalFinalization(postId, versionNumber, outcome.approvedAtMs);
+  // The approval is no longer true: close its "Approvato" notification.
+  try {
+    await closeInfoActivity(outcome.workspaceId, `approved:${postId}:v${versionNumber}`);
+  } catch (error) {
+    console.error(`[Approval] Failed to close the approval activity of post ${postId}:`, error);
+  }
   return prisma.post.findUniqueOrThrow({ where: { id: postId } });
 }
 
