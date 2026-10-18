@@ -1218,6 +1218,15 @@ function userIdOf(actor: Actor): string | null {
   return actor.kind === "user" ? actor.userId : null;
 }
 
+/** Closes the open tasks of a post, never throwing (the action already happened). */
+async function closeTasksForPostSafe(postId: string, userId: string | null): Promise<void> {
+  try {
+    await closeTasksForPost(postId, userId);
+  } catch (error) {
+    console.error(`[posts] Failed to close tasks for ${postId}:`, error);
+  }
+}
+
 // ─── Agency: create / edit / submit / cancel ─────────────────────────────────
 
 async function preparePostCreation(db: DbClient, workspaceId: string, input: PostInput) {
@@ -1685,11 +1694,12 @@ export async function submitForReview(
   });
 
   if (opts.notify !== false) await notifyReviewRequested(ids);
+  for (const id of ids) await closeTasksForPostSafe(id, userIdOf(actor));
   return { submitted: ids, clientsWithoutReviewers, clientsWithoutEmail, clientsWithoutScheduling };
 }
 
 export async function cancelPost(postId: string, workspaceId: string, actor: Actor): Promise<Post> {
-  return prisma.$transaction(async (tx) => {
+  const cancelled = await prisma.$transaction(async (tx) => {
     const post = await tx.post.findFirst({ where: { id: postId, workspaceId, kind: { in: enabledKinds() } } });
     if (!post) throw new NotFoundError("Post non trovato");
     const next = assertTransition(post.status, "cancel");
@@ -1703,6 +1713,8 @@ export async function cancelPost(postId: string, workspaceId: string, actor: Act
     });
     return tx.post.findUniqueOrThrow({ where: { id: postId } });
   });
+  await closeTasksForPostSafe(postId, userIdOf(actor));
+  return cancelled;
 }
 
 /**
