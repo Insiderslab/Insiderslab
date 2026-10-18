@@ -114,6 +114,28 @@ describe("activity hooks in the agency notifications", () => {
     );
   });
 
+  it("builds the excerpt from the comments the client saved before sending the request", async () => {
+    mockPrisma.post.findUnique.mockResolvedValue(socialPost());
+    mockPrisma.postEvent.findFirst.mockResolvedValue({
+      reviewer: { name: "Mario" },
+      metadata: { feedbackCommentIds: ["comment-1", "comment-2"] },
+    });
+    mockPrisma.postComment.findMany.mockResolvedValue([
+      { body: "Il titolo è troppo lungo." },
+      { body: "Togli l'hashtag." },
+    ]);
+
+    await notifyChangesRequested("post-1");
+
+    expect(mockRecordActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "CHANGES_REQUESTED",
+        summary: "Il titolo è troppo lungo. · Togli l'hashtag.",
+        dedupeKey: "changes:post-1:v2",
+      })
+    );
+  });
+
   it("records WEBSITE_NOTES for a website change request", async () => {
     mockPrisma.post.findUnique.mockResolvedValue(socialPost({ kind: "WEBSITE", title: "Sito vetrina" }));
 

@@ -542,6 +542,7 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       commentId?: unknown;
       reviewSessionId?: unknown;
       actionCommentIds?: unknown;
+      feedbackCommentIds?: unknown;
     };
     const comment =
       typeof metadata.commentId === "string"
@@ -601,6 +602,25 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       onlyUnlocated: Array.isArray(metadata.actionCommentIds),
     });
 
+    // The portal sends the comments the client saved beforehand: there is no
+    // single comment body then, so the task's excerpt is made of those comments.
+    const savedIds = Array.isArray(metadata.feedbackCommentIds)
+      ? metadata.feedbackCommentIds.filter((id): id is string => typeof id === "string")
+      : [];
+    let activitySummary = comment?.body ?? "";
+    if (!activitySummary && savedIds.length > 0) {
+      try {
+        const saved = await prisma.postComment.findMany({
+          where: { id: { in: savedIds }, postId },
+          orderBy: { createdAt: "asc" },
+          take: 5,
+          select: { body: true },
+        });
+        activitySummary = saved.map((item) => item.body).join(" · ");
+      } catch (error) {
+        logFailure("activitySummary", error);
+      }
+    }
     const isWebsite = post.kind === "WEBSITE";
     await recordActivitySafe({
       workspaceId: post.workspaceId,
@@ -609,7 +629,7 @@ export async function notifyChangesRequested(postId: string): Promise<void> {
       planId: post.planId ?? null,
       type: isWebsite ? "WEBSITE_NOTES" : "CHANGES_REQUESTED",
       title: `${isWebsite ? "Note sul sito" : "Modifiche richieste"}: ${post.title}`,
-      summary: comment?.body ?? session?.summary ?? "",
+      summary: activitySummary || session?.summary || "",
       versionNumber: post.currentVersionNumber,
       dedupeKey: `changes:${post.id}:v${post.currentVersionNumber}`,
     });

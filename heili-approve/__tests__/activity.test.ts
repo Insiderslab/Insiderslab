@@ -4,6 +4,7 @@ const mock = vi.hoisted(() => ({
   clientFindFirst: vi.fn(),
   upsert: vi.fn(),
   updateMany: vi.fn(),
+  deleteMany: vi.fn(),
   findMany: vi.fn(),
   count: vi.fn(),
   activityFindFirst: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@/lib/db/client", () => ({
     agencyActivity: {
       upsert: mock.upsert,
       updateMany: mock.updateMany,
+      deleteMany: mock.deleteMany,
       findMany: mock.findMany,
       count: mock.count,
       findFirst: mock.activityFindFirst,
@@ -132,6 +134,54 @@ describe("recordActivity", () => {
     expect(create.summary.endsWith("…")).toBe(true);
   });
 
+  it("drops the open comment tasks of a post when its change request arrives", async () => {
+    mock.clientFindFirst.mockResolvedValue({ ownerUserId: null });
+    mock.upsert.mockResolvedValue({ id: "act-1", kind: "TASK", status: "OPEN" });
+
+    await recordActivity({
+      workspaceId: "ws-1",
+      clientId: "client-1",
+      postId: "post-1",
+      type: "CHANGES_REQUESTED",
+      title: "Modifiche richieste: Lancio autunno",
+      dedupeKey: "changes:post-1:v1",
+    });
+    expect(mock.deleteMany).toHaveBeenCalledWith({
+      where: { postId: "post-1", type: "CLIENT_COMMENT", status: "OPEN" },
+    });
+
+    mock.deleteMany.mockClear();
+    await recordActivity({
+      workspaceId: "ws-1",
+      clientId: "client-1",
+      postId: "post-1",
+      type: "CLIENT_COMMENT",
+      title: "Commento del cliente: Lancio autunno",
+      dedupeKey: "comment:c1",
+    });
+    expect(mock.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("brings back a notification closed by an undone approval when the approval is given again", async () => {
+    mock.clientFindFirst.mockResolvedValue({ ownerUserId: null });
+    mock.upsert.mockResolvedValue({ id: "act-9", kind: "INFO", status: "DONE" });
+    mock.update.mockResolvedValue({ id: "act-9", kind: "INFO", status: "OPEN" });
+
+    await recordActivity({
+      workspaceId: "ws-1",
+      clientId: "client-1",
+      postId: "post-1",
+      type: "APPROVED",
+      title: "Approvato: Lancio autunno",
+      dedupeKey: "approved:post-1:v1",
+    });
+
+    expect(mock.update).toHaveBeenCalledWith({
+      where: { id: "act-9" },
+      data: { status: "OPEN", doneAt: null, doneByUserId: null, readAt: null, createdAt: expect.any(Date) },
+    });
+  });
+
   it("throws NotFoundError when the client is not in the workspace", async () => {
     mock.clientFindFirst.mockResolvedValue(null);
     await expect(
@@ -180,12 +230,12 @@ describe("listActivities", () => {
     );
   });
 
-  it("lists notifications without a status filter and honors scope all", async () => {
+  it("lists only the open notifications (an undone approval closes its one) and honors scope all", async () => {
     mock.findMany.mockResolvedValue([]);
     await listActivities({ workspaceId: "ws-1", userId: "me", tab: "notifications", scope: "all" });
     const call = mock.findMany.mock.calls[0][0];
     expect(call.where.kind).toBe("INFO");
-    expect(call.where.status).toBeUndefined();
+    expect(call.where.status).toBe("OPEN");
     expect(call.where.OR).toBeUndefined();
   });
 

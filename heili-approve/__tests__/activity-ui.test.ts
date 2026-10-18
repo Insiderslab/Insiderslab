@@ -84,13 +84,14 @@ describe("listCompletedTasks", () => {
 });
 
 describe("countUnreadNotifications", () => {
-  it("counts unread INFO assigned to me plus unassigned", async () => {
+  it("counts unread, still open INFO assigned to me plus unassigned", async () => {
     mock.count.mockResolvedValue(4);
     await expect(countUnreadNotifications("ws-1", "me")).resolves.toBe(4);
     expect(mock.count).toHaveBeenCalledWith({
       where: {
         workspaceId: "ws-1",
         kind: "INFO",
+        status: "OPEN",
         readAt: null,
         OR: [{ assigneeUserId: "me" }, { assigneeUserId: null }],
       },

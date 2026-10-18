@@ -89,7 +89,7 @@ export async function recordActivity(input: RecordActivityInput): Promise<Agency
   });
   if (!client) throw new NotFoundError("Cliente non trovato");
 
-  return prisma.agencyActivity.upsert({
+  const activity = await prisma.agencyActivity.upsert({
     where: { workspaceId_dedupeKey: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey } },
     create: {
       workspaceId: input.workspaceId,
@@ -107,6 +107,24 @@ export async function recordActivity(input: RecordActivityInput): Promise<Agency
     },
     update: {},
   });
+
+  // A change request already carries the comments the client saved before
+  // sending it: their "Commento del cliente" tasks would only repeat it.
+  if (input.postId && (input.type === "CHANGES_REQUESTED" || input.type === "WEBSITE_NOTES")) {
+    await prisma.agencyActivity.deleteMany({
+      where: { postId: input.postId, type: "CLIENT_COMMENT", status: "OPEN" },
+    });
+  }
+
+  // The same fact came true again (an approval undone and then given again):
+  // its notification, closed by the undo, comes back as a new one.
+  if (activity.kind === "INFO" && activity.status === "DONE") {
+    return prisma.agencyActivity.update({
+      where: { id: activity.id },
+      data: { status: "OPEN", doneAt: null, doneByUserId: null, readAt: null, createdAt: new Date() },
+    });
+  }
+  return activity;
 }
 
 /**
@@ -183,7 +201,9 @@ async function queryActivityPage(where: Prisma.AgencyActivityWhereInput, cursor?
 export async function listActivities(input: ListActivitiesInput): Promise<ActivityPage> {
   const where: Prisma.AgencyActivityWhereInput = { workspaceId: input.workspaceId };
   if (input.tab === "notifications") {
+    // OPEN only: an undone approval closes its notification, which is no longer true.
     where.kind = "INFO";
+    where.status = "OPEN";
   } else {
     where.kind = "TASK";
     where.status = "OPEN";
@@ -242,6 +262,7 @@ export async function countUnreadNotifications(workspaceId: string, userId: stri
     where: {
       workspaceId,
       kind: "INFO",
+      status: "OPEN",
       readAt: null,
       OR: [{ assigneeUserId: userId }, { assigneeUserId: null }],
     },
