@@ -71,7 +71,7 @@ Container non-root, filesystem di sola lettura, upload read-only, tmpfs, capabil
 
 `components/heili-assistant-icon.tsx` riprende il nucleo con tre satelliti del materiale Heili interno: `sbp-consenso-team/docs/IDENTITA_HEILI.md` (25 luglio 2026), `DESIGN-SYSTEM-HEILI.md` e `design-tokens.css` (21 agosto 2026), con geometrie dal componente Business Brain. Navy #001F2F, menta #00E1CD, nucleo chiaro. Il materiale indica Heili come prodotto del gruppo 3Runes; non è stato trovato un manuale 3Runes autonomo più recente. L'icona è un adattamento per l'assistente, non un nuovo marchio ufficiale.
 
-Fonti tecniche: [Whisper e timestamp](https://developers.openai.com/api/docs/guides/speech-to-text), [Qwen3-VL-Flash](https://docs.modelstudio.console.alibabacloud.com/en/model-studio/qwen3-vl-flash).
+Fonti tecniche: [Whisper e timestamp](https://developers.openai.com/api/docs/guides/speech-to-text), Qwen3-VL-Plus (dal 18/10/2026: qwen3-vl-flash è stato ritirato da Qwen; se il modello configurato risponde 404 il worker prova da solo qwen3-vl-plus e poi qwen3.5-omni-flash, e le analisi fallite per errori del fornitore vengono ritentate, al massimo 3 volte per file).
 
 Documentazione vocale: [GPT-Live](https://developers.openai.com/api/docs/guides/live), [WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc), [controlli server e trascrizione](https://developers.openai.com/api/docs/guides/voice-server-controls).
 
