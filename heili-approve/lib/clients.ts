@@ -142,6 +142,8 @@ export const clientInputSchema = z.object({
     .default([])
     .transform((list) => [...new Set(list)]),
   autoSchedule: z.boolean().default(true),
+  /** Social media manager responsible for this client (a workspace member). */
+  ownerUserId: optionalText(64),
   /** Absent = the instance's first kind (social posts on social / all). */
   services: servicesSchema.optional(),
 });
@@ -159,6 +161,8 @@ export const clientUpdateSchema = z.object({
     .transform((list) => [...new Set(list)])
     .optional(),
   autoSchedule: z.boolean().optional(),
+  /** Social media manager responsible for this client (a workspace member). */
+  ownerUserId: optionalText(64).optional(),
   /** Kinds this instance enables; stored services of other kinds are kept. */
   services: servicesSchema.optional(),
 });
@@ -167,6 +171,7 @@ export type ClientUpdateInput = z.input<typeof clientUpdateSchema>;
 
 export type ClientListItem = Client & {
   _count: { posts: number; reviewers: number };
+  owner: { id: string; name: string | null } | null;
 };
 
 export async function listClients(
@@ -180,6 +185,7 @@ export async function listClients(
     },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { name: "asc" }],
     include: {
+      owner: { select: { id: true, name: true } },
       _count: {
         select: {
           posts: { where: { status: { not: "CANCELLED" }, kind: { in: enabledKinds() } } },
@@ -205,6 +211,7 @@ export async function getClient(clientId: string, workspaceId: string): Promise<
 export async function createClient(workspaceId: string, input: ClientInput): Promise<Client> {
   const data = parseOrThrow(clientInputSchema, input);
   const services = validateServices(data.services ?? [defaultKind()]);
+  await assertMemberInWorkspace(data.ownerUserId, workspaceId);
   // Metricool brand and networks only for clients with social posts.
   const social = isMetricoolEnabled() && services.includes("SOCIAL_POST");
   return prisma.client.create({
@@ -216,6 +223,7 @@ export async function createClient(workspaceId: string, input: ClientInput): Pro
       logoUrl: data.logoUrl ?? null,
       networks: social ? data.networks : [],
       autoSchedule: data.autoSchedule,
+      ownerUserId: data.ownerUserId,
       services,
     },
   });
@@ -232,6 +240,9 @@ export async function updateClient(
     : { ...parsed, metricoolBlogId: undefined, networks: undefined, autoSchedule: undefined };
   const current = await assertClientInWorkspace(clientId, workspaceId);
   const services = data.services !== undefined ? mergeServices(current.services, data.services) : undefined;
+  if (data.ownerUserId !== undefined) {
+    await assertMemberInWorkspace(data.ownerUserId, workspaceId);
+  }
   return prisma.client.update({
     where: { id: clientId },
     data: {
@@ -242,6 +253,7 @@ export async function updateClient(
       ...(data.logoUrl !== undefined ? { logoUrl: data.logoUrl } : {}),
       ...(data.networks !== undefined ? { networks: data.networks } : {}),
       ...(data.autoSchedule !== undefined ? { autoSchedule: data.autoSchedule } : {}),
+      ...(data.ownerUserId !== undefined ? { ownerUserId: data.ownerUserId } : {}),
     },
   });
 }
@@ -267,4 +279,14 @@ export async function assertClientInWorkspace(
     throw new NotFoundError("Cliente non trovato");
   }
   return client;
+}
+
+/** A social media manager must be a member of the workspace (null = none). */
+async function assertMemberInWorkspace(userId: string | null, workspaceId: string): Promise<void> {
+  if (!userId) return;
+  const member = await prisma.workspaceMember.findFirst({
+    where: { workspaceId, userId },
+    select: { id: true },
+  });
+  if (!member) throw new ValidationError("Il responsabile scelto non fa parte del team");
 }

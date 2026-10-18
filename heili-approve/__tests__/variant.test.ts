@@ -118,6 +118,7 @@ describe("navigation", () => {
   it("keeps the social menu as before", () => {
     expect(navItems("social").map(({ label, href }) => [label, href])).toEqual([
       ["Dashboard", "/dashboard"],
+      ["Attività", "/attivita"],
       ["Post", "/posts"],
       ["Calendario", "/calendar"],
       ["Piani del mese", "/plans"],
@@ -128,8 +129,8 @@ describe("navigation", () => {
   });
 
   it("names the single kind of a blog or ads instance, without ?kind=", () => {
-    expect(navItems("blog")[1]).toEqual({ label: "Articoli", href: "/posts", kind: "BLOG_ARTICLE" });
-    expect(navItems("ads")[1]).toEqual({ label: "Creatività ads", href: "/posts", kind: "AD_CREATIVE" });
+    expect(navItems("blog")[2]).toEqual({ label: "Articoli", href: "/posts", kind: "BLOG_ARTICLE" });
+    expect(navItems("ads")[2]).toEqual({ label: "Creatività ads", href: "/posts", kind: "AD_CREATIVE" });
     // Monthly plans are social only.
     expect(navItems("blog").some((item) => item.href === "/plans")).toBe(false);
     expect(navItems("ads").some((item) => item.href === "/plans")).toBe(false);

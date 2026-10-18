@@ -43,8 +43,17 @@ export interface ClientFormValues {
   metricoolBlogId: string;
   networks: string[];
   autoSchedule: boolean;
+  /** Social media manager responsible for this client (null = none). */
+  ownerUserId: string | null;
   /** The client's services among `kinds` (the enabled ones). */
   services: ContentKind[];
+}
+
+/** A workspace member as offered in the "Social media manager" select. */
+export interface ClientFormMember {
+  userId: string;
+  name: string | null;
+  email: string | null;
 }
 
 /** What each service means, next to its checkbox. */
@@ -67,6 +76,8 @@ interface ClientFormProps {
   metricool?: boolean;
   /** Kinds this instance handles (lib/variant enabledKinds): the services offered. */
   kinds?: ContentKind[];
+  /** Workspace members to choose the "Social media manager" from. */
+  members?: ClientFormMember[];
 }
 
 const OTHER_ZONE = "__other__";
@@ -83,6 +94,7 @@ export default function ClientForm({
   readOnly = false,
   metricool = true,
   kinds = ["SOCIAL_POST"],
+  members = [],
 }: ClientFormProps) {
   const [values, setValues] = useState<ClientFormValues>(initial);
   const knownZone = timeZoneOptions.some((option) => option.value === initial.timezone);
@@ -217,6 +229,7 @@ export default function ClientForm({
       metricoolBlogId: values.metricoolBlogId || null,
       networks: values.networks.filter(isNetwork),
       autoSchedule: values.autoSchedule,
+      ownerUserId: values.ownerUserId || null,
       // Hidden choice: a new client gets the instance's only kind, an edit
       // leaves the services as they are.
       services: showServices ? values.services : mode === "create" ? kinds.slice(0, 1) : undefined,
@@ -285,6 +298,29 @@ export default function ClientForm({
                 : "Compare nel portale del cliente e nelle anteprime."}
             </p>
           </div>
+        </div>
+
+        {/* Social media manager */}
+        <div className="space-y-1.5">
+          <label htmlFor="client-owner" className="block text-sm font-medium">
+            Social media manager
+          </label>
+          <select
+            id="client-owner"
+            value={values.ownerUserId ?? ""}
+            onChange={(e) => update("ownerUserId", e.target.value || null)}
+            className={inputClass}
+          >
+            <option value="">Nessuno</option>
+            {members.map((member) => (
+              <option key={member.userId} value={member.userId}>
+                {member.name ?? member.email ?? "Persona senza nome"}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted">
+            Riceve i compiti di questo cliente in Attività. Nessuno = li vedono tutti.
+          </p>
         </div>
 
         {/* Services */}

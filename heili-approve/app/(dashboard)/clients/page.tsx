@@ -202,6 +202,9 @@ export default async function ClientsPage({
                     </p>
                   )}
                   <p className="mt-1 text-xs text-muted">
+                    Social media manager: {client.owner?.name ?? "nessuno"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
                     {social && (
                       <>
                         {client.metricoolBlogId ? (

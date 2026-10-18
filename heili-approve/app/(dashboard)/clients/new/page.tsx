@@ -14,6 +14,7 @@ import ClientForm from "@/components/clients/client-form";
 import { buildTimeZoneOptions } from "@/components/clients/helpers";
 import { contentWords } from "@/components/posts/helpers";
 import { defaultKind, enabledKinds, isMetricoolEnabled, productName } from "@/lib/variant";
+import { listWorkspaceMembers } from "@/lib/workspace";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export async function generateMetadata() {
@@ -26,7 +27,10 @@ export default async function NewClientPage() {
 
   const metricool = isMetricoolEnabled();
   // No Metricool call at all on blog / ads instances.
-  const brands = metricool ? await loadBrandOptions(context.workspaceId) : ({ status: "not_configured" } as const);
+  const [brands, members] = await Promise.all([
+    metricool ? loadBrandOptions(context.workspaceId) : Promise.resolve({ status: "not_configured" as const }),
+    listWorkspaceMembers(context.workspaceId),
+  ]);
   const words = contentWords(enabledKinds());
 
   return (
@@ -49,12 +53,14 @@ export default async function NewClientPage() {
             metricoolBlogId: "",
             networks: [],
             autoSchedule: true,
+            ownerUserId: null,
             services: [defaultKind()],
           }}
           timeZoneOptions={buildTimeZoneOptions()}
           brands={brands}
           metricool={metricool}
           kinds={enabledKinds()}
+          members={members}
         />
       </section>
     </div>

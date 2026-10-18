@@ -37,6 +37,7 @@ import { NotFoundError } from "@/lib/errors";
 import { summarizeVersionForList } from "@/lib/posts";
 import { getReviewUrl } from "@/lib/reviewers";
 import { KIND_UI, enabledKinds, isMetricoolEnabled, kindParam, productName, servicesSentence, sortKinds } from "@/lib/variant";
+import { listWorkspaceMembers } from "@/lib/workspace";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
 import { getCurrentClientId } from "@/lib/current-client";
 import SyncCurrentClient from "@/components/sync-current-client";
@@ -97,9 +98,10 @@ export default async function ClientDetailPage({
     status: { not: "CANCELLED" as const },
   };
 
-  const [brands, grouped, recentPosts] = await Promise.all([
+  const [brands, members, grouped, recentPosts] = await Promise.all([
     // No Metricool call at all on blog / ads instances.
     metricool ? loadBrandOptions(context.workspaceId, client.id) : Promise.resolve({ status: "not_configured" as const }),
+    listWorkspaceMembers(context.workspaceId),
     prisma.post.groupBy({
       by: ["kind", "status"],
       where: postWhere,
@@ -366,6 +368,7 @@ export default async function ClientDetailPage({
             metricoolBlogId: client.metricoolBlogId ?? "",
             networks: client.networks.filter(isNetwork),
             autoSchedule: client.autoSchedule,
+            ownerUserId: client.ownerUserId,
             services,
           }}
           timeZoneOptions={buildTimeZoneOptions()}
@@ -373,6 +376,7 @@ export default async function ClientDetailPage({
           readOnly={archived}
           metricool={metricool}
           kinds={kinds}
+          members={members}
         />
       </section>
 
