@@ -19,6 +19,7 @@ PARTE A — Stato (solo lettura, riportami tutto)
 2. developers.facebook.com/apps/609974691965875 → l'app è in modalità "Live" (Pubblicata) o "Sviluppo"?
 3. "Revisione dell'app" / "App Review" → "Autorizzazioni e funzioni" (oppure "Casi d'uso" → "Personalizza"): livello di accesso attuale (Standard o Avanzato) di whatsapp_business_management, whatsapp_business_messaging e business_management.
 4. Impostazioni → Di base: sono compilati "URL dell'informativa sulla privacy", "URL dei termini di servizio", "Istruzioni per la cancellazione dei dati" (URL), "Icona dell'app", "Categoria"? Riportami i valori attuali.
+5. "Facebook Login for Business" → "Configurazioni": per la configurazione usata dal CRM (il suo ID è in crm.heili.cloud/admin → Piattaforma → Meta), riportami il tipo di accesso, la variante/il tipo di login (per esempio "WhatsApp Embedded Signup"), i prodotti e le autorizzazioni selezionate, e se c'è un'opzione per i numeri dell'app WhatsApp Business ("coexistence" / "WhatsApp Business app onboarding"). Solo lettura: non modificare niente.
 
 PARTE B — Preparare la richiesta (ok prima di ogni salvataggio)
 1. Impostazioni → Di base, solo se mancano:
