@@ -22,7 +22,7 @@
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
 import { prisma } from "@/lib/db/client";
 import { AutomationError, authenticateAutomation } from "@/lib/automation/auth";
-import { isEmailAllowedToSignIn } from "@/lib/env";
+import { canEmailSignIn } from "@/lib/sign-in-access";
 import { MCP_SCOPES, getMcpConfig, type McpConfig, type McpOAuthConfig, type McpScope } from "./config";
 import type { McpPrincipal } from "./access";
 
@@ -154,7 +154,8 @@ async function authenticateJwt(token: string, oauth: McpOAuthConfig, keys: JWTVe
   if (!email) {
     throw new McpAuthError(403, "no_access", "Il token non contiene un'email verificata", "email_missing_or_unverified");
   }
-  if (!isEmailAllowedToSignIn(email)) {
+  // Members only: a pending invitation is accepted in the app, never through MCP.
+  if (!(await canEmailSignIn(email, { allowPendingInvitation: false }))) {
     throw new McpAuthError(403, "no_access", "Questo account non ha accesso ad Approve", "email_not_allowed");
   }
   // Existing users only. No ensureWorkspaceForUser, no pending invitation accepted.

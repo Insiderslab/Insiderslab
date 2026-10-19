@@ -5,7 +5,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db/client";
 import { ensureWorkspaceForUser } from "@/lib/workspace";
 import { getActiveWorkspaceForUser } from "@/lib/active-workspace";
-import { isEmailAllowedToSignIn } from "@/lib/env";
+import { canEmailSignIn } from "@/lib/sign-in-access";
 
 type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
 
@@ -35,7 +35,7 @@ export const authConfig = {
     // Runs before the magic link is sent, so a blocked address never receives
     // one, and again when the link is verified.
     async signIn({ user }) {
-      return isEmailAllowedToSignIn(user?.email);
+      return canEmailSignIn(user?.email);
     },
     async session({ session, user }) {
       if (session.user) {
