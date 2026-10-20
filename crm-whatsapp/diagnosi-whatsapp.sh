@@ -85,7 +85,7 @@ if [ -z "$T" ]; then
 else
   R=$(printf 'url = "%s/api/webhooks/wa/%s?hub.mode=subscribe&hub.verify_token=%s&hub.challenge=PROVA-OK"\n' "$HOST" "$T" "$T" | curl -s -K -)
   [ "$R" = "PROVA-OK" ] && ok "verifica GET: risponde alla challenge" || ko "verifica GET: risposta inattesa '$(printf '%s' "$R" | head -c 80)'"
-  BODY=$(mktemp); printf '%s' '{"object":"whatsapp_business_account","entry":[{"id":"0","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"123456123"},"messages":[]}}]}]}' > "$BODY"
+  BODY=$(mktemp); printf '%s' '{"object":"whatsapp_business_account","entry":[{"id":"0","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"phone_number_id":"123456123"},"messages":[{"from":"10000000000","id":"wamid.diagnosi.prova","timestamp":"1700000000","type":"text","text":{"body":"prova diagnosi"}}]}}]}]}' > "$BODY"
   SIG=""; [ -n "$S" ] && SIG=$(openssl dgst -sha256 -hmac "$S" < "$BODY" | sed 's/^.* //')
   C1=$({ printf 'url = "%s/api/webhooks/wa/%s"\n' "$HOST" "$T"; [ -n "$SIG" ] && printf 'header = "x-hub-signature-256: sha256=%s"\n' "$SIG"; } \
        | curl -s -o /dev/null -w '%{http_code}' -K - -X POST -H 'content-type: application/json' --data-binary @"$BODY")
@@ -94,7 +94,7 @@ else
   [ "$C1" = "200" ] && ok "POST firmato col segreto del CRM: 200" || ko "POST firmato: $C1 (atteso 200)"
   if [ -n "$S" ]; then [ "$C2" = "401" ] && ok "POST senza firma: 401 (la firma è attiva)" || ko "POST senza firma: $C2 (atteso 401)"; fi
   sleep 2
-  docker compose logs app --since 3m 2>&1 | grep -q "desconocido (123456123)" && ok "il CRM ha elaborato l'evento di prova (log 'desconocido (123456123)')" || ko "nel log non compare l'evento di prova"
+  docker compose logs app --since 3m 2>&1 | grep -qE "desconocid[oa] \(123456123\)" && ok "il CRM ha elaborato l'evento di prova (numero inesistente 123456123: scartato, come deve)" || ko "nel log non compare l'evento di prova"
 fi
 
 echo; echo "== 5. Lato Meta, con il token salvato nel CRM"
