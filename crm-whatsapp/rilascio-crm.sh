@@ -12,7 +12,7 @@
 set -euo pipefail
 
 APP_DIR=${RILASCIO_APP_DIR:-/opt/vocero}
-TARGET=${RILASCIO_TARGET:-}                          # main dopo la PR 015 (lo scrive Claude dopo il merge)
+TARGET=${RILASCIO_TARGET:-8619e67d69426ee55d21ea47b963c4b9abb83391}   # main dopo la PR #20 (015)
 PREV=db6f4268ce0b7b1a5553f9aa684b93a29fcccc41        # rilascio del 15/10 (per tornare indietro)
 MIG_EXPECTED=20                                      # 0000–0019
 BASE=https://crm.heili.cloud
