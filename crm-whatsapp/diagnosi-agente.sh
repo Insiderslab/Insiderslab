@@ -35,7 +35,7 @@ const h = { Authorization: "Bearer " + (process.env.OPENROUTER_API_TOKEN || "").
 '
 
 echo "== 3. Log dell'agente (ultime 3 ore) =="
-docker logs "$APP" --since 3h 2>&1 | grep -E "\[agente\]|\[lab\]|\[ai\]|openrouter|OpenRouter" | tail -15 | cut -c1-300 || true
+docker logs "$APP" --since 3h 2>&1 | grep -E "\[agente\]|\[agent\]|\[lab\]|\[ai\]|\[webhook\]|\[pipeline\]|openrouter|OpenRouter|allowlist|riservat" | tail -20 | cut -c1-300 || true
 echo "  (fine log)"
 
 echo "== 4. Stato conversazioni =="
@@ -43,6 +43,7 @@ ORG_SQL_NAME=${ORG_NAME//\'/\'\'}
 ORG=$(psqlq "select id from organization where name = '$ORG_SQL_NAME' limit 1;")
 [ -n "$ORG" ] || { echo "  organizzazione «$ORG_NAME» non trovata"; exit 0; }
 echo "  agente: $(psqlq "select name || ' · ' || case when enabled then 'ACCESO' else 'SPENTO' end from agent_profile where organization_id = '$ORG';")"
+echo "  accesso riservato: $(psqlq "select case when restrict_to_allowlist then 'ACCESO (numeri in lista: ' || coalesce(array_length(allowed_identities, 1), 0) || ')' else 'spento' end from agent_profile where organization_id = '$ORG';" 2>/dev/null || echo '?')"
 echo "  test | IA conv | handoff | motivo | ultimo entrante (UTC) | ultimo messaggio"
 psqlq "select c.is_test, c.ai_enabled, coalesce(to_char(c.handoff_at,'MM-DD HH24:MI'),'-'), coalesce(c.handoff_reason::text,'-'),
               coalesce(to_char(c.last_inbound_at,'MM-DD HH24:MI'),'-'),
