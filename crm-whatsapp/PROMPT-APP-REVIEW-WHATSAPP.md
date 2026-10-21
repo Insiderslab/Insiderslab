@@ -18,14 +18,14 @@ PARTE A — Stato (solo lettura, riportami tutto)
 1. business.facebook.com → Impostazioni → Centro per la sicurezza (business 404240226745821): la verifica dell'azienda è "Verificata"? Se non lo è, dimmi cosa chiede e fermati su questo punto.
 2. developers.facebook.com/apps/609974691965875 → l'app è in modalità "Live" (Pubblicata) o "Sviluppo"?
 3. "Revisione dell'app" / "App Review" → "Autorizzazioni e funzioni" (oppure "Casi d'uso" → "Personalizza"): livello di accesso attuale (Standard o Avanzato) di whatsapp_business_management, whatsapp_business_messaging e business_management.
-4. Impostazioni → Di base: sono compilati "URL dell'informativa sulla privacy", "URL dei termini di servizio", "Istruzioni per la cancellazione dei dati" (URL), "Icona dell'app", "Categoria"? Riportami i valori attuali.
+4. Impostazioni → Di base: sono compilati "URL dell'informativa sulla privacy", "URL dei termini di servizio", "Cancellazione dei dati" (deve essere l'URL di CALLBACK https://crm.heili.cloud/api/meta/data-deletion, già salvato il 20/10), "Icona dell'app", "Categoria"? Riportami i valori attuali.
 5. "Facebook Login for Business" → "Configurazioni": per la configurazione usata dal CRM (il suo ID è in crm.heili.cloud/admin → Piattaforma → Meta), riportami il tipo di accesso, la variante/il tipo di login (per esempio "WhatsApp Embedded Signup"), i prodotti e le autorizzazioni selezionate, e se c'è un'opzione per i numeri dell'app WhatsApp Business ("coexistence" / "WhatsApp Business app onboarding"). Solo lettura: non modificare niente.
 
 PARTE B — Preparare la richiesta (ok prima di ogni salvataggio)
 1. Impostazioni → Di base, solo se mancano:
    - Informativa sulla privacy: https://crm.heili.cloud/privacy
    - Termini di servizio: https://crm.heili.cloud/termini
-   - Istruzioni per la cancellazione dei dati: https://crm.heili.cloud/cancellazione-dati
+   - Cancellazione dei dati: deve restare l'URL di callback https://crm.heili.cloud/api/meta/data-deletion (non cambiarlo)
    - Categoria: "Business and pages" (o la più vicina, per esempio "Affari e pagine")
 2. Per whatsapp_business_management e per whatsapp_business_messaging: "Richiedi accesso avanzato" / "Request advanced access". Compila i campi così (in inglese, incolla esattamente):
 
