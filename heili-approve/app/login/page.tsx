@@ -1,13 +1,9 @@
 import { redirect } from "next/navigation";
-import { EMAIL_PROVIDER_ID, auth, signIn } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { HeiliAppIcon } from "@/components/brand";
+import LoginForms from "@/components/login/login-forms";
 import { productName } from "@/lib/variant";
-
-/** Same-origin path only ("/posts/x"), never "//evil.com" or an absolute URL. */
-function safeCallbackUrl(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return "/dashboard";
-  return value;
-}
+import { safeCallbackUrl } from "./callback-url";
 
 export function generateMetadata() {
   return {
@@ -32,14 +28,6 @@ export default async function LoginPage({
   const session = await auth();
   if (session?.user?.id) redirect(callbackUrl);
 
-  async function sendMagicLink(formData: FormData) {
-    "use server";
-    await signIn(EMAIL_PROVIDER_ID, {
-      email: String(formData.get("email") ?? ""),
-      redirectTo: callbackUrl,
-    });
-  }
-
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
@@ -61,26 +49,7 @@ export default async function LoginPage({
               </p>
             </div>
           ) : (
-            <form action={sendMagicLink} className="space-y-5">
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="block text-sm font-semibold text-foreground">
-                  Email di lavoro
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="nome@agenzia.it"
-                  className="field !min-h-11 !text-base"
-                />
-              </div>
-
-              <button type="submit" className="btn btn-primary w-full !min-h-11">
-                Inviami il link di accesso
-              </button>
-            </form>
+            <LoginForms callbackUrl={callbackUrl} />
           )}
         </div>
         <p className="mt-6 text-center text-xs text-muted">Heili by 3Runes</p>

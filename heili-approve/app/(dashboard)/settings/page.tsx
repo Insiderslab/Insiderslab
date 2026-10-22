@@ -15,6 +15,7 @@ import MetricoolSettings from "@/components/settings/metricool-settings";
 import TeamSettings from "@/components/settings/team-settings";
 import AutomationSettings from "@/components/settings/automation-settings";
 import McpSettings from "@/components/settings/mcp-settings";
+import PasswordSettings from "@/components/settings/password-settings";
 import { getMcpConfig } from "@/lib/mcp/config";
 import { prisma } from "@/lib/db/client";
 import { decryptSecret } from "@/lib/crypto";
@@ -46,6 +47,10 @@ export default async function SettingsPage() {
   const canManage = canManageWorkspace(context.role);
   const metricool = isMetricoolEnabled();
   const mcp = getMcpConfig();
+  const account = await prisma.user.findUnique({
+    where: { id: context.userId },
+    select: { email: true, passwordHash: true },
+  });
   const tokens = await prisma.automationToken.findMany({
     where: { workspaceId: context.workspaceId, userId: context.userId, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" }, take: 10,
@@ -54,6 +59,17 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
+      {account?.email && (
+        <section id="password" className="panel scroll-mt-4 rounded p-4 sm:p-6">
+          <h2 className="mb-1 text-base font-semibold">La tua password</h2>
+          <p className="mb-4 text-sm text-muted">
+            {account.passwordHash
+              ? "Accedi con email e password. Se la cambi, gli altri dispositivi dovranno accedere di nuovo."
+              : "Imposta una password per accedere con email e password, senza aspettare il link via email."}
+          </p>
+          <PasswordSettings email={account.email} hasPassword={Boolean(account.passwordHash)} />
+        </section>
+      )}
       <AutomationSettings tokens={tokens.map(token => ({ ...token, expiresAt: token.expiresAt.toISOString() }))} />
       <McpSettings url={mcp.resource} enabled={mcp.enabled} oauthConfigured={mcp.oauth !== null} canManage={canManage} />
       {metricool && (

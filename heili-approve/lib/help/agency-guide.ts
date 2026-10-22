@@ -139,6 +139,12 @@ export function agencyGuideQuestions(kinds: readonly ContentKind[]): GuideQuesti
         "Solo i contenuti che gli hai inviato, del suo cliente: mai le bozze né gli altri clienti. Vede l'anteprima come apparirà, cosa è cambiato tra una versione e l'altra e Heili, che gli spiega i passi. Per controllare, nel post usa «Apri come cliente».",
     },
     {
+      id: "accesso",
+      question: "Un collega non riesce ad accedere",
+      answer:
+        "Invitalo da «Impostazioni», alla voce Team, e mandagli il link dell'invito: aprendolo sceglie la sua password ed entra subito, senza aspettare email. Poi accede con email e password. Chi ha già un account può impostare la password in «Impostazioni»; il link di accesso via email resta come alternativa.",
+    },
+    {
       id: "sollecito",
       question: "Il cliente non risponde",
       answer:

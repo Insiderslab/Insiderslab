@@ -36,6 +36,7 @@ Claude, ChatGPT o Codex leggono post e commenti e preparano bozze. Non approvano
 - *Il cliente non trova il link.* Apri il post o la scheda cliente (Referenti) e usa **Copia link** o **Invia su WhatsApp**. Se il link è perso o non deve più funzionare, **Nuovo link** ne crea uno nuovo e il vecchio smette di funzionare.
 - *Ho sbagliato un post già approvato.* Se è ancora «Approvato», correggilo: torna in bozza e lo reinvii. Se è già «Programmato», correggilo direttamente in Metricool.
 - *Cosa vede il cliente.* Solo i contenuti che gli hai inviato, mai le bozze né gli altri clienti. Per controllare, nel post usa **Apri come cliente**.
+- *Un collega non riesce ad accedere.* Invitalo da **Impostazioni → Team** e mandagli il link dell'invito: lo apre, sceglie la sua password ed entra. Poi accede con email e password. Chi ha già un account imposta la password in **Impostazioni**; il link via email resta come alternativa.
 - *Il cliente non risponde.* All'invio scegli **Risposta entro**: dopo quella data chi ha l'email riceve un sollecito.
 
 ---

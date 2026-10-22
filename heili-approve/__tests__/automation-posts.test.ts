@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = vi.hoisted(() => ({
   client: { findFirst: vi.fn() },
@@ -60,8 +60,14 @@ function body(overrides: Record<string, unknown> = {}) {
   };
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // The fixtures publish on 20/10/2026: keep "now" before that date.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-10T08:00:00Z") });
   vi.stubEnv("PUBLIC_BASE_URL", "https://approve.example.com");
   vi.stubEnv("APP_VARIANT", "social");
   mockPrisma.client.findFirst.mockResolvedValue(client);
