@@ -8,10 +8,17 @@
  *   with a password, but only when no account exists for that email yet. An
  *   existing account is never taken over through an invitation link: its owner
  *   signs in (link via email) and sets a password in Impostazioni.
+ * - Reset: «Password dimenticata?» emails a one-hour link (VerificationToken,
+ *   identifier "password-reset:<email>", token stored hashed). Opening it sets a
+ *   new password (or a first one), signs out every device and signs in. The
+ *   request always answers the same, so it never reveals which emails exist.
  * - Rate limits are in memory per minute (lib/mcp/rate-limit.ts: one web process).
  */
 
+import { generateToken, hashToken } from "@/lib/crypto";
 import { prisma } from "@/lib/db/client";
+import { renderEmail, sendEmail } from "@/lib/email";
+import { getBaseUrl } from "@/lib/env";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { burnPasswordCheck, hashPassword, passwordProblem, verifyPassword } from "@/lib/password";
 import { canEmailSignIn } from "@/lib/sign-in-access";
@@ -29,6 +36,11 @@ const PER_EMAIL_PER_MINUTE = 5;
 const PER_CLIENT_PER_MINUTE = 20;
 const PER_INVITATION_PER_MINUTE = 10;
 const PER_USER_PER_MINUTE = 5;
+const RESET_REQUESTS_PER_EMAIL_PER_MINUTE = 2;
+const RESET_REQUESTS_PER_CLIENT_PER_MINUTE = 10;
+const RESET_TTL_MS = 60 * 60 * 1000;
+export const RESET_PREFIX = "password-reset:";
+export const RESET_LINK_INVALID = "Questo link non è più valido: chiedine uno nuovo dalla pagina di accesso.";
 
 function findUserByEmail(email: string) {
   return prisma.user.findFirst({
@@ -121,4 +133,86 @@ export async function changePassword(
     data: { passwordHash: await hashPassword(newPassword), passwordUpdatedAt: new Date() },
   });
   return { ok: true };
+}
+
+/** Sends the reset link when the email has an account that may sign in. Never tells which. */
+export async function requestPasswordReset(rawEmail: string, clientKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const email = normalizeInvitationEmail(rawEmail);
+  if (!email || !email.includes("@")) return { ok: false, error: "Scrivi la tua email." };
+  if (
+    !checkRateLimit(`reset:email:${email}`, RESET_REQUESTS_PER_EMAIL_PER_MINUTE).allowed ||
+    !checkRateLimit(`reset:client:${clientKey}`, RESET_REQUESTS_PER_CLIENT_PER_MINUTE).allowed
+  ) {
+    return { ok: false, error: TOO_MANY_ATTEMPTS };
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true, passwordHash: true },
+  });
+  if (!user || !(await canEmailSignIn(email))) return { ok: true };
+
+  const identifier = `${RESET_PREFIX}${email}`;
+  const token = generateToken(32);
+  // One live link per email: a new request replaces the previous one.
+  await prisma.verificationToken.deleteMany({ where: { identifier } });
+  await prisma.verificationToken.create({
+    data: { identifier, token: hashToken(token), expires: new Date(Date.now() + RESET_TTL_MS) },
+  });
+
+  const url = `${getBaseUrl().replace(/\/$/, "")}/nuova-password/${token}`;
+  const action = user.passwordHash ? "scegliere una nuova password" : "scegliere la tua password";
+  const { html, text } = renderEmail({
+    heading: user.passwordHash ? "Nuova password" : "La tua password",
+    paragraphs: [
+      `Hai chiesto di ${action} per Approve by Heili. Tocca il pulsante: il link vale un'ora e si usa una volta sola.`,
+      "Se non sei stato tu, ignora questa email: la password attuale resta valida.",
+    ],
+    cta: { label: user.passwordHash ? "Scegli una nuova password" : "Scegli la password", url },
+  });
+  const sent = await sendEmail({ to: email, subject: "La tua password di Approve by Heili", html, text });
+  if (!sent.ok) console.error("[password-reset] email not sent:", sent.error ?? "unknown error");
+  return { ok: true };
+}
+
+/** Whether a reset link can still be used (for the page, before the form). */
+export async function isResetTokenUsable(token: string): Promise<boolean> {
+  if (!token) return false;
+  const row = await prisma.verificationToken.findFirst({
+    where: { token: hashToken(token), identifier: { startsWith: RESET_PREFIX } },
+    select: { expires: true },
+  });
+  return Boolean(row && row.expires > new Date());
+}
+
+export async function resetPasswordWithToken(token: string, password: string, confirmation: string): Promise<PasswordResult> {
+  if (!checkRateLimit(`reset:token:${hashToken(token)}`, PER_INVITATION_PER_MINUTE).allowed) {
+    return { ok: false, error: TOO_MANY_ATTEMPTS };
+  }
+  const problem = passwordProblem(password);
+  if (problem) return { ok: false, error: problem };
+  if (password !== confirmation) return { ok: false, error: "Le due password non coincidono." };
+
+  const row = await prisma.verificationToken.findFirst({
+    where: { token: hashToken(token), identifier: { startsWith: RESET_PREFIX } },
+  });
+  if (!row) return { ok: false, error: RESET_LINK_INVALID };
+  // Single use, whatever happens next.
+  await prisma.verificationToken.deleteMany({ where: { identifier: row.identifier } });
+  if (row.expires <= new Date()) return { ok: false, error: RESET_LINK_INVALID };
+
+  const email = row.identifier.slice(RESET_PREFIX.length);
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (!user || !(await canEmailSignIn(email))) return { ok: false, error: RESET_LINK_INVALID };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await hashPassword(password), passwordUpdatedAt: new Date() },
+  });
+  // A reset may follow a stolen password: every device signs in again.
+  await prisma.session.deleteMany({ where: { userId: user.id } });
+  return { ok: true, userId: user.id };
 }

@@ -2,7 +2,7 @@
 // invitation link (no email needed), signs out, signs back in with email and
 // password, and a wrong password gets one generic message. Phone width.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { MOBILE, connectDb, expect, expectNoHorizontalScroll, seed, shot, test, uniq } from "./helpers.mjs";
 
 test.describe("accesso con email e password", () => {
@@ -62,13 +62,13 @@ test.describe("accesso con email e password", () => {
 
     await page.goto("/login");
     await page.getByLabel("Email di lavoro").fill(email);
-    await page.getByLabel("Password").fill("password sbagliata");
+    await page.getByLabel("Password", { exact: true }).fill("password sbagliata");
     await page.getByRole("button", { name: "Accedi", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Email o password non corretti." })).toBeVisible();
     await expectNoHorizontalScroll(page);
     await shot(page, "login-password-mobile.png");
 
-    await page.getByLabel("Password").fill(password);
+    await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Accedi", exact: true }).click();
     await page.waitForURL(/\/dashboard/);
 
@@ -79,8 +79,51 @@ test.describe("accesso con email e password", () => {
     // The magic link is still there as the alternative.
     await context.clearCookies();
     await page.goto("/login");
-    await page.getByRole("button", { name: "Ricevi un link di accesso via email" }).click();
+    await page.getByRole("button", { name: "Accedi senza password, con un link via email" }).click();
     await expect(page.getByRole("button", { name: "Inviami il link di accesso" })).toBeVisible();
+
+    // «Password dimenticata?»: the request answers without revealing anything.
+    await page.goto("/login");
+    await page.getByLabel("Email di lavoro").fill(email);
+    await page.getByRole("button", { name: "Password dimenticata?" }).click();
+    await expect(page.getByLabel("Email di lavoro")).toHaveValue(email);
+    await expectNoHorizontalScroll(page);
+    await shot(page, "login-password-dimenticata-mobile.png");
+    await page.getByRole("button", { name: "Mandami il link" }).click();
+    await expect(page.getByRole("heading", { name: "Controlla la tua email" })).toBeVisible();
+
+    // The emailed link carries a random token stored hashed: replace it with a known one.
+    const resetToken = randomBytes(32).toString("base64url");
+    const identifier = `password-reset:${email}`;
+    const pending = await db.query(`select count(*)::int as n from "VerificationToken" where identifier = $1`, [identifier]);
+    expect(pending.rows[0].n).toBe(1);
+    await db.query(`delete from "VerificationToken" where identifier = $1`, [identifier]);
+    await db.query(`insert into "VerificationToken" (identifier, token, expires) values ($1, $2, now() + interval '1 hour')`, [
+      identifier,
+      createHash("sha256").update(resetToken).digest("hex"),
+    ]);
+
+    const newPassword = "nuova password lunga 7";
+    await page.goto(`/nuova-password/${resetToken}`);
+    await page.getByLabel("Nuova password").fill(newPassword);
+    await page.getByLabel("Ripeti la password").fill(newPassword);
+    await expectNoHorizontalScroll(page);
+    await page.getByRole("button", { name: "Salva ed entra" }).click();
+    await page.waitForURL(/\/dashboard/);
+
+    // Used once: the same link now offers a new one.
+    await context.clearCookies();
+    await page.goto(`/nuova-password/${resetToken}`);
+    await expect(page.getByRole("link", { name: "Chiedi un nuovo link" })).toBeVisible();
+
+    await page.goto("/login");
+    await page.getByLabel("Email di lavoro").fill(email);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Accedi", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Email o password non corretti." })).toBeVisible();
+    await page.getByLabel("Password", { exact: true }).fill(newPassword);
+    await page.getByRole("button", { name: "Accedi", exact: true }).click();
+    await page.waitForURL(/\/dashboard/);
 
     await context.close();
   });

@@ -18,6 +18,7 @@ export default async function LoginPage({
   searchParams: Promise<{
     checkEmail?: string;
     callbackUrl?: string;
+    reset?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -49,7 +50,7 @@ export default async function LoginPage({
               </p>
             </div>
           ) : (
-            <LoginForms callbackUrl={callbackUrl} />
+            <LoginForms callbackUrl={callbackUrl} initialMode={params.reset === "1" ? "reset" : "password"} />
           )}
         </div>
         <p className="mt-6 text-center text-xs text-muted">Heili by 3Runes</p>

@@ -142,7 +142,7 @@ export function agencyGuideQuestions(kinds: readonly ContentKind[]): GuideQuesti
       id: "accesso",
       question: "Un collega non riesce ad accedere",
       answer:
-        "Invitalo da «Impostazioni», alla voce Team, e mandagli il link dell'invito: aprendolo sceglie la sua password ed entra subito, senza aspettare email. Poi accede con email e password. Chi ha già un account può impostare la password in «Impostazioni»; il link di accesso via email resta come alternativa.",
+        "Invitalo da «Impostazioni», alla voce Team, e mandagli il link dell'invito: aprendolo sceglie la sua password ed entra subito, senza aspettare email. Poi accede con email e password. Chi ha dimenticato la password, o non l'ha mai impostata, tocca «Password dimenticata?» nella pagina di accesso e riceve un link per sceglierne una nuova.",
     },
     {
       id: "sollecito",
